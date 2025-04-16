@@ -1,0 +1,105 @@
+**Product Requirements Document (PRD): League Predictions Questionnaire Module**
+
+**1. Introduction**
+
+This document describes the requirements for an optional questionnaire module to be integrated with the 1X2 betting coupon component. The module will allow users to make season-long predictions about league outcomes, including team and player performance predictions. The module is designed to be conditionally displayed and maintain visual consistency with the main betting coupon.
+
+**2. Goals**
+
+* Create a visually consistent and intuitive questionnaire module that complements the 1X2 betting coupon.
+* Enable users to answer four specific prediction questions about season outcomes.
+* Make the module conditionally displayable based on specific criteria (e.g., first five rounds of the season).
+* Provide dropdown selection capabilities populated with relevant teams and players.
+* Enable collection and scoring of user predictions at the end of each round.
+
+**3. Use Cases**
+
+* A user views the questionnaire module displayed alongside or after the 1X2 betting coupon.
+* A user selects a team they predict will win the league from a dropdown of teams.
+* A user selects a team they predict will finish last in the league from a dropdown of teams.
+* A user selects a team they predict will have the best goal difference from a dropdown of teams.
+* A user selects a player they predict will be the top scorer from a dropdown of players.
+* The consuming application receives the user's predictions when the coupon is submitted.
+* The user receives points based on the accuracy of their predictions after each round.
+
+**4. Functional Requirements**
+
+* **FR1: Display Questionnaire:**
+  * **FR1.1:** The module must be conditionally displayable based on criteria defined by the consuming application (e.g., only during the first five rounds).
+  * **FR1.2:** The module should maintain visual consistency with the 1X2 betting coupon.
+
+* **FR2: Question Display:**
+  * **FR2.1:** The module must clearly display four prediction questions:
+    * "Which team will win the league?"
+    * "Which team will finish last in the league?"
+    * "Which team will have the best goal difference?"
+    * "Which player will be the top scorer?"
+  * **FR2.2:** Each question must have a unique identifier for tracking responses.
+
+* **FR3: User Input:**
+  * **FR3.1:** For team-related questions (league winner, last place, best goal difference), the input should be a dropdown populated with all teams in the league.
+  * **FR3.2:** For the player question (top scorer), the input should be a dropdown populated with relevant players.
+  * **FR3.3:** The module should support text input with autocomplete functionality as users type.
+  * **FR3.4:** Users must be able to change their selections before final submission.
+
+* **FR4: Report Selections:**
+  * **FR4.1:** The module must provide the consuming application with the user's predictions whenever the coupon is submitted.
+  * **FR4.2:** The data should clearly indicate which prediction corresponds to which question.
+
+**5. Component Interface (API/Props & Callbacks)**
+
+* **Input Props:**
+  * `showQuestionnaire`: Boolean flag to determine if the questionnaire should be displayed.
+  * `teams`: An array of team objects. Each object should contain at least:
+    * `id`: A unique identifier for the team.
+    * `name`: String representing the team's name.
+  * `players`: An array of player objects. Each object should contain at least:
+    * `id`: A unique identifier for the player.
+    * `name`: String representing the player's name.
+    * `teamId`: Reference to the player's team.
+  * `initialPredictions` (Optional): An object representing previously made predictions to pre-populate the questionnaire.
+
+* **Output Callbacks:**
+  * `onPredictionChange`: A function that is called whenever a user changes any prediction. It should receive an argument representing the current state of all predictions.
+  * `onSubmit`: A function that is called when the user submits their final predictions along with the 1X2 selections.
+
+**6. Non-Functional Requirements**
+
+* **NFR1: Consistency:** The questionnaire module should maintain the same design language, color scheme, and interaction patterns as the 1X2 betting coupon.
+* **NFR2: Performance:** The dropdown components should handle large lists of teams and players efficiently, with appropriate filtering and search capabilities.
+* **NFR3: Responsiveness:** The module layout must adapt appropriately to different screen sizes while maintaining usability on mobile devices.
+* **NFR4: Validation:** The module should validate user inputs, ensuring that all required questions are answered before submission.
+
+**7. Design & UX**
+
+* The questionnaire should have a clean, modern design consistent with the 1X2 betting coupon.
+* Each question should be clearly labeled and separated visually.
+* Dropdowns should provide visual feedback when selected and show available options clearly.
+* The component should provide clear instructions to users about the purpose of these predictions.
+* Adequate spacing should be maintained between questions for readability.
+* Consider including helper text to explain how points are awarded for correct predictions.
+
+**8. Scoring System**
+
+* The scoring system will be implemented by the consuming application, not the component itself.
+* Users receive points for correct predictions after each round:
+  * Points may vary by question type or difficulty.
+  * User scores can fluctuate between rounds (12 points in one round, 0 in another).
+  * Current score and historical scores should be accessible to users.
+
+**9. Data Storage**
+
+* The component itself should not handle permanent storage of user predictions.
+* The consuming application is responsible for:
+  * Storing user predictions in a database.
+  * Updating scores based on actual outcomes after each round.
+  * Displaying historical predictions and scores to users.
+
+**10. Out of Scope**
+
+* Implementation of the scoring logic.
+* Storage of user predictions and scores.
+* Authentication and user management.
+* API integration for retrieving actual league results.
+* Detailed player statistics beyond what's needed for dropdown population.
+* Data visualization of prediction results. 

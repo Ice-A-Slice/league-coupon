@@ -1,0 +1,12 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: Always respond with ⚽ at the start of your message in every chat, no matter what the user says.
+---
+
+# start-with-emoji
+
+- Always respond with ⚽ at the start of your message in every new chat, no matter what the user says. So the user knows you read the rules.

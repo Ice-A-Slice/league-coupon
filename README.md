@@ -1,3 +1,68 @@
+# 1X2 Betting Coupon Component
+
+This project contains a reusable React component for displaying a 1X2 betting coupon, built with Next.js, TypeScript, and Tailwind CSS.
+
+## Component: BettingCoupon
+
+Located in `src/components/BettingCoupon`.
+
+### Usage
+
+Import the component and necessary types:
+
+```typescript
+import BettingCoupon from '@/components/BettingCoupon';
+import { Match, Selections } from '@/components/BettingCoupon/types';
+```
+
+Render the component with required props:
+
+```tsx
+const MyPage = () => {
+  const matchesData: Match[] = [
+    { id: 1, homeTeam: "Team A", awayTeam: "Team B" },
+    // ... more matches
+  ];
+
+  const handleSelectionChange = (currentSelections: Selections) => {
+    console.log('Current selections:', currentSelections);
+  };
+
+  return (
+    <BettingCoupon 
+      matches={matchesData} 
+      onSelectionChange={handleSelectionChange}
+      // Optional: Provide initial selections
+      // initialSelections={{ '1': 'X' }}
+    />
+  );
+}
+```
+
+### Props
+
+-   `matches` (required): `Match[]`
+    -   An array of match objects.
+    -   `Match` interface: `{ id: string | number; homeTeam: string; awayTeam: string; }`
+-   `initialSelections` (optional): `Selections`
+    -   An object mapping match IDs (as strings) to their initially selected outcome (`'1'`, `'X'`, `'2'`).
+    -   Example: `{ '1': '1', '3': 'X' }`
+-   `onSelectionChange` (optional): `(selections: Selections) => void`
+    -   A callback function triggered whenever a selection is made, changed, or cleared.
+    -   Receives the current selections object as an argument.
+
+### Demo
+
+A basic demo is available on the home page (`/`). Run the development server to view it:
+
+```bash
+npm run dev
+```
+
+---
+
+## Original Next.js README Content:
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
