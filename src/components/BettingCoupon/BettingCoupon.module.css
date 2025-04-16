@@ -1,16 +1,14 @@
+
 .container {
   /* Basic container styles */
-  width: 100%;
-  max-width: 32rem; /* Samma som Tailwind max-w-lg (512px) */
+  width: 100src/components/BettingCoupon/BettingCoupon.module.css;
+  max-width: 32rem; /* Same as Tailwind max-w-lg (512px) */
   display: flex;
   flex-direction: column;
   align-items: stretch;
   
-  /* Fix for iOS alignment issues */
+  /* Simplified centering approach */
   margin-left: auto;
   margin-right: auto;
-  position: relative; /* Add position relative */
-  left: 0;
-  right: 0;
   overflow-x: visible; /* Ensure no horizontal scrolling */
-} 
+}

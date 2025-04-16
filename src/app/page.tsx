@@ -145,28 +145,32 @@ export default function Home() {
       </header>
 
       {/* Main content area with the coupon */}
-      <main className="flex flex-col gap-4 sm:gap-[32px] row-start-2 items-center w-full max-w-full">
+      <main className="flex flex-col gap-4 sm:gap-[32px] row-start-2 items-center justify-center w-full max-w-full">
         {!isSubmitted ? (
           <>
-            <BettingCoupon 
-              matches={sampleMatches} 
-              initialSelections={initialSampleSelections} 
-              onSelectionChange={handleSelectionChange} 
-            />
+            <div className="flex justify-center w-full">
+              <BettingCoupon 
+                matches={sampleMatches} 
+                initialSelections={initialSampleSelections} 
+                onSelectionChange={handleSelectionChange} 
+              />
+            </div>
             
-            <Questionnaire
-              ref={questionnaireRef}
-              showQuestionnaire={true}
-              teams={sampleTeams}
-              players={samplePlayers}
-              initialPredictions={initialPredictions}
-              onPredictionChange={handlePredictionChange}
-              onToggleVisibility={handleQuestionnaireToggle}
-            />
+            <div className="flex justify-center w-full">
+              <Questionnaire
+                ref={questionnaireRef}
+                showQuestionnaire={true}
+                teams={sampleTeams}
+                players={samplePlayers}
+                initialPredictions={initialPredictions}
+                onPredictionChange={handlePredictionChange}
+                onToggleVisibility={handleQuestionnaireToggle}
+              />
+            </div>
             
-            <div className="w-full max-w-lg px-4 sm:px-0">
+            <div className="w-full max-w-lg px-4 sm:px-0 flex justify-center items-center flex-col">
               {validationErrors.length > 0 && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm w-full">
                   <p className="font-semibold mb-1">Please fix the following errors:</p>
                   <ul className="list-disc pl-5">
                     {validationErrors.map((error, index) => (
@@ -187,24 +191,26 @@ export default function Home() {
             </div>
           </>
         ) : (
-          <div className="text-center p-8 bg-green-50 rounded-lg border border-green-200 w-full max-w-lg">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto text-green-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            <h2 className="text-2xl font-bold text-green-800 mb-2">Success!</h2>
-            <p className="text-green-700 mb-6">Your coupon and predictions have been submitted.</p>
-            <button
-              type="button"
-              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-              onClick={() => {
-                setIsSubmitted(false);
-                setSelections(initialSampleSelections);
-                setPredictions(initialPredictions);
-                setValidationErrors([]);
-              }}
-            >
-              Submit Another Coupon
-            </button>
+          <div className="flex justify-center w-full">
+            <div className="text-center p-8 bg-green-50 rounded-lg border border-green-200 w-full max-w-lg">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto text-green-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              <h2 className="text-2xl font-bold text-green-800 mb-2">Success!</h2>
+              <p className="text-green-700 mb-6">Your coupon and predictions have been submitted.</p>
+              <button
+                type="button"
+                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                onClick={() => {
+                  setIsSubmitted(false);
+                  setSelections(initialSampleSelections);
+                  setPredictions(initialPredictions);
+                  setValidationErrors([]);
+                }}
+              >
+                Submit Another Coupon
+              </button>
+            </div>
           </div>
         )}
       </main>

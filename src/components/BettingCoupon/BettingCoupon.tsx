@@ -41,8 +41,8 @@ const BettingCoupon: React.FC<BettingCouponProps> = ({ matches, initialSelection
   }, [initialSelections]);
 
   return (
-    // Fix mobile alignment issue by using proper full width and flex layout with mx-auto
-    <div className={`w-full mx-auto bg-white shadow-md rounded-lg overflow-hidden ${styles.container}`}> 
+    // Fix mobile alignment issue by using proper full width and flex layout
+    <div className={`w-full bg-white shadow-md rounded-lg overflow-hidden ${styles.container}`}> 
       {/* Header similar to Questionnaire */}
       <div className="w-full p-4 bg-gradient-to-r from-teal-500 to-teal-600 text-white">
         <h2 className="text-lg font-bold">1x2</h2>
