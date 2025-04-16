@@ -9,6 +9,8 @@
   /* Fix for iOS alignment issues */
   margin-left: auto;
   margin-right: auto;
+  position: relative; /* Add position relative */
   left: 0;
   right: 0;
+  overflow-x: visible; /* Ensure no horizontal scrolling */
 } 

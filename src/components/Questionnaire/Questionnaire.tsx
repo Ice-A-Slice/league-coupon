@@ -98,7 +98,7 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
   const contentVisible = isContentVisible;
 
   return (
-    <div className="w-full max-w-lg bg-white rounded-lg overflow-hidden shadow-md border border-gray-200">
+    <div className="w-full max-w-lg bg-white rounded-lg overflow-hidden shadow-md border border-gray-200 mx-auto">
       <div 
         className="p-4 bg-gradient-to-r from-teal-500 to-teal-600 text-white flex justify-between items-center cursor-pointer"
         onClick={handleToggleContent}
@@ -135,7 +135,7 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
       </div>
       
       {contentVisible && (
-        <div id="predictions-content" className="px-4 py-5 divide-y divide-gray-200 space-y-4">
+        <div id="predictions-content" className="px-4 py-5 divide-y divide-gray-200 space-y-4 w-full">
           {/* League Winner Selection */}
           <div className="pt-4 first:pt-0">
             <label className="block text-sm font-medium text-gray-700 mb-1">
