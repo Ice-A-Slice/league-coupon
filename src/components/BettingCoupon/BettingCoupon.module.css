@@ -1,3 +1,14 @@
 .container {
   /* Basic container styles */
+  width: 100%;
+  max-width: 32rem; /* Samma som Tailwind max-w-lg (512px) */
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  
+  /* Fix for iOS alignment issues */
+  margin-left: auto;
+  margin-right: auto;
+  left: 0;
+  right: 0;
 } 

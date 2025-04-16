@@ -140,12 +140,12 @@ export default function Home() {
   return (
     <div className="grid grid-rows-[auto_1fr_auto] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
       {/* Header (simplified for demo) */}
-      <header className="row-start-1 mb-8">
+      <header className="row-start-1 mb-8 w-full text-center">
         <h1 className="text-2xl font-bold text-center">Round 1</h1>
       </header>
 
       {/* Main content area with the coupon */}
-      <main className="flex flex-col gap-[32px] row-start-2 items-center w-full">
+      <main className="flex flex-col gap-[32px] row-start-2 items-center w-full max-w-full">
         {!isSubmitted ? (
           <>
             <BettingCoupon 
