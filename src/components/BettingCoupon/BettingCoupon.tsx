@@ -55,7 +55,7 @@ const BettingCoupon: React.FC<BettingCouponProps> = ({ matches, initialSelection
 
           return (
             // Adjusted padding and spacing, force full width
-            <div key={matchIdStr} className="flex w-full items-center justify-between p-3 sm:p-4 border-b border-gray-200 last:border-b-0 hover:bg-gray-50 transition-colors duration-150">
+            <div key={matchIdStr} className="flex w-full items-center justify-between p-2 sm:p-3 border-b border-gray-200 last:border-b-0 hover:bg-gray-50 transition-colors duration-150">
               {/* Match Info - Adjusted spacing */}
               <div className="flex items-center space-x-2 sm:space-x-3 flex-1 min-w-0 mr-2 sm:mr-3">
                 <span className="flex-shrink-0 flex items-center justify-center w-6 h-6 bg-green-600 text-white rounded-full text-xs font-semibold"> 
@@ -74,7 +74,7 @@ const BettingCoupon: React.FC<BettingCouponProps> = ({ matches, initialSelection
                       type="button"
                       onClick={() => handleSelect(match.id, label)}
                       // Enhanced styling: bigger touch target, better feedback
-                      className={`w-9 h-9 sm:w-10 sm:h-10 border rounded-md flex items-center justify-center text-sm font-semibold transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 ${isSelected
+                      className={`flex-1 border rounded-md flex items-center justify-center text-sm font-semibold transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 ${isSelected
                           ? 'bg-teal-600 text-white border-teal-700 shadow-inner hover:bg-teal-700' // Clearer selected state
                           : 'border-gray-300 text-gray-600 bg-white hover:bg-gray-100 hover:border-gray-400' // Standard state
                         }`}

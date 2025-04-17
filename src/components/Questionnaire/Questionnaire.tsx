@@ -98,7 +98,7 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
   const contentVisible = isContentVisible;
 
   return (
-    <div className="w-full max-w-lg bg-white rounded-lg overflow-hidden shadow-md border border-gray-200">
+    <div className="w-full bg-white rounded-lg overflow-hidden shadow-md border border-gray-200">
       <div 
         className="p-4 bg-gradient-to-r from-teal-500 to-teal-600 text-white flex justify-between items-center cursor-pointer"
         onClick={handleToggleContent}
