@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import styles from './BettingCoupon.module.css';
 import type { BettingCouponProps, Match, SelectionType, Selections } from './types'; // Import types
 import SectionContainer from '../SectionContainer';
 
