@@ -1,11 +1,12 @@
+/* Import all of Tailwind at once */
 @import "tailwindcss";
 
-:root {
+/* Define variables */
+@theme {
   --background: #ffffff;
   --foreground: #171717;
-}
-
-@theme inline {
+  --teal-500: #14b8a6;
+  --teal-600: #0d9488;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
@@ -23,4 +24,46 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Custom responsive utilities */
+@layer utilities {
+  /* Additional responsive helpers can be added here */
+  .touch-target-min {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* For very small screens */
+@media (max-width: 479px) {
+  /* Add additional overrides for small screens here if needed */
+}
+
+/* Ensure section headers have proper styling */
+.section-header {
+  background: linear-gradient(to right, var(--teal-500), var(--teal-600));
+  color: white;
+  padding: 0.75rem 1rem;
+}
+
+/* Match item styling */
+.match-item {
+  display: flex;
+  padding: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  align-items: center;
+}
+
+@media (max-width: 479px) {
+  .match-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .match-buttons {
+    margin-top: 0.5rem;
+    width: 100%;
+    justify-content: flex-end;
+  }
 }
