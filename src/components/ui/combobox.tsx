@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { CheckIcon, ChevronsUpDown } from "lucide-react"
+import { CheckIcon, ChevronsUpDown, Search } from "lucide-react"
 
 import { cn, filterComboboxOptions } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -149,9 +149,11 @@ export function Combobox({
   const listRef = React.useRef<HTMLDivElement>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)
   const buttonRef = React.useRef<HTMLButtonElement>(null)
-  const componentId = id || React.useId()
+  
+  // Always call useId unconditionally to comply with Rules of Hooks
+  const generatedId = React.useId()
+  const componentId = id || generatedId
   const listboxId = `${componentId}-listbox`
-  const labelId = `${componentId}-label`
   
   // Find the selected option
   const selectedOption = React.useMemo(() => {
@@ -169,19 +171,83 @@ export function Combobox({
     setHighlightedIndex(filteredOptions.length > 0 ? 0 : -1)
   }, [filteredOptions])
 
-  // Scroll highlighted option into view
+  // Virtualization optimization
+  const [visibleStartIndex, setVisibleStartIndex] = React.useState(0);
+  const [visibleEndIndex, setVisibleEndIndex] = React.useState(Math.min(50, filteredOptions.length));
+  const itemHeight = 41; // Height of each option item in pixels (based on px-4 py-2.5 and text-sm)
+  
+  // Performance optimization for large lists
+  const visibleOptions = React.useMemo(() => {
+    // If we have a reasonable number of options, don't virtualize to avoid complexity
+    if (filteredOptions.length <= 100) {
+      return filteredOptions;
+    }
+    
+    // For large lists, only render the visible portion plus buffer for smooth scrolling
+    const buffer = 10; // Extra items to render before and after visible range
+    const start = Math.max(0, visibleStartIndex - buffer);
+    const end = Math.min(filteredOptions.length, visibleEndIndex + buffer);
+    
+    return filteredOptions.slice(start, end);
+  }, [filteredOptions, visibleStartIndex, visibleEndIndex]);
+
+  // Handle scroll events to update visible range
+  const handleScroll = React.useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    if (filteredOptions.length <= 100) return; // Skip virtualization for smaller lists
+    
+    const scrollTop = e.currentTarget.scrollTop;
+    const viewportHeight = e.currentTarget.clientHeight;
+    
+    const newStartIndex = Math.floor(scrollTop / itemHeight);
+    const newEndIndex = Math.min(
+      filteredOptions.length,
+      Math.ceil((scrollTop + viewportHeight) / itemHeight)
+    );
+    
+    if (newStartIndex !== visibleStartIndex || newEndIndex !== visibleEndIndex) {
+      setVisibleStartIndex(newStartIndex);
+      setVisibleEndIndex(newEndIndex);
+    }
+  }, [filteredOptions.length, itemHeight, visibleStartIndex, visibleEndIndex]);
+
+  // Scroll to selected item when dropdown opens
   React.useEffect(() => {
-    if (highlightedIndex >= 0 && listRef.current) {
+    if (open && selectedValue && listRef.current) {
+      const selectedIndex = filteredOptions.findIndex(option => option.value === selectedValue);
+      if (selectedIndex >= 0) {
+        // Use setTimeout to ensure the dropdown has fully opened
+        setTimeout(() => {
+          const selectedElement = listRef.current?.querySelector(`[id="${componentId}-option-${selectedValue}"]`) as HTMLElement;
+          if (selectedElement) {
+            selectedElement.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        }, 50);
+      }
+    }
+  }, [open, selectedValue, filteredOptions, componentId]);
+
+  // Improved scroll highlighted option into view with smoother behavior
+  React.useEffect(() => {
+    if (highlightedIndex >= 0 && listRef.current && open) {
       const listItems = listRef.current.querySelectorAll('[cmdk-item]')
       if (listItems.length > highlightedIndex) {
         const highlightedItem = listItems[highlightedIndex] as HTMLElement
         if (highlightedItem) {
-          highlightedItem.scrollIntoView({ block: 'nearest' })
+          highlightedItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+          
+          // Update virtualization indices if we're using virtualization
+          if (filteredOptions.length > 100) {
+            const itemIndex = Array.from(listItems).indexOf(highlightedItem);
+            const newStartIndex = Math.max(0, itemIndex - 5);
+            const newEndIndex = Math.min(filteredOptions.length, itemIndex + 10);
+            setVisibleStartIndex(newStartIndex);
+            setVisibleEndIndex(newEndIndex);
+          }
         }
       }
     }
-  }, [highlightedIndex])
-  
+  }, [highlightedIndex, open, filteredOptions.length]);
+
   // Handle search change - defined BEFORE it's used in handleKeyDown
   const handleSearchChange = React.useCallback((value: string) => {
     if (!isSearchControlled) {
@@ -238,8 +304,8 @@ export function Combobox({
             let next = prev
             do {
               next = (next + 1) % filteredOptions.length
-              // Break if we've cycled through all options
-              if (next === prev) break
+              // Break if we've cycled through all options or no options
+              if (next === prev || filteredOptions.length === 0) break
             } while (filteredOptions[next]?.disabled)
             
             return next
@@ -252,8 +318,8 @@ export function Combobox({
             let next = prev
             do {
               next = next <= 0 ? filteredOptions.length - 1 : next - 1
-              // Break if we've cycled through all options
-              if (next === prev) break
+              // Break if we've cycled through all options or no options
+              if (next === prev || filteredOptions.length === 0) break
             } while (filteredOptions[next]?.disabled)
             
             return next
@@ -298,6 +364,18 @@ export function Combobox({
           // Move focus back to trigger button
           setTimeout(() => buttonRef.current?.focus(), 0)
           break
+        case 'Tab':
+          // Allow Tab to navigate between options when dropdown is open
+          if (open && filteredOptions.length > 0) {
+            e.preventDefault();
+            setHighlightedIndex(prev => {
+              const direction = e.shiftKey ? -1 : 1;
+              let newIndex = (prev + direction) % filteredOptions.length;
+              if (newIndex < 0) newIndex = filteredOptions.length - 1;
+              return newIndex;
+            });
+          }
+          break
         // Type-ahead functionality
         default:
           if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
@@ -324,8 +402,13 @@ export function Combobox({
     }
   }, [open])
 
+  // Add a focus style utility
+  const getFocusStyles = React.useCallback(() => {
+    return open ? 'ring-2 ring-teal-500/20 border-teal-500' : '';
+  }, [open]);
+
   return (
-    <div className="relative">
+    <div className="relative w-full">
       {/* Live region for screen reader announcements */}
       <div 
         id={`${componentId}-live`}
@@ -335,7 +418,7 @@ export function Combobox({
       />
       
       <Popover open={open} onOpenChange={handleOpenChange}>
-        <div className="flex items-center">
+        <div className="flex items-center w-full">
           <PopoverTrigger asChild className="flex-1">
             <Button
               ref={buttonRef}
@@ -348,13 +431,28 @@ export function Combobox({
               aria-labelledby={ariaLabelledby}
               aria-describedby={ariaDescribedby}
               aria-autocomplete="list"
-              className={cn('w-full justify-between', className)}
+              className={cn(
+                'w-full justify-between', 
+                'border-gray-300 text-gray-800 font-medium',
+                'hover:border-teal-400 focus-visible:border-teal-500',
+                'transition-all duration-200',
+                'shadow-sm h-10 sm:h-10',
+                'text-sm sm:text-base',
+                'px-3 py-2',
+                getFocusStyles(),
+                className
+              )}
               disabled={disabled}
               id={componentId}
               data-state={open ? "open" : "closed"}
             >
-              {selectedOption?.label || placeholder}
-              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              <span className="truncate">
+                {selectedOption?.label || <span className="text-gray-500">{placeholder}</span>}
+              </span>
+              <ChevronsUpDown className={cn(
+                "ml-2 h-4 w-4 shrink-0 transition-transform duration-200",
+                open ? "rotate-180 opacity-100" : "opacity-60"
+              )} />
             </Button>
           </PopoverTrigger>
           
@@ -363,9 +461,9 @@ export function Combobox({
               variant="ghost"
               size="icon"
               onClick={handleClear}
-              className="ml-1 h-9 w-9"
+              className="ml-1 h-9 w-9 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors sm:h-10 sm:w-10"
               type="button"
-              aria-label="Clear selection"
+              aria-label="clear"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -385,28 +483,62 @@ export function Combobox({
         </div>
         
         <PopoverContent 
-          className="p-0" 
+          className={cn(
+            "p-0 border border-gray-200 shadow-lg",
+            "rounded-md overflow-hidden",
+            "bg-white text-gray-800",
+            "animate-in fade-in-0 zoom-in-95 duration-150",
+            "data-[side=bottom]:slide-in-from-top-2",
+            "data-[side=top]:slide-in-from-bottom-2",
+            "w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-2rem)]"
+          )} 
           style={{ width: 'var(--radix-popover-trigger-width)' }}
           onKeyDown={handleKeyDown}
           id={listboxId}
           role="region"
           aria-labelledby={componentId}
+          sideOffset={4}
         >
           <Command shouldFilter={false}>
-            <CommandInput 
-              placeholder={searchPlaceholder} 
-              value={search}
-              onValueChange={handleSearchChange}
-              className="h-9"
-              ref={inputRef}
-              aria-autocomplete="list"
-              aria-controls={`${componentId}-options`}
-              aria-activedescendant={
-                highlightedIndex >= 0 
-                  ? `${componentId}-option-${filteredOptions[highlightedIndex]?.value}`
-                  : undefined
-              }
-            />
+            <div className="flex items-center border-b border-gray-200 px-3">
+              <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+              <CommandInput 
+                placeholder={searchPlaceholder} 
+                value={search}
+                onValueChange={handleSearchChange}
+                className={cn(
+                  "h-10 flex-1",
+                  "border-0 border-none",
+                  "bg-transparent text-gray-800",
+                  "focus:ring-0 focus:outline-none",
+                  "placeholder:text-gray-400"
+                )}
+                ref={inputRef}
+                aria-autocomplete="list"
+                aria-controls={`${componentId}-options`}
+                aria-activedescendant={
+                  highlightedIndex >= 0 
+                    ? `${componentId}-option-${filteredOptions[highlightedIndex]?.value}`
+                    : undefined
+                }
+                onKeyDown={(e) => {
+                  // Override default CommandInput tab behavior
+                  if (e.key === 'Tab' && open && highlightedIndex >= 0) {
+                    e.preventDefault();
+                    // Move to next/previous option based on shift key
+                    setHighlightedIndex(prev => {
+                      if (e.shiftKey) {
+                        // Move up (or to last item if at first)
+                        return prev <= 0 ? filteredOptions.length - 1 : prev - 1;
+                      } else {
+                        // Move down (or to first item if at last)
+                        return (prev + 1) % filteredOptions.length;
+                      }
+                    });
+                  }
+                }}
+              />
+            </div>
             <CommandList 
               style={{ maxHeight }} 
               ref={listRef}
@@ -414,47 +546,111 @@ export function Combobox({
               role="listbox"
               aria-labelledby={componentId}
               aria-multiselectable="false"
+              className="custom-scrollbar max-h-[300px] overflow-y-auto"
+              onScroll={handleScroll}
+              onKeyDown={(e) => {
+                // Handle tab key for keyboard navigation
+                if (e.key === 'Tab') {
+                  e.stopPropagation(); // Prevent bubbling to parent handlers
+                }
+              }}
             >
               {filteredOptions.length === 0 ? (
-                <CommandEmpty role="status">{emptyMessage}</CommandEmpty>
+                <CommandEmpty role="status" className="py-3 px-4 text-sm text-gray-500 text-center">
+                  {emptyMessage}
+                </CommandEmpty>
               ) : (
                 <CommandGroup>
-                  {filteredOptions.map((option, index) => (
-                    <CommandItem
-                      key={option.value}
-                      value={option.value}
-                      onSelect={(value) => {
-                        if (!option.disabled) {
-                          onChange(value)
-                          handleOpenChange(false)
-                          handleSearchChange('')
-                          // Move focus back to trigger button after selection
-                          setTimeout(() => buttonRef.current?.focus(), 0)
-                        }
-                      }}
-                      onMouseEnter={() => !option.disabled && setHighlightedIndex(index)}
-                      aria-selected={index === highlightedIndex}
-                      data-highlighted={index === highlightedIndex}
-                      className={cn(
-                        index === highlightedIndex && 'bg-accent text-accent-foreground',
-                        option.disabled && 'opacity-50 pointer-events-none'
-                      )}
-                      role="option"
-                      aria-label={option.label}
-                      aria-disabled={option.disabled}
-                      id={`${componentId}-option-${option.value}`}
-                      tabIndex={-1}
-                    >
-                      <CheckIcon
+                  {/* Add spacer at the top for virtualized lists */}
+                  {filteredOptions.length > 100 && visibleStartIndex > 0 && (
+                    <div 
+                      style={{ 
+                        height: visibleStartIndex * itemHeight, 
+                        width: '100%' 
+                      }} 
+                      aria-hidden="true"
+                    />
+                  )}
+                  
+                  {(filteredOptions.length <= 100 ? filteredOptions : visibleOptions).map((option, index) => {
+                    // Adjust index for virtualized rendering
+                    const actualIndex = filteredOptions.length <= 100 
+                      ? index 
+                      : index + Math.max(0, visibleStartIndex - 10);
+                    
+                    const isHighlighted = actualIndex === highlightedIndex;
+                    const isSelected = selectedValue === option.value;
+                    
+                    return (
+                      <CommandItem
+                        key={option.value}
+                        value={option.value}
+                        onSelect={(value) => {
+                          if (!option.disabled) {
+                            onChange(value)
+                            handleOpenChange(false)
+                            handleSearchChange('')
+                            // Move focus back to trigger button after selection
+                            setTimeout(() => buttonRef.current?.focus(), 0)
+                          }
+                        }}
+                        onMouseEnter={() => !option.disabled && setHighlightedIndex(actualIndex)}
+                        onMouseDown={(e) => {
+                          // Prevent default to avoid losing focus on the input
+                          e.preventDefault();
+                        }}
+                        onClick={() => {
+                          if (!option.disabled) {
+                            onChange(option.value);
+                            handleOpenChange(false);
+                            handleSearchChange('');
+                            setTimeout(() => buttonRef.current?.focus(), 0);
+                          }
+                        }}
+                        aria-selected={isHighlighted}
+                        data-highlighted={isHighlighted}
                         className={cn(
-                          'mr-2 h-4 w-4',
-                          selectedValue === option.value ? 'opacity-100' : 'opacity-0'
+                          "px-4 py-2.5 cursor-pointer text-sm",
+                          "aria-selected:bg-accent aria-selected:text-accent-foreground",
+                          "data-[highlighted=true]:bg-teal-50 data-[highlighted=true]:text-teal-700",
+                          "hover:bg-teal-50 hover:text-teal-700",
+                          "focus:bg-teal-50 focus:text-teal-700",
+                          "focus:outline-none",
+                          "transition-colors duration-150",
+                       
+                          isHighlighted && "bg-teal-50 text-teal-700",
+                          option.disabled && "opacity-50 pointer-events-none text-gray-400"
                         )}
-                        aria-hidden="true"
-                      />
-                      {option.label}
-                    </CommandItem>
-                  ))}
+                        role="option"
+                        aria-label={option.label}
+                        aria-disabled={option.disabled}
+                        id={`${componentId}-option-${option.value}`}
+                        tabIndex={-1}
+                      >
+                        <div className="flex items-center">
+                          <CheckIcon
+                            className={cn(
+                              'mr-2 h-4 w-4 text-teal-600 flex-shrink-0',
+                              isSelected ? 'opacity-100' : 'opacity-0'
+                            )}
+                            aria-hidden="true"
+                          />
+                          <span className="truncate">{option.label}</span>
+                        </div>
+                      </CommandItem>
+                    );
+                  })}
+                  
+                  {/* Add spacer at the bottom for virtualized lists */}
+                  {filteredOptions.length > 100 && visibleEndIndex < filteredOptions.length && (
+                    <div 
+                      style={{ 
+                        height: (filteredOptions.length - visibleEndIndex) * itemHeight, 
+                        width: '100%' 
+                      }} 
+                      aria-hidden="true"
+                    />
+                  )}
                 </CommandGroup>
               )}
             </CommandList>

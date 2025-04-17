@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Questionnaire from '../Questionnaire';
 
@@ -204,7 +204,7 @@ describe('Questionnaire Component with Combobox', () => {
   
   it('clears selected value when clear button is clicked', async () => {
     // Start with initial selections
-    const { openDropdown } = setupQuestionnaire({
+    setupQuestionnaire({
       initialPredictions: {
         leagueWinner: 1,
         lastPlace: null,

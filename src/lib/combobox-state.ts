@@ -7,7 +7,6 @@
 
 'use client'
 
-import * as React from 'react'
 import { ComboboxOption } from "@/components/ui/combobox";
 import { useReducer, useCallback } from "react";
 

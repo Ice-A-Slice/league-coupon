@@ -121,7 +121,7 @@ export function ComboboxExample({
           <div>{state.isOpen ? 'Yes' : 'No'}</div>
           
           <div>Search term:</div>
-          <div>{state.searchTerm ? `"${state.searchTerm}"` : <em className="text-muted-foreground">Empty</em>}</div>
+          <div>{state.searchTerm ? `&quot;${state.searchTerm}&quot;` : <em className="text-muted-foreground">Empty</em>}</div>
           
           <div>Status:</div>
           <div>{disabled ? <Badge variant="outline">Disabled</Badge> : <Badge variant="outline">Enabled</Badge>}</div>
@@ -163,7 +163,7 @@ export function ComboboxExample({
           onClick={() => handleSearchChange('a')}
           disabled={disabled}
         >
-          Set Search: "a"
+          Set Search: &quot;a&quot;
         </Button>
         
         <Button

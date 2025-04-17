@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, forwardRef, useImperativeHandle, useEffect } from "react";
+import React, { useState, forwardRef, useImperativeHandle } from "react";
 import TeamSelectWithCombobox from "./TeamSelectWithCombobox";
 import PlayerSelectWithCombobox from "./PlayerSelectWithCombobox";
 import { Prediction, QuestionnaireProps } from "./types";

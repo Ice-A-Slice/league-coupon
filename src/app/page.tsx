@@ -7,6 +7,7 @@ import BettingCoupon from "@/components/BettingCoupon";
 import { Match, Selections } from "@/components/BettingCoupon/types";
 import Questionnaire from "@/components/Questionnaire";
 import { Prediction, Team, Player } from "@/components/Questionnaire/types";
+import { ShadcnTest } from "@/components/ui/shadcn-test";
 
 // Sample data for the demo
 const sampleMatches: Match[] = [
@@ -142,6 +143,11 @@ export default function Home() {
       {/* Header (simplified for demo) */}
       <header className="row-start-1 mb-4 sm:mb-8 w-full text-center">
         <h1 className="text-2xl font-bold text-center">Round 1</h1>
+        
+        {/* Add shadcn/ui test component */}
+        <div className="mt-4">
+          <ShadcnTest />
+        </div>
       </header>
 
       {/* Main content area with the coupon */}
