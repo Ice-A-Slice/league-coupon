@@ -96,9 +96,9 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
 
   // Content for the questionnaire
   const questionnaireContent = (
-    <div className="px-4 py-5 divide-y divide-gray-200 space-y-4 w-full">
+    <div className="px-3 sm:px-4 py-3 sm:py-5 divide-y divide-gray-200 space-y-3 sm:space-y-4 w-full">
       {/* League Winner Selection */}
-      <div className="pt-4 first:pt-0">
+      <div className="pt-3 sm:pt-4 first:pt-0">
         <label className="block text-sm font-medium text-gray-700 mb-1">
           1. Which team will win the league?
         </label>
@@ -116,7 +116,7 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
       </div>
       
       {/* Last Place Selection */}
-      <div className="pt-4">
+      <div className="pt-3 sm:pt-4">
         <label className="block text-sm font-medium text-gray-700 mb-1">
           2. Which team will finish in last place?
         </label>
@@ -134,7 +134,7 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
       </div>
       
       {/* Best Goal Difference Selection */}
-      <div className="pt-4">
+      <div className="pt-3 sm:pt-4">
         <label className="block text-sm font-medium text-gray-700 mb-1">
           3. Which team will have the best goal difference?
         </label>
@@ -152,7 +152,7 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
       </div>
       
       {/* Top Scorer Selection */}
-      <div className="pt-4">
+      <div className="pt-3 sm:pt-4">
         <label className="block text-sm font-medium text-gray-700 mb-1">
           4. Who will be the top scorer in the league?
         </label>

@@ -60,7 +60,7 @@ const BettingCoupon: React.FC<BettingCouponProps> = ({ matches, initialSelection
               <span className="text-sm sm:text-base font-medium text-gray-800 truncate">{match.homeTeam} - {match.awayTeam}</span>
             </div>
             {/* Selection Buttons - Adjusted spacing and button size */}
-            <div className="flex space-x-1 sm:space-x-2 flex-shrink-0"> 
+            <div className="flex space-x-1.5 sm:space-x-3 flex-shrink-0"> 
               {selectionLabels.map((label) => {
                 const isSelected = currentSelection === label;
                 return (
@@ -68,8 +68,11 @@ const BettingCoupon: React.FC<BettingCouponProps> = ({ matches, initialSelection
                     key={label}
                     type="button"
                     onClick={() => handleSelect(match.id, label)}
-                    // Enhanced styling: bigger touch target, better feedback
-                    className={`flex-1 border rounded-md flex items-center justify-center text-sm font-semibold transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 ${isSelected
+                    // Enhanced sizing and touch targets for accessibility
+                    className={`min-w-[44px] min-h-[44px] px-2 py-1.5 sm:px-3 sm:py-2 
+                      border rounded-md flex items-center justify-center 
+                      text-sm font-semibold transition-all duration-150 
+                      focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 ${isSelected
                         ? 'bg-teal-600 text-white border-teal-700 shadow-inner hover:bg-teal-700' // Clearer selected state
                         : 'border-gray-300 text-gray-600 bg-white hover:bg-gray-100 hover:border-gray-400' // Standard state
                       }`}
