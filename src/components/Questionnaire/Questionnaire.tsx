@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, forwardRef, useImperativeHandle, useEffect } from "react";
-import TeamSelect from "./TeamSelect";
-import PlayerSelect from "./PlayerSelect";
+import TeamSelectWithCombobox from "./TeamSelectWithCombobox";
+import PlayerSelectWithCombobox from "./PlayerSelectWithCombobox";
 import { Prediction, QuestionnaireProps } from "./types";
 import SectionContainer from "../SectionContainer";
 
@@ -24,11 +24,6 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const [isContentVisible, setIsContentVisible] = useState(true);
   
-  // Debugging console log to verify onToggleVisibility exists
-  useEffect(() => {
-    console.log("Questionnaire rendered with onToggleVisibility:", !!onToggleVisibility);
-  }, [onToggleVisibility]);
-
   // Expose validation method to parent component
   useImperativeHandle(ref, () => ({
     validatePredictions: () => {
@@ -78,8 +73,14 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
       newErrors.topScorer = "Please select a top scorer";
     }
     
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    const isValid = Object.keys(newErrors).length === 0;
+    
+    // Only update state if there are errors (avoids unnecessary renders)
+    if (!isValid) {
+      setErrors(newErrors);
+    }
+    
+    return isValid;
   };
 
   // Toggle content visibility
@@ -105,7 +106,7 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
         {errors.leagueWinner && (
           <p className="text-red-500 text-xs mt-1">{errors.leagueWinner}</p>
         )}
-        <TeamSelect
+        <TeamSelectWithCombobox
           teams={teams}
           selectedTeamId={predictions.leagueWinner}
           onSelect={(teamId) => updatePrediction('leagueWinner', teamId)}
@@ -123,7 +124,7 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
         {errors.lastPlace && (
           <p className="text-red-500 text-xs mt-1">{errors.lastPlace}</p>
         )}
-        <TeamSelect
+        <TeamSelectWithCombobox
           teams={teams}
           selectedTeamId={predictions.lastPlace}
           onSelect={(teamId) => updatePrediction('lastPlace', teamId)}
@@ -141,7 +142,7 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
         {errors.bestGoalDifference && (
           <p className="text-red-500 text-xs mt-1">{errors.bestGoalDifference}</p>
         )}
-        <TeamSelect
+        <TeamSelectWithCombobox
           teams={teams}
           selectedTeamId={predictions.bestGoalDifference}
           onSelect={(teamId) => updatePrediction('bestGoalDifference', teamId)}
@@ -159,7 +160,7 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
         {errors.topScorer && (
           <p className="text-red-500 text-xs mt-1">{errors.topScorer}</p>
         )}
-        <PlayerSelect
+        <PlayerSelectWithCombobox
           players={players}
           teams={teams}
           selectedPlayerId={predictions.topScorer}
