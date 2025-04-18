@@ -7,8 +7,6 @@ import BettingCoupon from "@/components/BettingCoupon";
 import { Match, Selections } from "@/components/BettingCoupon/types";
 import Questionnaire from "@/components/Questionnaire/Questionnaire";
 import { Prediction, Team, Player } from "@/components/Questionnaire/types";
-import { fetchLeagueData, fetchPlayers } from "@/lib/api";
-import { ComboboxOption } from "@/components/ui/combobox";
 
 // Sample data for the demo
 const sampleMatches: Match[] = [

@@ -87,7 +87,7 @@ const BettingCoupon: React.FC<BettingCouponProps> = ({ matches, initialSelection
 
   return (
     <SectionContainer
-      title="1x2"
+      title="Round 1"
       subtitle="Select match outcomes to fill your coupon"
       collapsible={false}
     >
