@@ -35,7 +35,7 @@ const PlayerSelectWithCombobox: React.FC<PlayerSelectWithComboboxProps> = (props
       showClearButton={true}
       emptyMessage="No players found"
       searchPlaceholder="Search players..."
-      filterMode="contains"
+      filterMode="fuzzy"
       maxHeight={250}
     />
   );

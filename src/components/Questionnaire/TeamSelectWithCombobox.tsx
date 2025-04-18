@@ -34,7 +34,7 @@ const TeamSelectWithCombobox: React.FC<TeamSelectWithComboboxProps> = (props) =>
       showClearButton={true}
       emptyMessage="No teams found"
       searchPlaceholder="Search teams..."
-      filterMode="contains"
+      filterMode="fuzzy"
       maxHeight={250}
     />
   );
