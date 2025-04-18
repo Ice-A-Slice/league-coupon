@@ -5,9 +5,10 @@ import { useState, useRef } from "react";
 // Import the component and types
 import BettingCoupon from "@/components/BettingCoupon";
 import { Match, Selections } from "@/components/BettingCoupon/types";
-import Questionnaire from "@/components/Questionnaire";
+import Questionnaire from "@/components/Questionnaire/Questionnaire";
 import { Prediction, Team, Player } from "@/components/Questionnaire/types";
-import { ShadcnTest } from "@/components/ui/shadcn-test";
+import { fetchLeagueData, fetchPlayers } from "@/lib/api";
+import { ComboboxOption } from "@/components/ui/combobox";
 
 // Sample data for the demo
 const sampleMatches: Match[] = [
@@ -141,37 +142,36 @@ export default function Home() {
   return (
     <div className="grid grid-rows-[auto_1fr_auto] items-center justify-items-center min-h-screen p-4 sm:p-8 pb-20 gap-8 sm:gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)] overflow-x-hidden">
       {/* Header (simplified for demo) */}
-      <header className="row-start-1 mb-4 sm:mb-8 w-full text-center">
+      {/* <header className="row-start-1 mb-4 sm:mb-8 w-full text-center">
         <h1 className="text-2xl font-bold text-center">Round 1</h1>
-        
-        {/* Add shadcn/ui test component */}
-        <div className="mt-4">
-          <ShadcnTest />
-        </div>
-      </header>
+      </header> */}
 
       {/* Main content area with the coupon */}
       <main className="flex flex-col gap-4 sm:gap-[32px] row-start-2 items-center justify-center w-full max-w-full">
         {!isSubmitted ? (
           <>
             <div className="flex justify-center w-full">
-              <BettingCoupon 
-                matches={sampleMatches} 
-                initialSelections={initialSampleSelections} 
-                onSelectionChange={handleSelectionChange} 
-              />
+              <div className="w-full max-w-lg">
+                <BettingCoupon 
+                  matches={sampleMatches} 
+                  initialSelections={initialSampleSelections} 
+                  onSelectionChange={handleSelectionChange} 
+                />
+              </div>
             </div>
             
             <div className="flex justify-center w-full">
-              <Questionnaire
-                ref={questionnaireRef}
-                showQuestionnaire={true}
-                teams={sampleTeams}
-                players={samplePlayers}
-                initialPredictions={initialPredictions}
-                onPredictionChange={handlePredictionChange}
-                onToggleVisibility={handleQuestionnaireToggle}
-              />
+              <div className="w-full max-w-lg">
+                <Questionnaire
+                  ref={questionnaireRef}
+                  showQuestionnaire={true}
+                  teams={sampleTeams}
+                  players={samplePlayers}
+                  initialPredictions={initialPredictions}
+                  onPredictionChange={handlePredictionChange}
+                  onToggleVisibility={handleQuestionnaireToggle}
+                />
+              </div>
             </div>
             
             <div className="w-full max-w-lg px-4 sm:px-0 flex justify-center items-center flex-col">
@@ -222,9 +222,9 @@ export default function Home() {
       </main>
       
       {/* Footer (simplified for demo) */}
-      <footer className="row-start-3 mt-8 text-center text-sm text-gray-500">
+      {/* <footer className="row-start-3 mt-8 text-center text-sm text-gray-500">
         Original Next.js footer links omitted for demo clarity.
-      </footer>
+      </footer> */}
     </div>
   );
 }

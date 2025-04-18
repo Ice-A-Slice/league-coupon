@@ -113,7 +113,6 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
           id="league-winner"
           placeholder="Select league winner..."
         />
-        <p className="text-xs text-gray-500 mt-1">+10 points if correct</p>
       </div>
       
       {/* Last Place Selection */}
@@ -131,7 +130,6 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
           id="last-place"
           placeholder="Select last place team..."
         />
-        <p className="text-xs text-gray-500 mt-1">+7 points if correct</p>
       </div>
       
       {/* Best Goal Difference Selection */}
@@ -149,7 +147,6 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
           id="best-goal-difference"
           placeholder="Select team with best goal difference..."
         />
-        <p className="text-xs text-gray-500 mt-1">+5 points if correct</p>
       </div>
       
       {/* Top Scorer Selection */}
@@ -168,7 +165,6 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
           id="top-scorer"
           placeholder="Select top scorer..."
         />
-        <p className="text-xs text-gray-500 mt-1">+8 points if correct</p>
       </div>
     </div>
   );
@@ -176,7 +172,7 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
   // Footer content explaining scoring
   const footerContent = (
     <p>
-      <span className="font-semibold">How scoring works:</span> You receive points for each correct prediction in addition to your coupon points.
+      <span className="font-semibold">How scoring works:</span> You receive 3 points for each correct prediction in addition to your match points.
     </p>
   );
 
