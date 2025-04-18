@@ -43,23 +43,21 @@ const BettingCoupon: React.FC<BettingCouponProps> = ({ matches, initialSelection
   // Content for the betting coupon
   const couponContent = (
     <div className="w-full">
-      {matches.map((match: Match, index: number) => {
+      {matches.map((match: Match) => {
         const matchIdStr = match.id.toString();
         const currentSelection = selections[matchIdStr];
 
         return (
-          // Responsive layout with preserved styling
-          <div key={matchIdStr} className="flex w-full flex-col xs:flex-row items-start xs:items-center justify-between p-2 sm:p-3 border-b border-gray-200 last:border-b-0 hover:bg-gray-50 transition-colors duration-150">
-            {/* Match Info - Adjusted spacing */}
-            <div className="flex items-center space-x-2 sm:space-x-3 flex-1 min-w-0 mr-2 sm:mr-3">
-              <span className="flex-shrink-0 flex items-center justify-center w-6 h-6 bg-green-600 text-white rounded-full text-xs font-semibold"> 
-                {index + 1}
-              </span>
-              {/* Adjusted text size and weight */}
-              <span className="text-sm sm:text-base font-medium text-gray-800 truncate">{match.homeTeam} - {match.awayTeam}</span>
+          <div key={matchIdStr} className="flex w-full flex-row items-center justify-between p-2 sm:p-3 border-b border-gray-200 last:border-b-0 hover:bg-gray-50 transition-colors duration-150">
+            {/* Match Info - Left aligned team names on separate lines with equal styling */}
+            <div className="flex-1 mr-2 sm:mr-3">
+              <div className="flex flex-col text-left">
+                <span className="text-sm sm:text-base text-gray-800">{match.homeTeam}</span>
+                <span className="text-sm sm:text-base text-gray-800">{match.awayTeam}</span>
+              </div>
             </div>
-            {/* Selection Buttons - Adjusted for responsive layout while maintaining style */}
-            <div className="flex space-x-1.5 sm:space-x-3 flex-shrink-0 mt-2 xs:mt-0 self-end xs:self-auto w-full xs:w-auto justify-end"> 
+            {/* Selection Buttons */}
+            <div className="flex space-x-1.5 sm:space-x-3 flex-shrink-0 self-center">
               {selectionLabels.map((label) => {
                 const isSelected = currentSelection === label;
                 return (
@@ -89,7 +87,7 @@ const BettingCoupon: React.FC<BettingCouponProps> = ({ matches, initialSelection
 
   return (
     <SectionContainer
-      title="1x2"
+      title="Round 1"
       subtitle="Select match outcomes to fill your coupon"
       collapsible={false}
     >

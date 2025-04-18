@@ -1,28 +1,66 @@
 /* Import all of Tailwind at once */
 @import "tailwindcss";
 
-/* Define variables */
-@theme {
-  --background: #ffffff;
-  --foreground: #171717;
-  --teal-500: #14b8a6;
-  --teal-600: #0d9488;
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 173 78% 40%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 173 78% 95%;
+    --accent-foreground: 173 78% 20%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 173 78% 40%;
+    --radius: 0.5rem;
+    
+    /* Legacy variables */
+    --teal-500: #14b8a6;
+    --teal-600: #0d9488;
+    --color-background: hsl(var(--background));
+    --color-foreground: hsl(var(--foreground));
+    --font-sans: var(--font-geist-sans);
+    --font-mono: var(--font-geist-mono);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --background: 240 10% 4%;
+      --foreground: 0 0% 93%;
+      --card: 240 10% 4%;
+      --card-foreground: 0 0% 93%;
+      --popover: 240 10% 4%;
+      --popover-foreground: 0 0% 93%;
+      --primary: 173 78% 40%;
+      --primary-foreground: 0 0% 98%;
+      --secondary: 240 3.7% 15.9%;
+      --secondary-foreground: 0 0% 98%;
+      --muted: 240 3.7% 15.9%;
+      --muted-foreground: 240 5% 64.9%;
+      --accent: 173 78% 20%;
+      --accent-foreground: 173 78% 95%;
+      --destructive: 0 62.8% 30.6%;
+      --destructive-foreground: 0 0% 98%;
+      --border: 240 3.7% 15.9%;
+      --input: 240 3.7% 15.9%;
+      --ring: 173 78% 35%;
+    }
   }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
   font-family: Arial, Helvetica, sans-serif;
 }
 
@@ -66,4 +104,57 @@ body {
     width: 100%;
     justify-content: flex-end;
   }
+}
+
+/* Custom scrollbar for Combobox dropdown */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: hsl(var(--secondary));
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.2s ease;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.custom-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox scrollbar */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.3) hsl(var(--secondary));
+}
+
+/* Styles for when the Combobox has focus */
+.custom-scrollbar:focus-within::-webkit-scrollbar-thumb {
+  background: hsl(var(--teal-500) / 0.4);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.custom-scrollbar:focus-within::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--teal-500) / 0.6);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/* Firefox scrollbar when focused */
+.custom-scrollbar:focus-within {
+  scrollbar-color: hsl(var(--teal-500) / 0.4) hsl(var(--secondary));
 }
