@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, forwardRef, useImperativeHandle, useEffect } from "react";
-import TeamSelect from "./TeamSelect";
-import PlayerSelect from "./PlayerSelect";
+import React, { useState, forwardRef, useImperativeHandle } from "react";
+import TeamSelectWithCombobox from "./TeamSelectWithCombobox";
+import PlayerSelectWithCombobox from "./PlayerSelectWithCombobox";
 import { Prediction, QuestionnaireProps } from "./types";
 import SectionContainer from "../SectionContainer";
 
@@ -24,11 +24,6 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const [isContentVisible, setIsContentVisible] = useState(true);
   
-  // Debugging console log to verify onToggleVisibility exists
-  useEffect(() => {
-    console.log("Questionnaire rendered with onToggleVisibility:", !!onToggleVisibility);
-  }, [onToggleVisibility]);
-
   // Expose validation method to parent component
   useImperativeHandle(ref, () => ({
     validatePredictions: () => {
@@ -78,8 +73,14 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
       newErrors.topScorer = "Please select a top scorer";
     }
     
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    const isValid = Object.keys(newErrors).length === 0;
+    
+    // Only update state if there are errors (avoids unnecessary renders)
+    if (!isValid) {
+      setErrors(newErrors);
+    }
+    
+    return isValid;
   };
 
   // Toggle content visibility
@@ -105,14 +106,13 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
         {errors.leagueWinner && (
           <p className="text-red-500 text-xs mt-1">{errors.leagueWinner}</p>
         )}
-        <TeamSelect
+        <TeamSelectWithCombobox
           teams={teams}
           selectedTeamId={predictions.leagueWinner}
           onSelect={(teamId) => updatePrediction('leagueWinner', teamId)}
           id="league-winner"
           placeholder="Select league winner..."
         />
-        <p className="text-xs text-gray-500 mt-1">+10 points if correct</p>
       </div>
       
       {/* Last Place Selection */}
@@ -123,14 +123,13 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
         {errors.lastPlace && (
           <p className="text-red-500 text-xs mt-1">{errors.lastPlace}</p>
         )}
-        <TeamSelect
+        <TeamSelectWithCombobox
           teams={teams}
           selectedTeamId={predictions.lastPlace}
           onSelect={(teamId) => updatePrediction('lastPlace', teamId)}
           id="last-place"
           placeholder="Select last place team..."
         />
-        <p className="text-xs text-gray-500 mt-1">+7 points if correct</p>
       </div>
       
       {/* Best Goal Difference Selection */}
@@ -141,14 +140,13 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
         {errors.bestGoalDifference && (
           <p className="text-red-500 text-xs mt-1">{errors.bestGoalDifference}</p>
         )}
-        <TeamSelect
+        <TeamSelectWithCombobox
           teams={teams}
           selectedTeamId={predictions.bestGoalDifference}
           onSelect={(teamId) => updatePrediction('bestGoalDifference', teamId)}
           id="best-goal-difference"
           placeholder="Select team with best goal difference..."
         />
-        <p className="text-xs text-gray-500 mt-1">+5 points if correct</p>
       </div>
       
       {/* Top Scorer Selection */}
@@ -159,7 +157,7 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
         {errors.topScorer && (
           <p className="text-red-500 text-xs mt-1">{errors.topScorer}</p>
         )}
-        <PlayerSelect
+        <PlayerSelectWithCombobox
           players={players}
           teams={teams}
           selectedPlayerId={predictions.topScorer}
@@ -167,7 +165,6 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
           id="top-scorer"
           placeholder="Select top scorer..."
         />
-        <p className="text-xs text-gray-500 mt-1">+8 points if correct</p>
       </div>
     </div>
   );
@@ -175,7 +172,7 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
   // Footer content explaining scoring
   const footerContent = (
     <p>
-      <span className="font-semibold">How scoring works:</span> You receive points for each correct prediction in addition to your coupon points.
+      <span className="font-semibold">How scoring works:</span> You receive 3 points for each correct prediction in addition to your match points.
     </p>
   );
 
