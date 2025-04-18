@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, forwardRef, useImperativeHandle } from "react";
-import TeamSelectWithCombobox from "./TeamSelectWithCombobox";
-import PlayerSelectWithCombobox from "./PlayerSelectWithCombobox";
+import TeamSelect from "./TeamSelect";
+import PlayerSelect from "./PlayerSelect";
 import { Prediction, QuestionnaireProps } from "./types";
 import SectionContainer from "../SectionContainer";
 
@@ -106,7 +106,7 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
         {errors.leagueWinner && (
           <p className="text-red-500 text-xs mt-1">{errors.leagueWinner}</p>
         )}
-        <TeamSelectWithCombobox
+        <TeamSelect
           teams={teams}
           selectedTeamId={predictions.leagueWinner}
           onSelect={(teamId) => updatePrediction('leagueWinner', teamId)}
@@ -123,7 +123,7 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
         {errors.lastPlace && (
           <p className="text-red-500 text-xs mt-1">{errors.lastPlace}</p>
         )}
-        <TeamSelectWithCombobox
+        <TeamSelect
           teams={teams}
           selectedTeamId={predictions.lastPlace}
           onSelect={(teamId) => updatePrediction('lastPlace', teamId)}
@@ -140,7 +140,7 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
         {errors.bestGoalDifference && (
           <p className="text-red-500 text-xs mt-1">{errors.bestGoalDifference}</p>
         )}
-        <TeamSelectWithCombobox
+        <TeamSelect
           teams={teams}
           selectedTeamId={predictions.bestGoalDifference}
           onSelect={(teamId) => updatePrediction('bestGoalDifference', teamId)}
@@ -157,7 +157,7 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
         {errors.topScorer && (
           <p className="text-red-500 text-xs mt-1">{errors.topScorer}</p>
         )}
-        <PlayerSelectWithCombobox
+        <PlayerSelect
           players={players}
           teams={teams}
           selectedPlayerId={predictions.topScorer}

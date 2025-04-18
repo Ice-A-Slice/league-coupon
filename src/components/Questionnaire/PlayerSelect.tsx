@@ -5,7 +5,7 @@ import { Player, Team } from "./types";
 import { Combobox } from "@/components/ui/combobox";
 import { playerSelectToComboboxProps } from "@/lib/combobox-adapters";
 
-interface PlayerSelectWithComboboxProps {
+interface PlayerSelectProps {
   players: Player[];
   teams?: Team[]; // Kept for API compatibility
   selectedPlayerId: string | number | null;
@@ -15,11 +15,9 @@ interface PlayerSelectWithComboboxProps {
 }
 
 /**
- * A drop-in replacement for PlayerSelect that uses the new Combobox component
- * This maintains the same API as the original PlayerSelect component but uses
- * the enhanced Combobox component internally.
+ * A component for selecting players using a Combobox
  */
-const PlayerSelectWithCombobox: React.FC<PlayerSelectWithComboboxProps> = (props) => {
+const PlayerSelect: React.FC<PlayerSelectProps> = (props) => {
   // Use our adapter to transform props to Combobox format
   const comboboxProps = playerSelectToComboboxProps(props);
   
@@ -41,4 +39,4 @@ const PlayerSelectWithCombobox: React.FC<PlayerSelectWithComboboxProps> = (props
   );
 };
 
-export default PlayerSelectWithCombobox; 
+export default PlayerSelect; 

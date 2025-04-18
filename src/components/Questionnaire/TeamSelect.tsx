@@ -5,7 +5,7 @@ import { Team } from "./types";
 import { Combobox } from "@/components/ui/combobox";
 import { teamSelectToComboboxProps } from "@/lib/combobox-adapters";
 
-interface TeamSelectWithComboboxProps {
+interface TeamSelectProps {
   teams: Team[];
   selectedTeamId: string | number | null;
   onSelect: (teamId: string | number | null) => void;
@@ -14,11 +14,9 @@ interface TeamSelectWithComboboxProps {
 }
 
 /**
- * A drop-in replacement for TeamSelect that uses the new Combobox component
- * This maintains the same API as the original TeamSelect component but uses
- * the enhanced Combobox component internally.
+ * A component for selecting teams using a Combobox
  */
-const TeamSelectWithCombobox: React.FC<TeamSelectWithComboboxProps> = (props) => {
+const TeamSelect: React.FC<TeamSelectProps> = (props) => {
   // Use our adapter to transform props to Combobox format
   const comboboxProps = teamSelectToComboboxProps(props);
   
@@ -40,4 +38,4 @@ const TeamSelectWithCombobox: React.FC<TeamSelectWithComboboxProps> = (props) =>
   );
 };
 
-export default TeamSelectWithCombobox; 
+export default TeamSelect; 
