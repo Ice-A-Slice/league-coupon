@@ -42,7 +42,7 @@ const BettingCoupon: React.FC<BettingCouponProps> = ({ matches, initialSelection
 
   // Content for the betting coupon
   const couponContent = (
-    <div className="w-full">
+    <div className="w-full flex flex-col items-stretch p-2 overflow-x-visible">
       {matches.map((match: Match) => {
         const matchIdStr = match.id.toString();
         const currentSelection = selections[matchIdStr];

@@ -7,6 +7,7 @@ import BettingCoupon from "@/components/BettingCoupon";
 import { Match, Selections } from "@/components/BettingCoupon/types";
 import Questionnaire from "@/components/Questionnaire/Questionnaire";
 import { Prediction, Team, Player } from "@/components/Questionnaire/types";
+import { Button } from "@/components/ui/button";
 
 // Sample data for the demo
 const sampleMatches: Match[] = [
@@ -184,14 +185,14 @@ export default function Home() {
                 </div>
               )}
               
-              <button
+              <Button
                 type="button"
-                className="w-full px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:opacity-70"
+                className="w-full"
                 onClick={handleSubmit}
                 disabled={isSubmitting}
               >
-                {isSubmitting ? 'Submitting...' : 'Submit Coupon and Predictions'}
-              </button>
+                {isSubmitting ? 'Submitting...' : 'Submit'}
+              </Button>
             </div>
           </>
         ) : (
@@ -202,18 +203,22 @@ export default function Home() {
               </svg>
               <h2 className="text-2xl font-bold text-green-800 mb-2">Success!</h2>
               <p className="text-green-700 mb-6">Your coupon and predictions have been submitted.</p>
-              <button
+              <Button
                 type="button"
-                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                className="w-full"
                 onClick={() => {
                   setIsSubmitted(false);
                   setSelections(initialSampleSelections);
                   setPredictions(initialPredictions);
                   setValidationErrors([]);
                 }}
+                style={{ 
+                  backgroundColor: 'rgb(22 163 74)', // bg-green-600
+                  color: 'white'
+                }}
               >
                 Submit Another Coupon
-              </button>
+              </Button>
             </div>
           </div>
         )}

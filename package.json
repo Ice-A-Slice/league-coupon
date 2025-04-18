@@ -45,11 +45,13 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwind-merge": "^3.2.0",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "tw-animate-css": "^1.2.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@heroicons/react": "^2.2.0",
+    "@swc/core": "^1.11.21",
     "@swc/jest": "^0.2.37",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.6.3",
