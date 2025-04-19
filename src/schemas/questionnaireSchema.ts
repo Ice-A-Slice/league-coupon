@@ -3,10 +3,10 @@ import type { Prediction } from '@/components/Questionnaire/types';
 
 // Schema for validating non-null values for prediction fields
 export const PredictionSchema = z.object({
-  leagueWinner: z.string().min(1, "League winner is required").nullable(),
-  lastPlace: z.string().min(1, "Last place team is required").nullable(),
-  bestGoalDifference: z.string().min(1, "Best goal difference team is required").nullable(),
-  topScorer: z.string().min(1, "Top scorer is required").nullable()
+  leagueWinner: z.string().min(1, "League winner prediction is required"),
+  lastPlace: z.string().min(1, "Last place team prediction is required"),
+  bestGoalDifference: z.string().min(1, "Best goal difference team prediction is required"),
+  topScorer: z.string().min(1, "Top scorer prediction is required")
 });
 
 // Helper schema that doesn't enforce non-null validation

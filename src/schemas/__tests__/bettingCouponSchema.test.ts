@@ -100,6 +100,7 @@ describe('validateCoupon', () => {
   it('should invalidate when selections have invalid structure', () => {
     const invalidSelections = {
       '1': '1' as const,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       '2': 'invalid' as any, // Invalid selection
       '3': '2' as const
     };

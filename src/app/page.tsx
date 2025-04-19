@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 // Remove unused Image import
 // Import the component and types
-import BettingCoupon, { BettingCouponRef } from '@/components/BettingCoupon/BettingCoupon';
+import BettingCoupon from '@/components/BettingCoupon/BettingCoupon';
 import { Match, Selections } from "@/components/BettingCoupon/types";
 import Questionnaire from '@/components/Questionnaire/Questionnaire';
 import { Prediction, Team, Player } from "@/components/Questionnaire/types";
@@ -64,6 +64,13 @@ const initialPredictions: Prediction = {
   topScorer: null
 };
 
+// Interface for structured validation errors
+interface ErrorsState {
+  coupon?: Record<string, string>;
+  questionnaire?: Record<string, string>; // Allows for specific field errors later
+  summary?: string;
+}
+
 export default function Home() {
   // State for selections and predictions
   const [selections, setSelections] = useState<Selections>(initialSampleSelections);
@@ -73,17 +80,18 @@ export default function Home() {
   const [isQuestionnaireContentVisible, setIsQuestionnaireContentVisible] = useState(true);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  // Use the new structured error state
+  const [validationErrors, setValidationErrors] = useState<ErrorsState>({});
   
   // Log initial selections on mount
   useEffect(() => {
     console.log('Initial selections loaded:', initialSampleSelections);
     console.log('Current selections state:', selections);
-  }, []);
+  }, [selections]);
   
   // Create ref for the questionnaire component with proper type
   interface QuestionnaireRef {
-    validatePredictions: () => boolean;
+    validatePredictions: () => { isValid: boolean; errors?: Record<string, string> };
   }
   const questionnaireRef = useRef<QuestionnaireRef>(null);
   
@@ -96,15 +104,14 @@ export default function Home() {
   // Handler for selection changes
   const handleSelectionChange = (newSelections: Selections) => {
     console.log('Selection change detected:', newSelections);
-    // Ensure we are setting new object reference, not just updating existing one
     setSelections({...newSelections});
-    setValidationErrors([]);
+    setValidationErrors({}); // Reset structured errors
   };
   
   // Handler for prediction changes
   const handlePredictionChange = (newPredictions: Prediction) => {
     setPredictions(newPredictions);
-    setValidationErrors([]);
+    setValidationErrors({}); // Reset structured errors
   };
   
   // Handler for questionnaire content toggle
@@ -112,31 +119,19 @@ export default function Home() {
     setIsQuestionnaireContentVisible(!isQuestionnaireContentVisible);
   };
   
-  // Validate selections
-  const validateSelections = () => {
-    // Check if at least one match selection has been made
-    const hasSelections = Object.keys(selections).length > 0;
-    console.log(`🔍 validateSelections called - Has selections: ${hasSelections}, Count: ${Object.keys(selections).length}`);
-    console.log(`🔍 Current selections:`, JSON.stringify(selections, null, 2));
-    return hasSelections;
-  };
-  
   // Handler for form submission
   const handleSubmit = () => {
     console.log(`🚀 Form submission started`);
     setIsSubmitting(true);
-    setValidationErrors([]);
+    setValidationErrors({}); // Reset errors to an empty object
     
-    // Track overall form validity and specific component validity
     let isFormValid = true;
-    let couponErrorCount = 0;
-    let questionnaireErrorCount = 0;
-    
-    // Log current state for debugging
+    const combinedErrors: ErrorsState = {}; // Use const
+
     console.log("🧾 Current selections:", JSON.stringify(selections, null, 2));
     console.log("🔮 Current predictions:", JSON.stringify(predictions, null, 2));
     
-    // Validate betting coupon using the ref
+    // Validate betting coupon
     if (bettingCouponRef.current) {
       console.log(`🧪 Validating betting coupon...`);
       const couponValidation = bettingCouponRef.current.validate();
@@ -145,54 +140,43 @@ export default function Home() {
       if (!couponValidation.isValid) {
         isFormValid = false;
         if (couponValidation.errors) {
-          couponErrorCount = Object.keys(couponValidation.errors).length;
-          console.log(`❌ Found ${couponErrorCount} coupon validation errors:`, JSON.stringify(couponValidation.errors, null, 2));
-          
-          setValidationErrors(prev => [
-            ...prev, 
-            `Please make selections for all ${couponErrorCount} unselected match${couponErrorCount > 1 ? 'es' : ''}`
-          ]);
+          combinedErrors.coupon = couponValidation.errors; // Store detailed coupon errors
+          console.log(`❌ Found coupon validation errors:`, JSON.stringify(couponValidation.errors, null, 2));
         }
       } else {
         console.log(`✅ Coupon validation passed`);
       }
     }
     
-    // Validate questionnaire if shown
+    // Validate questionnaire
     if (showQuestionnaire && questionnaireRef.current) {
-      const isQuestionnaireValid = questionnaireRef.current.validatePredictions();
-      console.log("Questionnaire validation result:", isQuestionnaireValid);
+       console.log(`🧪 Validating questionnaire...`);
+      // Assuming validatePredictions now returns { isValid, errors? }
+      const questionnaireValidation = questionnaireRef.current.validatePredictions(); 
+      console.log("❓ Questionnaire validation result:", JSON.stringify(questionnaireValidation, null, 2));
       
-      if (!isQuestionnaireValid) {
+      if (!questionnaireValidation.isValid) {
         isFormValid = false;
-        questionnaireErrorCount = 1; // We don't have access to specific field errors from the current API
-        setValidationErrors(prev => [
-          ...prev,
-          "Please complete all predictions in the questionnaire"
-        ]);
+        // Store questionnaire errors (assuming generic for now, but could be detailed)
+        combinedErrors.questionnaire = questionnaireValidation.errors || { form: "Please complete all predictions" }; 
+        console.log(`❌ Found questionnaire validation errors:`, JSON.stringify(combinedErrors.questionnaire, null, 2));
+      }
+       else {
+         console.log(`✅ Questionnaire validation passed`);
       }
     }
     
-    // Add a summary message if both components have errors
-    if (couponErrorCount > 0 && questionnaireErrorCount > 0) {
-      setValidationErrors(prev => [
-        "Please fix all errors in both sections before submitting",
-        ...prev
-      ]);
-    }
-    
-    // If everything is valid, proceed with submission
-    if (isFormValid) {
-      // Submit both selections and predictions
-      console.log("Submitting coupon with the following data:");
-      console.log("Selections:", selections);
-      console.log("Predictions:", showQuestionnaire ? predictions : "Questionnaire not shown");
-      
-      // In a real app, you would submit to a server here
-      setIsSubmitted(true);
-    } else {
-      // Scroll to the top of the form to show validation errors
+    // Update state with combined errors and potentially a summary
+    if (!isFormValid) {
+      combinedErrors.summary = "Please fix all errors in both sections before submitting";
+      setValidationErrors(combinedErrors);
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      // Submit logic... 
+      console.log("Submitting coupon...");
+      console.log("Selections:", selections);
+      console.log("Predictions:", predictions);
+      setIsSubmitted(true);
     }
     
     setIsSubmitting(false);
@@ -235,12 +219,36 @@ export default function Home() {
             </div>
             
             <div className="w-full max-w-lg px-4 sm:px-0 flex justify-center items-center flex-col">
-              {validationErrors.length > 0 && (
+              {/* Display Summary Error */}
+              {validationErrors.summary && (
+                <div className="mb-4 p-3 bg-red-100 border border-red-300 rounded text-red-800 text-sm w-full">
+                  <p className="font-bold">{validationErrors.summary}</p>
+                </div>
+              )}
+
+              {/* Display Detailed Coupon Errors (if any) */}
+              {validationErrors.coupon && Object.keys(validationErrors.coupon).length > 0 && (
                 <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm w-full">
-                  <p className="font-semibold mb-1">Please fix the following errors:</p>
+                  <p className="font-semibold mb-1">Coupon Errors:</p>
                   <ul className="list-disc pl-5">
-                    {validationErrors.map((error, index) => (
-                      <li key={index}>{error}</li>
+                    {Object.entries(validationErrors.coupon).map(([matchId, error]) => {
+                       // Find match details to show more context (optional)
+                       const match = sampleMatches.find(m => m.id.toString() === matchId);
+                       const matchLabel = match ? `${match.homeTeam} vs ${match.awayTeam}` : `Match ${matchId}`;
+                      return <li key={`coupon-err-${matchId}`}>{matchLabel}: {error}</li>;
+                    })}
+                  </ul>
+                </div>
+              )}
+
+              {/* Display Questionnaire Errors (if any) */}
+              {validationErrors.questionnaire && Object.keys(validationErrors.questionnaire).length > 0 && (
+                 <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm w-full">
+                  <p className="font-semibold mb-1">Questionnaire Errors:</p>
+                  <ul className="list-disc pl-5">
+                     {/* Assuming generic error for now, but could map specific fields */}
+                     {Object.entries(validationErrors.questionnaire).map(([field, error]) => (
+                      <li key={`q-err-${field}`}>{error}</li> // Display the generic message or field-specific error
                     ))}
                   </ul>
                 </div>
@@ -271,7 +279,7 @@ export default function Home() {
                   setIsSubmitted(false);
                   setSelections(initialSampleSelections);
                   setPredictions(initialPredictions);
-                  setValidationErrors([]);
+                  setValidationErrors({});
                 }}
                 style={{ 
                   backgroundColor: 'rgb(22 163 74)', // bg-green-600

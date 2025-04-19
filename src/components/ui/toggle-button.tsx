@@ -31,7 +31,8 @@ const ToggleButton: React.FC<ToggleButtonProps> = ({
   };
 
   // Create a handler with additional logging
-  const handleClick = (e: React.MouseEvent) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const handleClick = (_e: React.MouseEvent) => {
     console.log(`👆 BUTTON CLICKED - Match: ${matchId}, Selection: ${selection}, Current isSelected: ${isSelected}`);
     
     try {

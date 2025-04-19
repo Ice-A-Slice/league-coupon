@@ -4,7 +4,7 @@ import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'rea
 import type { BettingCouponProps, Match, SelectionType, Selections } from './types'; // Import types
 import SectionContainer from '@/components/layout';
 import ToggleButton from '../ui/toggle-button'; // Updated import
-import { SelectionsSchema, validateCoupon } from '@/schemas/bettingCouponSchema';
+import { validateCoupon } from '@/schemas/bettingCouponSchema';
 
 // Define the ref interface
 export interface BettingCouponRef {
@@ -113,6 +113,8 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
   };
 
   // Sync state if initialSelections prop changes externally
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     if (initialSelections && JSON.stringify(initialSelections) !== JSON.stringify({})) {
       // Only update if there are actual initialSelections and they differ from current
@@ -121,6 +123,7 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
       }
     }
   }, [initialSelections]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   // Content for the betting coupon
   const couponContent = (

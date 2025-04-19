@@ -7,7 +7,12 @@ import { Prediction, QuestionnaireProps } from "./types";
 import SectionContainer from "@/components/layout";
 import { validatePrediction } from "@/schemas/questionnaireSchema";
 
-const Questionnaire = forwardRef<{validatePredictions: () => boolean}, QuestionnaireProps>(({
+// Update Ref type definition
+export interface QuestionnaireRef {
+  validatePredictions: () => { isValid: boolean; errors?: Record<string, string> };
+}
+
+const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
   showQuestionnaire = true,
   teams,
   players,
@@ -25,10 +30,19 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const [isContentVisible, setIsContentVisible] = useState(true);
   
-  // Expose validation method to parent component
+  // Expose validation method returning the detailed result
   useImperativeHandle(ref, () => ({
     validatePredictions: () => {
-      return validatePredictions();
+      // Directly call the imported validator and return its full result
+      const result = validatePrediction(predictions);
+      console.log("Questionnaire validation details:", result); // Keep logging
+      // Update internal errors state for inline display
+      if (!result.isValid && result.errors) {
+        setErrors(result.errors);
+      } else {
+        setErrors({});
+      }
+      return result; // Return the full { isValid, errors? } object
     }
   }));
 
@@ -51,22 +65,6 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
     
     setPredictions(updatedPredictions);
     onPredictionChange(updatedPredictions);
-  };
-
-  // Validate predictions using Zod schema
-  const validatePredictions = (): boolean => {
-    // Use our Zod validation function
-    const result = validatePrediction(predictions);
-    
-    console.log("Questionnaire validation details:", result);
-    
-    if (!result.isValid && result.errors) {
-      setErrors(result.errors);
-    } else {
-      setErrors({});
-    }
-    
-    return result.isValid;
   };
 
   // Toggle content visibility
