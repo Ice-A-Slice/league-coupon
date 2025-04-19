@@ -10,6 +10,7 @@ interface ToggleButtonProps {
   disabled?: boolean;
   'data-match-id'?: string;
   'data-selection'?: string;
+  'data-testid'?: string;
 }
 
 const ToggleButton: React.FC<ToggleButtonProps> = ({ 
@@ -21,6 +22,7 @@ const ToggleButton: React.FC<ToggleButtonProps> = ({
   disabled = false,
   'data-match-id': matchId,
   'data-selection': selection,
+  'data-testid': dataTestId,
   ...rest
 }) => {
   // Size-specific classes
@@ -52,6 +54,7 @@ const ToggleButton: React.FC<ToggleButtonProps> = ({
       data-selected={isSelected} 
       data-match-id={matchId}
       data-selection={selection}
+      data-testid={dataTestId}
       className={cn(
         "touch-target-min border rounded-md flex items-center justify-center",
         "font-semibold transition-all duration-100",

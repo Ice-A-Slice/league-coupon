@@ -69,6 +69,12 @@ export interface SectionContainerProps {
    * This is called whenever the collapsed state changes.
    */
   onToggleVisibility?: () => void;
+  
+  /** 
+   * Optional aria-label for accessibility.
+   * If provided, it will be applied to the section element.
+   */
+  'aria-label'?: string;
 }
 
 /**
@@ -124,6 +130,7 @@ const SectionContainer: React.FC<SectionContainerProps> = ({
   headerClassName = '',
   footerClassName = '',
   onToggleVisibility,
+  'aria-label': ariaLabel,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(initialCollapsed);
 
@@ -154,6 +161,7 @@ const SectionContainer: React.FC<SectionContainerProps> = ({
     <section
       className={`${containerBaseStyle} ${className}`}
       aria-labelledby={headingId}
+      aria-label={ariaLabel}
     >
       {/* Header Section */}
       <div

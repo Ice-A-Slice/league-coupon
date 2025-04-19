@@ -5,6 +5,7 @@ import type { BettingCouponProps, Match, SelectionType, Selections } from './typ
 import SectionContainer from '@/components/layout';
 import ToggleButton from '../ui/toggle-button'; // Updated import
 import { validateCoupon } from '@/schemas/bettingCouponSchema';
+import ValidationStatusIndicator from '@/components/ui/ValidationStatusIndicator'; // Added import
 
 // Define the ref interface
 export interface BettingCouponRef {
@@ -33,7 +34,7 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
     }
   }));
 
-  // Validate selections using the Zod schema
+  // Validate selections using the Zod schema (for immediate validation on demand)
   const validateSelections = () => {
     // Use the new validateCoupon function that combines structure and completeness validation
     console.log('Validating selections:', selections);
@@ -89,7 +90,7 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
     // Log the new selections state
     console.log(`📊 New selections state:`, JSON.stringify(newSelections, null, 2));
     
-    // Clear any error for this match
+    // Restore immediate error clearing for the specific match
     if (errors[matchIdStr]) {
       console.log(`🧹 Clearing error for match ${matchIdStr}`);
       setErrors(prev => {
@@ -99,11 +100,11 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
       });
     }
     
-    // Update state
+    // Update state immediately
     console.log(`💾 Updating selections state`);
     setSelections(newSelections);
     
-    // Call the callback function if it exists
+    // Call the callback function immediately if it exists
     if (onSelectionChange) {
       console.log(`📞 Calling onSelectionChange callback with new selections`);
       onSelectionChange(newSelections);
@@ -130,7 +131,7 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
     <div className="w-full flex flex-col items-stretch p-2 overflow-x-visible">
       {/* Summary error message when validation errors exist */}
       {Object.keys(errors).length > 0 && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm w-full">
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm w-full" role="alert">
           <p className="font-semibold mb-1">Please make selections for all matches:</p>
           <ul className="list-disc pl-5">
             {Object.entries(errors).map(([matchId, error]) => {
@@ -159,11 +160,16 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
             key={matchIdStr} 
             className={`flex w-full flex-row items-center justify-between p-2 sm:p-3 border-b border-gray-200 last:border-b-0 hover:bg-gray-50 transition-colors duration-150 ${
               hasError ? 'bg-red-50 border-l-4 border-l-red-500' : 
-              isSelected ? 'bg-green-50 border-l-4 border-l-green-500' : ''
+              (isSelected && !hasError) ? 'bg-green-50 border-l-4 border-l-green-500' : ''
             }`}
           >
             {/* Match Info - Left aligned team names on separate lines with equal styling */}
-            <div className="flex-1 mr-2 sm:mr-3">
+            <div className="flex-1 mr-2 sm:mr-3 flex items-center">
+              <ValidationStatusIndicator 
+                hasError={hasError}
+                isValid={isSelected && !hasError}
+                className="mr-2 flex-shrink-0"
+              />
               <div className="flex flex-col text-left">
                 <span className={`text-sm sm:text-base ${hasError ? 'text-red-700 font-medium' : 'text-gray-800'}`}>
                   {match.homeTeam}
@@ -199,6 +205,7 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
                     className={hasError ? "ring-1 ring-red-300" : ""}
                     data-match-id={matchIdStr}
                     data-selection={label}
+                    data-testid={`toggle-button-${matchIdStr}-${label}`}
                   />
                 );
               })}
@@ -214,6 +221,7 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
       title="Round 1"
       subtitle="Select match outcomes to fill your coupon"
       collapsible={false}
+      aria-label="Round 1 Betting Coupon"
     >
       {couponContent}
     </SectionContainer>

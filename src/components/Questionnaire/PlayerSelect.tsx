@@ -10,6 +10,9 @@ interface PlayerSelectProps {
   onSelect: (playerId: string | null) => void;
   placeholder?: string;
   id?: string;
+  className?: string;
+  "aria-invalid"?: boolean;
+  "aria-describedby"?: string;
 }
 
 /**
@@ -36,6 +39,9 @@ const PlayerSelect: React.FC<PlayerSelectProps> = (props) => {
       onClear={handleClear}
       placeholder={props.placeholder || 'Select a player...'}
       id={props.id}
+      className={props.className}
+      aria-invalid={props["aria-invalid"]}
+      aria-describedby={props["aria-describedby"]}
       ariaLabel={`Select a player for ${props.id || 'player selection'}`}
       showClearButton={true}
       emptyMessage="No players found"
