@@ -5,6 +5,7 @@ import TeamSelect from "./TeamSelect";
 import PlayerSelect from "./PlayerSelect";
 import { Prediction, QuestionnaireProps } from "./types";
 import SectionContainer from "@/components/layout";
+import { validatePrediction } from "@/schemas/questionnaireSchema";
 
 const Questionnaire = forwardRef<{validatePredictions: () => boolean}, QuestionnaireProps>(({
   showQuestionnaire = true,
@@ -52,35 +53,16 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
     onPredictionChange(updatedPredictions);
   };
 
-  // Validate predictions
+  // Validate predictions using Zod schema
   const validatePredictions = (): boolean => {
-    const newErrors: {[key: string]: string} = {};
+    // Use our Zod validation function
+    const result = validatePrediction(predictions);
     
-    // Check each prediction field
-    if (predictions.leagueWinner === null) {
-      newErrors.leagueWinner = "Please select a league winner";
+    if (!result.isValid && result.errors) {
+      setErrors(result.errors);
     }
     
-    if (predictions.lastPlace === null) {
-      newErrors.lastPlace = "Please select a team for last place";
-    }
-    
-    if (predictions.bestGoalDifference === null) {
-      newErrors.bestGoalDifference = "Please select a team with best goal difference";
-    }
-    
-    if (predictions.topScorer === null) {
-      newErrors.topScorer = "Please select a top scorer";
-    }
-    
-    const isValid = Object.keys(newErrors).length === 0;
-    
-    // Only update state if there are errors (avoids unnecessary renders)
-    if (!isValid) {
-      setErrors(newErrors);
-    }
-    
-    return isValid;
+    return result.isValid;
   };
 
   // Toggle content visibility

@@ -1,17 +1,66 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import type { BettingCouponProps, Match, SelectionType, Selections } from './types'; // Import types
 import SectionContainer from '@/components/layout';
 import ToggleButton from '../ui/toggle-button'; // Updated import
+import { SelectionsSchema, createSelectionsValidator } from '@/schemas/bettingCouponSchema';
 
-// Define the component with props
-const BettingCoupon: React.FC<BettingCouponProps> = ({ matches, initialSelections = {}, onSelectionChange }) => {
+// Define the ref interface
+export interface BettingCouponRef {
+  validate: () => { isValid: boolean; errors?: Record<string, string> };
+}
+
+// Define the component with props and ref
+const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({ 
+  matches, 
+  initialSelections = {}, 
+  onSelectionChange 
+}, ref) => {
   // State for current selections
   const [selections, setSelections] = useState<Selections>(initialSelections);
+  // State for validation errors
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Define button labels
   const selectionLabels: SelectionType[] = ['1', 'X', '2'];
+
+  // Expose validation method via ref
+  useImperativeHandle(ref, () => ({
+    validate: () => {
+      const result = validateSelections();
+      return result;
+    }
+  }));
+
+  // Validate selections using the Zod schema
+  const validateSelections = () => {
+    // First validate the structure of the selections object
+    const structureResult = SelectionsSchema.safeParse(selections);
+    if (!structureResult.success) {
+      // Handle structure validation errors
+      const formattedErrors: Record<string, string> = {};
+      structureResult.error.issues.forEach((issue) => {
+        // For record validation, path will contain the key with the issue
+        const matchId = issue.path.join('.');
+        formattedErrors[matchId] = issue.message;
+      });
+      setErrors(formattedErrors);
+      return { isValid: false, errors: formattedErrors };
+    }
+
+    // Then validate that all required matches have selections
+    const validator = createSelectionsValidator(matches);
+    const result = validator(selections);
+    
+    if (!result.isValid && result.errors) {
+      setErrors(result.errors);
+    } else {
+      setErrors({});
+    }
+    
+    return result;
+  };
 
   // Handle button click
   const handleSelect = (matchId: string | number, selection: SelectionType) => {
@@ -31,6 +80,15 @@ const BettingCoupon: React.FC<BettingCouponProps> = ({ matches, initialSelection
         [matchIdStr]: selection,
       };
     }
+    
+    // Clear any error for this match
+    if (errors[matchIdStr]) {
+      setErrors(prev => {
+        const { [matchIdStr]: _, ...rest } = prev;
+        return rest;
+      });
+    }
+    
     setSelections(newSelections);
     // Call the callback function if it exists
     onSelectionChange?.(newSelections);
@@ -38,7 +96,12 @@ const BettingCoupon: React.FC<BettingCouponProps> = ({ matches, initialSelection
 
   // Sync state if initialSelections prop changes externally
   useEffect(() => {
-    setSelections(initialSelections);
+    if (initialSelections && JSON.stringify(initialSelections) !== JSON.stringify({})) {
+      // Only update if there are actual initialSelections and they differ from current
+      if (JSON.stringify(selections) !== JSON.stringify(initialSelections)) {
+        setSelections(initialSelections);
+      }
+    }
   }, [initialSelections]);
 
   // Content for the betting coupon
@@ -47,6 +110,7 @@ const BettingCoupon: React.FC<BettingCouponProps> = ({ matches, initialSelection
       {matches.map((match: Match) => {
         const matchIdStr = match.id.toString();
         const currentSelection = selections[matchIdStr];
+        const hasError = !!errors[matchIdStr];
 
         return (
           <div key={matchIdStr} className="flex w-full flex-row items-center justify-between p-2 sm:p-3 border-b border-gray-200 last:border-b-0 hover:bg-gray-50 transition-colors duration-150">
@@ -55,6 +119,9 @@ const BettingCoupon: React.FC<BettingCouponProps> = ({ matches, initialSelection
               <div className="flex flex-col text-left">
                 <span className="text-sm sm:text-base text-gray-800">{match.homeTeam}</span>
                 <span className="text-sm sm:text-base text-gray-800">{match.awayTeam}</span>
+                {hasError && (
+                  <span className="text-xs text-red-500 mt-1">{errors[matchIdStr]}</span>
+                )}
               </div>
             </div>
             {/* Selection Buttons using ToggleButton */}
@@ -86,6 +153,8 @@ const BettingCoupon: React.FC<BettingCouponProps> = ({ matches, initialSelection
       {couponContent}
     </SectionContainer>
   );
-};
+});
+
+BettingCoupon.displayName = "BettingCoupon";
 
 export default BettingCoupon; 
