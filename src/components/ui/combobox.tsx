@@ -1,10 +1,10 @@
 'use client'
 
 import * as React from 'react'
-import { CheckIcon, ChevronsUpDown, Search } from "lucide-react"
+import { Check, ChevronsUpDown } from 'lucide-react'
 
 import { cn, filterComboboxOptions } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/ui'
 import {
   Command,
   CommandEmpty,
@@ -12,12 +12,12 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from '@/components/ui/command'
+} from '@/components/ui'
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from '@/components/ui/popover'
+} from '@/components/ui'
 
 export interface ComboboxOption {
   value: string
@@ -501,7 +501,7 @@ export function Combobox({
         >
           <Command shouldFilter={false}>
             <div className="flex items-center border-b border-gray-200 px-3">
-              <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+              <ChevronsUpDown className="mr-2 h-4 w-4 shrink-0 opacity-50" />
               <CommandInput 
                 placeholder={searchPlaceholder} 
                 value={search}
@@ -628,7 +628,7 @@ export function Combobox({
                         tabIndex={-1}
                       >
                         <div className="flex items-center">
-                          <CheckIcon
+                          <Check
                             className={cn(
                               'mr-2 h-4 w-4 text-teal-600 flex-shrink-0',
                               isSelected ? 'opacity-100' : 'opacity-0'

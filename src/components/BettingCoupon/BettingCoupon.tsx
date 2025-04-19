@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import type { BettingCouponProps, Match, SelectionType, Selections } from './types'; // Import types
-import SectionContainer from '../SectionContainer';
-import PredictionButton from './PredictionButton'; // Import the new component
+import SectionContainer from '@/components/layout';
+import ToggleButton from '../ui/toggle-button'; // Updated import
 
 // Define the component with props
 const BettingCoupon: React.FC<BettingCouponProps> = ({ matches, initialSelections = {}, onSelectionChange }) => {
@@ -57,12 +57,12 @@ const BettingCoupon: React.FC<BettingCouponProps> = ({ matches, initialSelection
                 <span className="text-sm sm:text-base text-gray-800">{match.awayTeam}</span>
               </div>
             </div>
-            {/* Selection Buttons using PredictionButton */}
+            {/* Selection Buttons using ToggleButton */}
             <div className="flex space-x-1.5 sm:space-x-3 flex-shrink-0 self-center">
               {selectionLabels.map((label) => {
                 const isSelected = currentSelection === label;
                 return (
-                  <PredictionButton
+                  <ToggleButton
                     key={label}
                     label={label}
                     isSelected={isSelected}

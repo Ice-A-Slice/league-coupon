@@ -4,7 +4,7 @@ import React, { useState, forwardRef, useImperativeHandle } from "react";
 import TeamSelect from "./TeamSelect";
 import PlayerSelect from "./PlayerSelect";
 import { Prediction, QuestionnaireProps } from "./types";
-import SectionContainer from "../SectionContainer";
+import SectionContainer from "@/components/layout";
 
 const Questionnaire = forwardRef<{validatePredictions: () => boolean}, QuestionnaireProps>(({
   showQuestionnaire = true,
