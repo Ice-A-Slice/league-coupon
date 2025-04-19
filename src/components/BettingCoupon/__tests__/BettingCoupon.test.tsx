@@ -1,13 +1,13 @@
 import React from 'react';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import BettingCoupon, { BettingCouponRef } from '../BettingCoupon';
 import type { Match, Selections } from '../types';
 
-// Mock matches for testing
+// Mock matches for testing with real team names
 const mockMatches: Match[] = [
-  { id: '1', homeTeam: 'Team A', awayTeam: 'Team B' },
-  { id: '2', homeTeam: 'Team C', awayTeam: 'Team D' },
-  { id: '3', homeTeam: 'Team E', awayTeam: 'Team F' }
+  { id: '1', homeTeam: 'Real Madrid', awayTeam: 'Arsenal' },
+  { id: '2', homeTeam: 'Inter', awayTeam: 'Bayern München' },
+  { id: '3', homeTeam: 'Newcastle', awayTeam: 'Crystal Palace' }
 ];
 
 describe('BettingCoupon', () => {
@@ -15,12 +15,12 @@ describe('BettingCoupon', () => {
     render(<BettingCoupon matches={mockMatches} />);
     
     // Check that all team names are displayed
-    expect(screen.getByText('Team A')).toBeInTheDocument();
-    expect(screen.getByText('Team B')).toBeInTheDocument();
-    expect(screen.getByText('Team C')).toBeInTheDocument();
-    expect(screen.getByText('Team D')).toBeInTheDocument();
-    expect(screen.getByText('Team E')).toBeInTheDocument();
-    expect(screen.getByText('Team F')).toBeInTheDocument();
+    expect(screen.getByText('Real Madrid')).toBeInTheDocument();
+    expect(screen.getByText('Arsenal')).toBeInTheDocument();
+    expect(screen.getByText('Inter')).toBeInTheDocument();
+    expect(screen.getByText('Bayern München')).toBeInTheDocument();
+    expect(screen.getByText('Newcastle')).toBeInTheDocument();
+    expect(screen.getByText('Crystal Palace')).toBeInTheDocument();
     
     // Check that all selection buttons are displayed
     const buttons = screen.getAllByRole('button');
@@ -141,9 +141,68 @@ describe('BettingCoupon', () => {
       ref.current?.validate();
     });
     
-    // Find error messages by text content
-    const errorMessages = screen.getAllByText('No selection made');
-    expect(errorMessages.length).toBe(3); // One for each match
+    // Find error messages by checking specific message content within span elements
+    await waitFor(() => {
+      const errorSpans = screen.getAllByText((content, element) => {
+        return element?.tagName.toLowerCase() === 'span' && 
+               content.includes('Please select a result for');
+      });
+      
+      // We should have one error span per match
+      expect(errorSpans.length).toBe(3);
+      
+      // Verify specific team names in the error messages
+      expect(errorSpans[0].textContent).toContain('Real Madrid vs Arsenal');
+      expect(errorSpans[1].textContent).toContain('Inter vs Bayern München');
+      expect(errorSpans[2].textContent).toContain('Newcastle vs Crystal Palace');
+    });
+  });
+  
+  it('displays enhanced error UI with summary and styled matches', async () => {
+    // Create a ref
+    const ref = React.createRef<BettingCouponRef>();
+    
+    render(
+      <BettingCoupon 
+        ref={ref}
+        matches={mockMatches} 
+      />
+    );
+    
+    // Trigger validation to generate errors
+    await act(async () => {
+      ref.current?.validate();
+    });
+    
+    // Check that the error summary is displayed
+    const summaryHeading = screen.getByText('Please make selections for all matches:');
+    expect(summaryHeading).toBeInTheDocument();
+    
+    // Check for error list items in the summary
+    const errorListItems = screen.getAllByRole('listitem');
+    expect(errorListItems.length).toBe(3); // One per match
+    
+    // Verify team names in error list
+    expect(errorListItems[0].textContent).toContain('Real Madrid vs Arsenal');
+    expect(errorListItems[1].textContent).toContain('Inter vs Bayern München');
+    expect(errorListItems[2].textContent).toContain('Newcastle vs Crystal Palace');
+    
+    // Check for inline error messages in each match row
+    const errorSpans = screen.getAllByText((content, element) => {
+      return element?.tagName.toLowerCase() === 'span' && 
+             content.includes('Please select a result for');
+    });
+    expect(errorSpans.length).toBe(3); // One per match
+    
+    // Check that error highlighting is applied to team names (text-red-700 style)
+    const highlightedTeamNames = screen.getAllByText((content, element) => {
+      return element?.tagName.toLowerCase() === 'span' && 
+            ['Real Madrid', 'Inter', 'Newcastle', 'Arsenal', 'Bayern München', 'Crystal Palace'].includes(content) && 
+            element.className.includes('text-red-700');
+    });
+    
+    // Should have 6 highlighted team names (both home and away for each match)
+    expect(highlightedTeamNames.length).toBe(6);
   });
   
   it('maintains multiple selections across different matches', () => {

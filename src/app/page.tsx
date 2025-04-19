@@ -1,22 +1,22 @@
 "use client";
 
-import { useState, useRef } from "react";
+import React, { useEffect, useRef, useState } from 'react';
 // Remove unused Image import
 // Import the component and types
-import BettingCoupon from "@/components/BettingCoupon";
+import BettingCoupon, { BettingCouponRef } from '@/components/BettingCoupon/BettingCoupon';
 import { Match, Selections } from "@/components/BettingCoupon/types";
-import Questionnaire from "@/components/Questionnaire/Questionnaire";
+import Questionnaire from '@/components/Questionnaire/Questionnaire';
 import { Prediction, Team, Player } from "@/components/Questionnaire/types";
 import { Button } from "@/components/ui/button";
 
 // Sample data for the demo
 const sampleMatches: Match[] = [
-  { id: 1, homeTeam: "Real Madrid", awayTeam: "Arsenal" },
-  { id: 2, homeTeam: "Inter", awayTeam: "Bayern München" },
-  { id: 3, homeTeam: "Newcastle", awayTeam: "Crystal Palace" },
-  { id: 4, homeTeam: "Rapid Wien", awayTeam: "Djurgården" },
-  { id: 5, homeTeam: "Manchester United", awayTeam: "Lyon" },
-  { id: 6, homeTeam: "Frankfurt", awayTeam: "Tottenham" },
+  { id: '1', homeTeam: "Real Madrid", awayTeam: "Arsenal" },
+  { id: '2', homeTeam: "Inter", awayTeam: "Bayern München" },
+  { id: '3', homeTeam: "Newcastle", awayTeam: "Crystal Palace" },
+  { id: '4', homeTeam: "Rapid Wien", awayTeam: "Djurgården" },
+  { id: '5', homeTeam: "Manchester United", awayTeam: "Lyon" },
+  { id: '6', homeTeam: "Frankfurt", awayTeam: "Tottenham" },
 ];
 
 const initialSampleSelections: Selections = {
@@ -75,15 +75,29 @@ export default function Home() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   
+  // Log initial selections on mount
+  useEffect(() => {
+    console.log('Initial selections loaded:', initialSampleSelections);
+    console.log('Current selections state:', selections);
+  }, []);
+  
   // Create ref for the questionnaire component with proper type
   interface QuestionnaireRef {
     validatePredictions: () => boolean;
   }
   const questionnaireRef = useRef<QuestionnaireRef>(null);
   
+  // Create ref for the betting coupon component
+  interface BettingCouponRef {
+    validate: () => { isValid: boolean; errors?: Record<string, string> };
+  }
+  const bettingCouponRef = useRef<BettingCouponRef>(null);
+  
   // Handler for selection changes
   const handleSelectionChange = (newSelections: Selections) => {
-    setSelections(newSelections);
+    console.log('Selection change detected:', newSelections);
+    // Ensure we are setting new object reference, not just updating existing one
+    setSelections({...newSelections});
     setValidationErrors([]);
   };
   
@@ -101,31 +115,74 @@ export default function Home() {
   // Validate selections
   const validateSelections = () => {
     // Check if at least one match selection has been made
-    return Object.keys(selections).length > 0;
+    const hasSelections = Object.keys(selections).length > 0;
+    console.log(`🔍 validateSelections called - Has selections: ${hasSelections}, Count: ${Object.keys(selections).length}`);
+    console.log(`🔍 Current selections:`, JSON.stringify(selections, null, 2));
+    return hasSelections;
   };
   
-  // Handle form submission
+  // Handler for form submission
   const handleSubmit = () => {
+    console.log(`🚀 Form submission started`);
     setIsSubmitting(true);
     setValidationErrors([]);
     
-    // Validate coupon first
-    const isCouponValid = validateSelections();
-    if (!isCouponValid) {
-      setValidationErrors(prev => [...prev, "Please make at least one match selection"]);
-    }
+    // Track overall form validity and specific component validity
+    let isFormValid = true;
+    let couponErrorCount = 0;
+    let questionnaireErrorCount = 0;
     
-    // Validate questionnaire if shown
-    let isQuestionnaireValid = true;
-    if (showQuestionnaire && questionnaireRef.current && questionnaireRef.current.validatePredictions) {
-      isQuestionnaireValid = questionnaireRef.current.validatePredictions();
-      if (!isQuestionnaireValid) {
-        setValidationErrors(prev => [...prev, "Please answer all questions in the predictions module"]);
+    // Log current state for debugging
+    console.log("🧾 Current selections:", JSON.stringify(selections, null, 2));
+    console.log("🔮 Current predictions:", JSON.stringify(predictions, null, 2));
+    
+    // Validate betting coupon using the ref
+    if (bettingCouponRef.current) {
+      console.log(`🧪 Validating betting coupon...`);
+      const couponValidation = bettingCouponRef.current.validate();
+      console.log("📋 Coupon validation result:", JSON.stringify(couponValidation, null, 2));
+      
+      if (!couponValidation.isValid) {
+        isFormValid = false;
+        if (couponValidation.errors) {
+          couponErrorCount = Object.keys(couponValidation.errors).length;
+          console.log(`❌ Found ${couponErrorCount} coupon validation errors:`, JSON.stringify(couponValidation.errors, null, 2));
+          
+          setValidationErrors(prev => [
+            ...prev, 
+            `Please make selections for all ${couponErrorCount} unselected match${couponErrorCount > 1 ? 'es' : ''}`
+          ]);
+        }
+      } else {
+        console.log(`✅ Coupon validation passed`);
       }
     }
     
+    // Validate questionnaire if shown
+    if (showQuestionnaire && questionnaireRef.current) {
+      const isQuestionnaireValid = questionnaireRef.current.validatePredictions();
+      console.log("Questionnaire validation result:", isQuestionnaireValid);
+      
+      if (!isQuestionnaireValid) {
+        isFormValid = false;
+        questionnaireErrorCount = 1; // We don't have access to specific field errors from the current API
+        setValidationErrors(prev => [
+          ...prev,
+          "Please complete all predictions in the questionnaire"
+        ]);
+      }
+    }
+    
+    // Add a summary message if both components have errors
+    if (couponErrorCount > 0 && questionnaireErrorCount > 0) {
+      setValidationErrors(prev => [
+        "Please fix all errors in both sections before submitting",
+        ...prev
+      ]);
+    }
+    
     // If everything is valid, proceed with submission
-    if (isCouponValid && (!showQuestionnaire || isQuestionnaireValid)) {
+    if (isFormValid) {
       // Submit both selections and predictions
       console.log("Submitting coupon with the following data:");
       console.log("Selections:", selections);
@@ -133,6 +190,9 @@ export default function Home() {
       
       // In a real app, you would submit to a server here
       setIsSubmitted(true);
+    } else {
+      // Scroll to the top of the form to show validation errors
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
     
     setIsSubmitting(false);
@@ -152,6 +212,7 @@ export default function Home() {
             <div className="flex justify-center w-full">
               <div className="w-full max-w-lg">
                 <BettingCoupon 
+                  ref={bettingCouponRef}
                   matches={sampleMatches} 
                   initialSelections={initialSampleSelections} 
                   onSelectionChange={handleSelectionChange} 

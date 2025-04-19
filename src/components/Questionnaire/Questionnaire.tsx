@@ -58,8 +58,12 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
     // Use our Zod validation function
     const result = validatePrediction(predictions);
     
+    console.log("Questionnaire validation details:", result);
+    
     if (!result.isValid && result.errors) {
       setErrors(result.errors);
+    } else {
+      setErrors({});
     }
     
     return result.isValid;

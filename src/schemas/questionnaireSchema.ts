@@ -3,31 +3,19 @@ import type { Prediction } from '@/components/Questionnaire/types';
 
 // Schema for validating non-null values for prediction fields
 export const PredictionSchema = z.object({
-  leagueWinner: z.string().uuid().nullable().refine(
-    (value) => value !== null, 
-    { message: 'League winner is required' }
-  ),
-  lastPlace: z.string().uuid().nullable().refine(
-    (value) => value !== null, 
-    { message: 'Last place team is required' }
-  ),
-  bestGoalDifference: z.string().uuid().nullable().refine(
-    (value) => value !== null, 
-    { message: 'Best goal difference team is required' }
-  ),
-  topScorer: z.string().uuid().nullable().refine(
-    (value) => value !== null, 
-    { message: 'Top scorer is required' }
-  )
+  leagueWinner: z.string().min(1, "League winner is required").nullable(),
+  lastPlace: z.string().min(1, "Last place team is required").nullable(),
+  bestGoalDifference: z.string().min(1, "Best goal difference team is required").nullable(),
+  topScorer: z.string().min(1, "Top scorer is required").nullable()
 });
 
 // Helper schema that doesn't enforce non-null validation
 // Useful for partial validations during form completion
 export const PartialPredictionSchema = z.object({
-  leagueWinner: z.string().uuid().nullable(),
-  lastPlace: z.string().uuid().nullable(),
-  bestGoalDifference: z.string().uuid().nullable(),
-  topScorer: z.string().uuid().nullable()
+  leagueWinner: z.string().nullable(),
+  lastPlace: z.string().nullable(),
+  bestGoalDifference: z.string().nullable(),
+  topScorer: z.string().nullable()
 });
 
 // Function to validate a prediction and return field-specific errors
