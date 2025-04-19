@@ -5,20 +5,20 @@ import Questionnaire from '../Questionnaire';
 
 // Mock data
 const mockTeams = [
-  { id: 1, name: 'Arsenal' },
-  { id: 2, name: 'Chelsea' },
-  { id: 3, name: 'Liverpool' },
-  { id: 4, name: 'Manchester City' },
-  { id: 5, name: 'Manchester United' },
-  { id: 6, name: 'Tottenham Hotspur' }
+  { id: '1', name: 'Arsenal' },
+  { id: '2', name: 'Chelsea' },
+  { id: '3', name: 'Liverpool' },
+  { id: '4', name: 'Manchester City' },
+  { id: '5', name: 'Manchester United' },
+  { id: '6', name: 'Tottenham Hotspur' }
 ];
 
 const mockPlayers = [
-  { id: 101, name: 'Harry Kane', teamId: 6 },
-  { id: 102, name: 'Mohamed Salah', teamId: 3 },
-  { id: 103, name: 'Erling Haaland', teamId: 4 },
-  { id: 104, name: 'Bruno Fernandes', teamId: 5 },
-  { id: 105, name: 'Bukayo Saka', teamId: 1 }
+  { id: '101', name: 'Harry Kane', teamId: '6' },
+  { id: '102', name: 'Mohamed Salah', teamId: '3' },
+  { id: '103', name: 'Erling Haaland', teamId: '4' },
+  { id: '104', name: 'Bruno Fernandes', teamId: '5' },
+  { id: '105', name: 'Bukayo Saka', teamId: '1' }
 ];
 
 // Mock functions
@@ -133,9 +133,9 @@ describe('Questionnaire Component with Combobox', () => {
     // Select Arsenal option
     await selectOption('Arsenal');
     
-    // Check if onPredictionChange was called with the correct value
+    // Check if onPredictionChange was called with the correct value (string ID)
     expect(mockOnPredictionChange).toHaveBeenCalledWith(expect.objectContaining({
-      leagueWinner: 1
+      leagueWinner: '1'
     }));
   });
   
@@ -148,9 +148,9 @@ describe('Questionnaire Component with Combobox', () => {
     // Select Salah option
     await selectOption('Mohamed Salah');
     
-    // Check if onPredictionChange was called with the correct value
+    // Check if onPredictionChange was called with the correct value (string ID)
     expect(mockOnPredictionChange).toHaveBeenCalledWith(expect.objectContaining({
-      topScorer: 102
+      topScorer: '102'
     }));
   });
   
@@ -193,46 +193,60 @@ describe('Questionnaire Component with Combobox', () => {
       // Press Enter to select the option (Liverpool, ID: 3)
       await userEvent.keyboard('{Enter}');
       
-      // Check if onPredictionChange was called with the correct value
+      // Check if onPredictionChange was called with the correct value (string ID)
       await waitFor(() => {
         expect(mockOnPredictionChange).toHaveBeenCalledWith(expect.objectContaining({
-          leagueWinner: 3
+          leagueWinner: '3'
         }));
       });
     }
   });
   
   it('clears selected value when clear button is clicked', async () => {
-    // Start with initial selections
+    // Start with initial selections (using string ID)
     setupQuestionnaire({
       initialPredictions: {
-        leagueWinner: 1,
+        leagueWinner: '1', // Use string ID
         lastPlace: null,
         bestGoalDifference: null,
         topScorer: null
       }
     });
     
-    // Verify Arsenal is selected
-    expect(screen.getByText('Arsenal')).toBeInTheDocument();
+    // Find the specific trigger button for league winner
+    const leagueWinnerLabel = screen.getByText('1. Which team will win the league?');
+    const leagueWinnerTrigger = leagueWinnerLabel.parentElement?.querySelector<HTMLButtonElement>('[role="combobox"]');
+    expect(leagueWinnerTrigger).toBeInTheDocument();
+
+    // Verify Arsenal is displayed in the trigger button
+    expect(leagueWinnerTrigger).toHaveTextContent('Arsenal');
     
-    // Find and click the clear button (usually an X icon near selected value)
-    const clearButton = screen.getByRole('button', { name: /clear/i });
-    await userEvent.click(clearButton);
+    // Find the clear button, which should be a sibling of the trigger
+    const clearButton = leagueWinnerTrigger?.parentElement?.querySelector<HTMLButtonElement>('button[aria-label="clear"]');
+    expect(clearButton).toBeInTheDocument(); // Ensure the button is found
+    
+    if (clearButton) { // Type guard
+      await userEvent.click(clearButton);
+    }
     
     // Check if onPredictionChange was called with null for leagueWinner
     expect(mockOnPredictionChange).toHaveBeenCalledWith(expect.objectContaining({
       leagueWinner: null
     }));
+
+    // Optionally, verify the placeholder is shown again
+    await waitFor(() => {
+        expect(leagueWinnerTrigger).toHaveTextContent(/Select league winner/i);
+    });
   });
   
   it('validates form successfully when all fields are filled', async () => {
     const { ref } = setupQuestionnaire({
       initialPredictions: {
-        leagueWinner: 1,
-        lastPlace: 2,
-        bestGoalDifference: 3,
-        topScorer: 101
+        leagueWinner: '1',
+        lastPlace: '2',
+        bestGoalDifference: '3',
+        topScorer: '101'
       }
     });
     

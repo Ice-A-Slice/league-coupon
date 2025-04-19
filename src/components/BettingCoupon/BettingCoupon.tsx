@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import type { BettingCouponProps, Match, SelectionType, Selections } from './types'; // Import types
-import SectionContainer from '../SectionContainer';
+import SectionContainer from '@/components/layout';
+import ToggleButton from '../ui/toggle-button'; // Updated import
 
 // Define the component with props
 const BettingCoupon: React.FC<BettingCouponProps> = ({ matches, initialSelections = {}, onSelectionChange }) => {
@@ -42,7 +43,7 @@ const BettingCoupon: React.FC<BettingCouponProps> = ({ matches, initialSelection
 
   // Content for the betting coupon
   const couponContent = (
-    <div className="w-full">
+    <div className="w-full flex flex-col items-stretch p-2 overflow-x-visible">
       {matches.map((match: Match) => {
         const matchIdStr = match.id.toString();
         const currentSelection = selections[matchIdStr];
@@ -56,26 +57,17 @@ const BettingCoupon: React.FC<BettingCouponProps> = ({ matches, initialSelection
                 <span className="text-sm sm:text-base text-gray-800">{match.awayTeam}</span>
               </div>
             </div>
-            {/* Selection Buttons */}
+            {/* Selection Buttons using ToggleButton */}
             <div className="flex space-x-1.5 sm:space-x-3 flex-shrink-0 self-center">
               {selectionLabels.map((label) => {
                 const isSelected = currentSelection === label;
                 return (
-                  <button
+                  <ToggleButton
                     key={label}
-                    type="button"
+                    label={label}
+                    isSelected={isSelected}
                     onClick={() => handleSelect(match.id, label)}
-                    // Enhanced styling with responsive accommodations
-                    className={`touch-target-min px-1.5 py-1 sm:px-2.5 sm:py-1.5 
-                      border rounded-md flex items-center justify-center 
-                      text-sm font-semibold transition-all duration-150 
-                      focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 ${isSelected
-                        ? 'bg-teal-600 text-white border-teal-700 shadow-inner hover:bg-teal-700' // Clearer selected state
-                        : 'border-gray-300 text-gray-600 bg-white hover:bg-gray-100 hover:border-gray-400' // Standard state
-                      }`}
-                  >
-                    {label}
-                  </button>
+                  />
                 );
               })}
             </div>

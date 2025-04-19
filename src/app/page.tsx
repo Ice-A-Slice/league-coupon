@@ -7,6 +7,7 @@ import BettingCoupon from "@/components/BettingCoupon";
 import { Match, Selections } from "@/components/BettingCoupon/types";
 import Questionnaire from "@/components/Questionnaire/Questionnaire";
 import { Prediction, Team, Player } from "@/components/Questionnaire/types";
+import { Button } from "@/components/ui/button";
 
 // Sample data for the demo
 const sampleMatches: Match[] = [
@@ -23,36 +24,36 @@ const initialSampleSelections: Selections = {
   '3': 'X',
 };
 
-// Sample teams for the demo
+// Sample teams for the demo - Updated IDs to strings
 const sampleTeams: Team[] = [
-  { id: 1, name: "Real Madrid" },
-  { id: 2, name: "Arsenal" },
-  { id: 3, name: "Inter" },
-  { id: 4, name: "Bayern München" },
-  { id: 5, name: "Newcastle" },
-  { id: 6, name: "Crystal Palace" },
-  { id: 7, name: "Rapid Wien" },
-  { id: 8, name: "Djurgården" },
-  { id: 9, name: "Manchester United" },
-  { id: 10, name: "Lyon" },
-  { id: 11, name: "Frankfurt" },
-  { id: 12, name: "Tottenham" },
+  { id: '1', name: "Real Madrid" },
+  { id: '2', name: "Arsenal" },
+  { id: '3', name: "Inter" },
+  { id: '4', name: "Bayern München" },
+  { id: '5', name: "Newcastle" },
+  { id: '6', name: "Crystal Palace" },
+  { id: '7', name: "Rapid Wien" },
+  { id: '8', name: "Djurgården" },
+  { id: '9', name: "Manchester United" },
+  { id: '10', name: "Lyon" },
+  { id: '11', name: "Frankfurt" },
+  { id: '12', name: "Tottenham" },
 ];
 
-// Sample players for the demo
+// Sample players for the demo - Updated IDs to strings
 const samplePlayers: Player[] = [
-  { id: 1, name: "Harry Kane", teamId: 4 },
-  { id: 2, name: "Kylian Mbappé", teamId: 1 },
-  { id: 3, name: "Bukayo Saka", teamId: 2 },
-  { id: 4, name: "Lautaro Martínez", teamId: 3 },
-  { id: 5, name: "Alexander Isak", teamId: 5 },
-  { id: 6, name: "Marcus Rashford", teamId: 9 },
-  { id: 7, name: "Karim Adeyemi", teamId: 11 },
-  { id: 8, name: "Heung-min Son", teamId: 12 },
-  { id: 9, name: "Eberechi Eze", teamId: 6 },
-  { id: 10, name: "Guido Burgstaller", teamId: 7 },
-  { id: 11, name: "Victor Edvardsen", teamId: 8 },
-  { id: 12, name: "Alexandre Lacazette", teamId: 10 },
+  { id: '1', name: "Harry Kane", teamId: '4' },
+  { id: '2', name: "Kylian Mbappé", teamId: '1' },
+  { id: '3', name: "Bukayo Saka", teamId: '2' },
+  { id: '4', name: "Lautaro Martínez", teamId: '3' },
+  { id: '5', name: "Alexander Isak", teamId: '5' },
+  { id: '6', name: "Marcus Rashford", teamId: '9' },
+  { id: '7', name: "Karim Adeyemi", teamId: '11' },
+  { id: '8', name: "Heung-min Son", teamId: '12' },
+  { id: '9', name: "Eberechi Eze", teamId: '6' },
+  { id: '10', name: "Guido Burgstaller", teamId: '7' },
+  { id: '11', name: "Victor Edvardsen", teamId: '8' },
+  { id: '12', name: "Alexandre Lacazette", teamId: '10' },
 ];
 
 // Initial predictions (empty for demo)
@@ -184,14 +185,14 @@ export default function Home() {
                 </div>
               )}
               
-              <button
+              <Button
                 type="button"
-                className="w-full px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:opacity-70"
+                className="w-full"
                 onClick={handleSubmit}
                 disabled={isSubmitting}
               >
-                {isSubmitting ? 'Submitting...' : 'Submit Coupon and Predictions'}
-              </button>
+                {isSubmitting ? 'Submitting...' : 'Submit'}
+              </Button>
             </div>
           </>
         ) : (
@@ -202,18 +203,22 @@ export default function Home() {
               </svg>
               <h2 className="text-2xl font-bold text-green-800 mb-2">Success!</h2>
               <p className="text-green-700 mb-6">Your coupon and predictions have been submitted.</p>
-              <button
+              <Button
                 type="button"
-                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                className="w-full"
                 onClick={() => {
                   setIsSubmitted(false);
                   setSelections(initialSampleSelections);
                   setPredictions(initialPredictions);
                   setValidationErrors([]);
                 }}
+                style={{ 
+                  backgroundColor: 'rgb(22 163 74)', // bg-green-600
+                  color: 'white'
+                }}
               >
                 Submit Another Coupon
-              </button>
+              </Button>
             </div>
           </div>
         )}
