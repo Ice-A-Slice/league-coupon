@@ -61,9 +61,12 @@ globs: **/*.tsx, **/*.jsx, components/**/*
 ## Testing
 - Write unit tests for components
 - Implement integration tests for complex flows
-- Use React Testing Library
-- Test user interactions
-- Test error scenarios
+- **Focus on user-perceived behavior, not internal implementation details**
+- **Write tests resilient to refactoring (avoid testing implementation specifics)**
+- Use React Testing Library (encourages behavior-driven testing)
+- Test user interactions and critical user flows
+- Test error scenarios and edge cases
+- Test accessibility requirements
 - Implement proper mock data
 
 ## Accessibility

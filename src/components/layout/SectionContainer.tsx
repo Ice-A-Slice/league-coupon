@@ -69,6 +69,12 @@ export interface SectionContainerProps {
    * This is called whenever the collapsed state changes.
    */
   onToggleVisibility?: () => void;
+  
+  /** 
+   * Optional aria-label for accessibility.
+   * If provided, it will be applied to the section element.
+   */
+  'aria-label'?: string;
 }
 
 /**
@@ -124,6 +130,7 @@ const SectionContainer: React.FC<SectionContainerProps> = ({
   headerClassName = '',
   footerClassName = '',
   onToggleVisibility,
+  'aria-label': ariaLabel,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(initialCollapsed);
 
@@ -145,16 +152,24 @@ const SectionContainer: React.FC<SectionContainerProps> = ({
   // Header gradient background style
   const headerBaseStyle = `p-3 sm:p-4 bg-gradient-to-r from-teal-500 to-teal-600 text-white flex justify-between items-center ${collapsible ? 'cursor-pointer' : ''}`;
 
+  // Generate a stable ID based on the title for linking heading and section
+  const sectionIdBase = title.replace(/\s+/g, '-').toLowerCase(); // Create a base ID from title
+  const headingId = `heading-${sectionIdBase}`; // Unique ID for the heading
+  const contentId = `content-${sectionIdBase}`; // Unique ID for the content area if collapsible
+
   return (
-    <div className={`${containerBaseStyle} ${className}`}>
+    <section
+      className={`${containerBaseStyle} ${className}`}
+      aria-labelledby={headingId}
+      aria-label={ariaLabel}
+    >
       {/* Header Section */}
       <div
         className={`${headerBaseStyle} ${headerClassName}`}
         onClick={handleToggleCollapse}
         role={collapsible ? 'button' : undefined}
         tabIndex={collapsible ? 0 : undefined}
-        aria-expanded={collapsible ? !isCollapsed : undefined}
-        aria-controls={collapsible ? `section-content-${title.replace(/\s+/g, '-').toLowerCase()}` : undefined}
+        aria-controls={collapsible ? contentId : undefined}
         onKeyDown={(e) => {
           if (collapsible && (e.key === 'Enter' || e.key === ' ')) {
             e.preventDefault();
@@ -164,7 +179,12 @@ const SectionContainer: React.FC<SectionContainerProps> = ({
       >
         {/* Title and Subtitle */}
         <div className="flex-1 min-w-0 pr-2">
-          <h2 className="text-base sm:text-lg font-bold truncate">{title}</h2>
+          <h2
+            id={headingId}
+            className="text-base sm:text-lg font-bold truncate"
+          >
+            {title}
+          </h2>
           {subtitle && <p className="text-xs opacity-90 truncate">{subtitle}</p>}
         </div>
 
@@ -191,7 +211,7 @@ const SectionContainer: React.FC<SectionContainerProps> = ({
       {/* Content Area */}
       {!isCollapsed && (
         <div 
-          id={collapsible ? `section-content-${title.replace(/\s+/g, '-').toLowerCase()}` : undefined} 
+          id={collapsible ? contentId : undefined} 
           className="w-full"
         >
           {children}
@@ -204,7 +224,7 @@ const SectionContainer: React.FC<SectionContainerProps> = ({
           {footer}
         </div>
       )}
-    </div>
+    </section>
   );
 };
 
