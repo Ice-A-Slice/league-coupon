@@ -1,21 +1,21 @@
 // TypeScript types for Questionnaire component
 
 export interface Team {
-  id: string | number;
+  id: string;
   name: string;
 }
 
 export interface Player {
-  id: string | number;
+  id: string;
   name: string;
-  teamId: string | number;
+  teamId: string;
 }
 
 export interface Prediction {
-  leagueWinner: string | number | null;
-  lastPlace: string | number | null;
-  bestGoalDifference: string | number | null;
-  topScorer: string | number | null;
+  leagueWinner: string | null;
+  lastPlace: string | null;
+  bestGoalDifference: string | null;
+  topScorer: string | null;
 }
 
 export interface QuestionnaireProps {

@@ -32,7 +32,7 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
   }));
 
   // Update a specific prediction field
-  const updatePrediction = (field: keyof Prediction, value: string | number | null) => {
+  const updatePrediction = (field: keyof Prediction, value: string | null) => {
     // Clear any error for this field
     if (errors[field]) {
       setErrors(prev => {
@@ -159,7 +159,6 @@ const Questionnaire = forwardRef<{validatePredictions: () => boolean}, Questionn
         )}
         <PlayerSelect
           players={players}
-          teams={teams}
           selectedPlayerId={predictions.topScorer}
           onSelect={(playerId) => updatePrediction('topScorer', playerId)}
           id="top-scorer"
