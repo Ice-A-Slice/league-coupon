@@ -158,7 +158,9 @@ export function Combobox({
   // Find the selected option
   const selectedOption = React.useMemo(() => {
     if (selectedValue === null || selectedValue === undefined) return undefined
-    return options.find((option) => option.value === selectedValue)
+    const found = options.find((option) => option.value === selectedValue);
+    
+    return found;
   }, [selectedValue, options])
 
   // Filter options based on search text
@@ -587,10 +589,10 @@ export function Combobox({
                         value={option.value}
                         onSelect={(value) => {
                           if (!option.disabled) {
-                            onChange(value)
+                            // Restore original logic
+                            onChange(value) 
                             handleOpenChange(false)
                             handleSearchChange('')
-                            // Move focus back to trigger button after selection
                             setTimeout(() => buttonRef.current?.focus(), 0)
                           }
                         }}
@@ -598,14 +600,6 @@ export function Combobox({
                         onMouseDown={(e) => {
                           // Prevent default to avoid losing focus on the input
                           e.preventDefault();
-                        }}
-                        onClick={() => {
-                          if (!option.disabled) {
-                            onChange(option.value);
-                            handleOpenChange(false);
-                            handleSearchChange('');
-                            setTimeout(() => buttonRef.current?.focus(), 0);
-                          }
                         }}
                         aria-selected={isHighlighted}
                         data-highlighted={isHighlighted}

@@ -1,15 +1,13 @@
 "use client";
 
 import React from "react";
-import { Player, Team } from "./types";
-import { Combobox } from "@/components/ui/combobox";
-import { playerSelectToComboboxProps } from "@/lib/combobox-adapters";
+import { Player } from "./types";
+import { Combobox, ComboboxOption } from "@/components/ui/combobox";
 
 interface PlayerSelectProps {
   players: Player[];
-  teams?: Team[]; // Kept for API compatibility
-  selectedPlayerId: string | number | null;
-  onSelect: (playerId: string | number | null) => void;
+  selectedPlayerId: string | null;
+  onSelect: (playerId: string | null) => void;
   placeholder?: string;
   id?: string;
 }
@@ -18,17 +16,26 @@ interface PlayerSelectProps {
  * A component for selecting players using a Combobox
  */
 const PlayerSelect: React.FC<PlayerSelectProps> = (props) => {
-  // Use our adapter to transform props to Combobox format
-  const comboboxProps = playerSelectToComboboxProps(props);
+  // Reverted: Map players to options directly
+  const options: ComboboxOption[] = props.players.map(player => ({
+    value: String(player.id), // Ensure value is a string
+    label: player.name,
+    disabled: false
+  }));
   
+  // Handle clear action
+  const handleClear = () => {
+    props.onSelect(null);
+  };
+
   return (
     <Combobox
-      options={comboboxProps.options}
-      selectedValue={comboboxProps.selectedValue}
-      onChange={comboboxProps.onChange}
-      onClear={comboboxProps.onClear}
-      placeholder={comboboxProps.placeholder}
-      id={comboboxProps.id}
+      options={options}
+      selectedValue={props.selectedPlayerId}
+      onChange={props.onSelect}
+      onClear={handleClear}
+      placeholder={props.placeholder || 'Select a player...'}
+      id={props.id}
       ariaLabel={`Select a player for ${props.id || 'player selection'}`}
       showClearButton={true}
       emptyMessage="No players found"

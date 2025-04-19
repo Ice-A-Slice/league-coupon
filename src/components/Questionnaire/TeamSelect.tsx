@@ -2,13 +2,12 @@
 
 import React from "react";
 import { Team } from "./types";
-import { Combobox } from "@/components/ui/combobox";
-import { teamSelectToComboboxProps } from "@/lib/combobox-adapters";
+import { Combobox, ComboboxOption } from "@/components/ui/combobox";
 
 interface TeamSelectProps {
   teams: Team[];
-  selectedTeamId: string | number | null;
-  onSelect: (teamId: string | number | null) => void;
+  selectedTeamId: string | null;
+  onSelect: (teamId: string | null) => void;
   placeholder?: string;
   id?: string;
 }
@@ -17,17 +16,26 @@ interface TeamSelectProps {
  * A component for selecting teams using a Combobox
  */
 const TeamSelect: React.FC<TeamSelectProps> = (props) => {
-  // Use our adapter to transform props to Combobox format
-  const comboboxProps = teamSelectToComboboxProps(props);
+  // Reverted: Map teams to options directly
+  const options: ComboboxOption[] = props.teams.map(team => ({
+    value: String(team.id), // Ensure value is a string
+    label: team.name,
+    disabled: false
+  }));
+
+  // Handle clear action
+  const handleClear = () => {
+    props.onSelect(null);
+  };
   
   return (
     <Combobox
-      options={comboboxProps.options}
-      selectedValue={comboboxProps.selectedValue}
-      onChange={comboboxProps.onChange}
-      onClear={comboboxProps.onClear}
-      placeholder={comboboxProps.placeholder}
-      id={comboboxProps.id}
+      options={options}
+      selectedValue={props.selectedTeamId}
+      onChange={props.onSelect}
+      onClear={handleClear}
+      placeholder={props.placeholder || 'Select a team...'}
+      id={props.id}
       ariaLabel={`Select a team for ${props.id || 'team selection'}`}
       showClearButton={true}
       emptyMessage="No teams found"
