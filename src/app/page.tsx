@@ -1,71 +1,38 @@
 "use client";
 
-import { useState, useRef } from "react";
+import React, { useEffect, useRef, useState } from 'react';
 // Remove unused Image import
 // Import the component and types
-import BettingCoupon from "@/components/BettingCoupon";
-import { Match, Selections } from "@/components/BettingCoupon/types";
-import Questionnaire from "@/components/Questionnaire/Questionnaire";
-import { Prediction, Team, Player } from "@/components/Questionnaire/types";
+import BettingCoupon from '@/components/BettingCoupon/BettingCoupon';
+import { Selections } from "@/components/BettingCoupon/types";
+import Questionnaire from '@/components/Questionnaire/Questionnaire';
+import { Prediction } from "@/components/Questionnaire/types";
 import { Button } from "@/components/ui/button";
+// Import mock data from the new file
+import { 
+  sampleMatches, 
+  sampleTeams, 
+  samplePlayers, 
+  initialPredictions, 
+  initialSampleSelections // Assuming this was also defined inline before
+} from '@/data/mockData';
 
-// Sample data for the demo
-const sampleMatches: Match[] = [
-  { id: 1, homeTeam: "Real Madrid", awayTeam: "Arsenal" },
-  { id: 2, homeTeam: "Inter", awayTeam: "Bayern München" },
-  { id: 3, homeTeam: "Newcastle", awayTeam: "Crystal Palace" },
-  { id: 4, homeTeam: "Rapid Wien", awayTeam: "Djurgården" },
-  { id: 5, homeTeam: "Manchester United", awayTeam: "Lyon" },
-  { id: 6, homeTeam: "Frankfurt", awayTeam: "Tottenham" },
-];
+// Sample data for the demo - REMOVED
+// const sampleMatches: Match[] = [...];
+// const initialSampleSelections: Selections = {...};
+// const sampleTeams: Team[] = [...];
+// const samplePlayers: Player[] = [...];
+// const initialPredictions: Prediction = {...};
 
-const initialSampleSelections: Selections = {
-  '1': '1',
-  '3': 'X',
-};
-
-// Sample teams for the demo - Updated IDs to strings
-const sampleTeams: Team[] = [
-  { id: '1', name: "Real Madrid" },
-  { id: '2', name: "Arsenal" },
-  { id: '3', name: "Inter" },
-  { id: '4', name: "Bayern München" },
-  { id: '5', name: "Newcastle" },
-  { id: '6', name: "Crystal Palace" },
-  { id: '7', name: "Rapid Wien" },
-  { id: '8', name: "Djurgården" },
-  { id: '9', name: "Manchester United" },
-  { id: '10', name: "Lyon" },
-  { id: '11', name: "Frankfurt" },
-  { id: '12', name: "Tottenham" },
-];
-
-// Sample players for the demo - Updated IDs to strings
-const samplePlayers: Player[] = [
-  { id: '1', name: "Harry Kane", teamId: '4' },
-  { id: '2', name: "Kylian Mbappé", teamId: '1' },
-  { id: '3', name: "Bukayo Saka", teamId: '2' },
-  { id: '4', name: "Lautaro Martínez", teamId: '3' },
-  { id: '5', name: "Alexander Isak", teamId: '5' },
-  { id: '6', name: "Marcus Rashford", teamId: '9' },
-  { id: '7', name: "Karim Adeyemi", teamId: '11' },
-  { id: '8', name: "Heung-min Son", teamId: '12' },
-  { id: '9', name: "Eberechi Eze", teamId: '6' },
-  { id: '10', name: "Guido Burgstaller", teamId: '7' },
-  { id: '11', name: "Victor Edvardsen", teamId: '8' },
-  { id: '12', name: "Alexandre Lacazette", teamId: '10' },
-];
-
-// Initial predictions (empty for demo)
-const initialPredictions: Prediction = {
-  leagueWinner: null,
-  lastPlace: null,
-  bestGoalDifference: null,
-  topScorer: null
-};
+// Interface for structured validation errors
+interface ErrorsState {
+  coupon?: Record<string, string>;
+  questionnaire?: Record<string, string>; // Allows for specific field errors later
+  summary?: string;
+}
 
 export default function Home() {
-  // State for selections and predictions
+  // State for selections and predictions - Initial state uses imported value
   const [selections, setSelections] = useState<Selections>(initialSampleSelections);
   const [predictions, setPredictions] = useState<Prediction>(initialPredictions);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -73,24 +40,38 @@ export default function Home() {
   const [isQuestionnaireContentVisible, setIsQuestionnaireContentVisible] = useState(true);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  // Use the new structured error state
+  const [validationErrors, setValidationErrors] = useState<ErrorsState>({});
+  
+  // Log initial selections on mount
+  useEffect(() => {
+    console.log('Initial selections loaded:', initialSampleSelections);
+    console.log('Current selections state:', selections);
+  }, [selections]);
   
   // Create ref for the questionnaire component with proper type
   interface QuestionnaireRef {
-    validatePredictions: () => boolean;
+    validatePredictions: () => { isValid: boolean; errors?: Record<string, string> };
   }
   const questionnaireRef = useRef<QuestionnaireRef>(null);
   
+  // Create ref for the betting coupon component
+  interface BettingCouponRef {
+    validate: () => { isValid: boolean; errors?: Record<string, string> };
+  }
+  const bettingCouponRef = useRef<BettingCouponRef>(null);
+  
   // Handler for selection changes
   const handleSelectionChange = (newSelections: Selections) => {
-    setSelections(newSelections);
-    setValidationErrors([]);
+    console.log('Selection change detected:', newSelections);
+    setSelections({...newSelections});
+    setValidationErrors({}); // Reset structured errors
   };
   
   // Handler for prediction changes
   const handlePredictionChange = (newPredictions: Prediction) => {
     setPredictions(newPredictions);
-    setValidationErrors([]);
+    setValidationErrors({}); // Reset structured errors
   };
   
   // Handler for questionnaire content toggle
@@ -98,40 +79,63 @@ export default function Home() {
     setIsQuestionnaireContentVisible(!isQuestionnaireContentVisible);
   };
   
-  // Validate selections
-  const validateSelections = () => {
-    // Check if at least one match selection has been made
-    return Object.keys(selections).length > 0;
-  };
-  
-  // Handle form submission
+  // Handler for form submission
   const handleSubmit = () => {
+    console.log(`🚀 Form submission started`);
     setIsSubmitting(true);
-    setValidationErrors([]);
+    setValidationErrors({}); // Reset errors to an empty object
     
-    // Validate coupon first
-    const isCouponValid = validateSelections();
-    if (!isCouponValid) {
-      setValidationErrors(prev => [...prev, "Please make at least one match selection"]);
-    }
+    let isFormValid = true;
+    const combinedErrors: ErrorsState = {}; // Use const
+
+    console.log("🧾 Current selections:", JSON.stringify(selections, null, 2));
+    console.log("🔮 Current predictions:", JSON.stringify(predictions, null, 2));
     
-    // Validate questionnaire if shown
-    let isQuestionnaireValid = true;
-    if (showQuestionnaire && questionnaireRef.current && questionnaireRef.current.validatePredictions) {
-      isQuestionnaireValid = questionnaireRef.current.validatePredictions();
-      if (!isQuestionnaireValid) {
-        setValidationErrors(prev => [...prev, "Please answer all questions in the predictions module"]);
+    // Validate betting coupon
+    if (bettingCouponRef.current) {
+      console.log(`🧪 Validating betting coupon...`);
+      const couponValidation = bettingCouponRef.current.validate();
+      console.log("📋 Coupon validation result:", JSON.stringify(couponValidation, null, 2));
+      
+      if (!couponValidation.isValid) {
+        isFormValid = false;
+        if (couponValidation.errors) {
+          combinedErrors.coupon = couponValidation.errors; // Store detailed coupon errors
+          console.log(`❌ Found coupon validation errors:`, JSON.stringify(couponValidation.errors, null, 2));
+        }
+      } else {
+        console.log(`✅ Coupon validation passed`);
       }
     }
     
-    // If everything is valid, proceed with submission
-    if (isCouponValid && (!showQuestionnaire || isQuestionnaireValid)) {
-      // Submit both selections and predictions
-      console.log("Submitting coupon with the following data:");
-      console.log("Selections:", selections);
-      console.log("Predictions:", showQuestionnaire ? predictions : "Questionnaire not shown");
+    // Validate questionnaire
+    if (showQuestionnaire && questionnaireRef.current) {
+       console.log(`🧪 Validating questionnaire...`);
+      // Assuming validatePredictions now returns { isValid, errors? }
+      const questionnaireValidation = questionnaireRef.current.validatePredictions(); 
+      console.log("❓ Questionnaire validation result:", JSON.stringify(questionnaireValidation, null, 2));
       
-      // In a real app, you would submit to a server here
+      if (!questionnaireValidation.isValid) {
+        isFormValid = false;
+        // Store questionnaire errors (assuming generic for now, but could be detailed)
+        combinedErrors.questionnaire = questionnaireValidation.errors || { form: "Please complete all predictions" }; 
+        console.log(`❌ Found questionnaire validation errors:`, JSON.stringify(combinedErrors.questionnaire, null, 2));
+      }
+       else {
+         console.log(`✅ Questionnaire validation passed`);
+      }
+    }
+    
+    // Update state with combined errors and potentially a summary
+    if (!isFormValid) {
+      combinedErrors.summary = "Please fix all errors in both sections before submitting";
+      setValidationErrors(combinedErrors);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      // Submit logic... 
+      console.log("Submitting coupon...");
+      console.log("Selections:", selections);
+      console.log("Predictions:", predictions);
       setIsSubmitted(true);
     }
     
@@ -152,8 +156,9 @@ export default function Home() {
             <div className="flex justify-center w-full">
               <div className="w-full max-w-lg">
                 <BettingCoupon 
-                  matches={sampleMatches} 
-                  initialSelections={initialSampleSelections} 
+                  ref={bettingCouponRef}
+                  matches={sampleMatches} // Use imported mock data
+                  initialSelections={initialSampleSelections} // Use imported mock data
                   onSelectionChange={handleSelectionChange} 
                 />
               </div>
@@ -164,9 +169,9 @@ export default function Home() {
                 <Questionnaire
                   ref={questionnaireRef}
                   showQuestionnaire={true}
-                  teams={sampleTeams}
-                  players={samplePlayers}
-                  initialPredictions={initialPredictions}
+                  teams={sampleTeams} // Use imported mock data
+                  players={samplePlayers} // Use imported mock data
+                  initialPredictions={initialPredictions} // Use imported mock data
                   onPredictionChange={handlePredictionChange}
                   onToggleVisibility={handleQuestionnaireToggle}
                 />
@@ -174,12 +179,36 @@ export default function Home() {
             </div>
             
             <div className="w-full max-w-lg px-4 sm:px-0 flex justify-center items-center flex-col">
-              {validationErrors.length > 0 && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm w-full">
-                  <p className="font-semibold mb-1">Please fix the following errors:</p>
+              {/* Display Summary Error */}
+              {validationErrors.summary && (
+                <div className="mb-4 p-3 bg-red-100 border border-red-300 rounded text-red-800 text-sm w-full" role="alert">
+                  <p className="font-bold">{validationErrors.summary}</p>
+                </div>
+              )}
+
+              {/* Display Detailed Coupon Errors (if any) */}
+              {validationErrors.coupon && Object.keys(validationErrors.coupon).length > 0 && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm w-full" role="alert">
+                  <p className="font-semibold mb-1">Coupon Errors:</p>
                   <ul className="list-disc pl-5">
-                    {validationErrors.map((error, index) => (
-                      <li key={index}>{error}</li>
+                    {Object.entries(validationErrors.coupon).map(([matchId, error]) => {
+                       // Find match details to show more context (optional)
+                       const match = sampleMatches.find(m => m.id.toString() === matchId);
+                       const matchLabel = match ? `${match.homeTeam} vs ${match.awayTeam}` : `Match ${matchId}`;
+                      return <li key={`coupon-err-${matchId}`}>{matchLabel}: {error}</li>;
+                    })}
+                  </ul>
+                </div>
+              )}
+
+              {/* Display Questionnaire Errors (if any) */}
+              {validationErrors.questionnaire && Object.keys(validationErrors.questionnaire).length > 0 && (
+                 <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm w-full" role="alert">
+                  <p className="font-semibold mb-1">Questionnaire Errors:</p>
+                  <ul className="list-disc pl-5">
+                     {/* Assuming generic error for now, but could map specific fields */}
+                     {Object.entries(validationErrors.questionnaire).map(([field, error]) => (
+                      <li key={`q-err-${field}`}>{error}</li> // Display the generic message or field-specific error
                     ))}
                   </ul>
                 </div>
@@ -208,9 +237,9 @@ export default function Home() {
                 className="w-full"
                 onClick={() => {
                   setIsSubmitted(false);
-                  setSelections(initialSampleSelections);
-                  setPredictions(initialPredictions);
-                  setValidationErrors([]);
+                  setSelections(initialSampleSelections); // Reset using imported value
+                  setPredictions(initialPredictions); // Reset using imported value
+                  setValidationErrors({});
                 }}
                 style={{ 
                   backgroundColor: 'rgb(22 163 74)', // bg-green-600

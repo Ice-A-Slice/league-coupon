@@ -12,6 +12,8 @@ module.exports = {
     // Handle module aliases
     '^@/components/(.*)$': '<rootDir>/src/components/$1',
     '^@/lib/(.*)$': '<rootDir>/src/lib/$1',
+    '^@/schemas/(.*)$': '<rootDir>/src/schemas/$1',
+    '^@/data/(.*)$': '<rootDir>/src/data/$1',
   },
   testPathIgnorePatterns: ['<rootDir>/node_modules/', '<rootDir>/.next/'],
   transform: {

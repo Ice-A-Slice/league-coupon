@@ -10,6 +10,9 @@ interface TeamSelectProps {
   onSelect: (teamId: string | null) => void;
   placeholder?: string;
   id?: string;
+  className?: string;
+  "aria-invalid"?: boolean;
+  "aria-describedby"?: string;
 }
 
 /**
@@ -36,6 +39,9 @@ const TeamSelect: React.FC<TeamSelectProps> = (props) => {
       onClear={handleClear}
       placeholder={props.placeholder || 'Select a team...'}
       id={props.id}
+      className={props.className}
+      aria-invalid={props["aria-invalid"]}
+      aria-describedby={props["aria-describedby"]}
       ariaLabel={`Select a team for ${props.id || 'team selection'}`}
       showClearButton={true}
       emptyMessage="No teams found"
