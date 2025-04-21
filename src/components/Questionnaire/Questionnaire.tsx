@@ -33,19 +33,11 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const [isContentVisible, setIsContentVisible] = useState(true);
   
-  // // Debounced validation function - REMOVED
-  // const debouncedValidate = useCallback(debounce((currentPredictions: Prediction) => {
-  //   const result = validatePrediction(currentPredictions);
-  //   console.log("Debounced Questionnaire validation details:", result); // Log debounced result
-  //   setErrors(result.errors || {}); // Update with all current errors or clear if valid
-  // }, 500), []); // 500ms debounce delay
-
   // Expose validation method returning the detailed result
   useImperativeHandle(ref, () => ({
     validatePredictions: () => {
       // Directly call the imported validator and return its full result
       const result = validatePrediction(predictions);
-      console.log("Questionnaire validation details:", result); // Keep logging
       // Update internal errors state for inline display
       if (!result.isValid && result.errors) {
         setErrors(result.errors);

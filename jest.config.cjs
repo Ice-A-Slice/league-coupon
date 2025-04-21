@@ -14,6 +14,7 @@ module.exports = {
     '^@/lib/(.*)$': '<rootDir>/src/lib/$1',
     '^@/schemas/(.*)$': '<rootDir>/src/schemas/$1',
     '^@/data/(.*)$': '<rootDir>/src/data/$1',
+    '^@/utils/(.*)$': '<rootDir>/src/utils/$1',
   },
   testPathIgnorePatterns: ['<rootDir>/node_modules/', '<rootDir>/.next/'],
   transform: {
