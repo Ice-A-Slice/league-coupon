@@ -21,7 +21,7 @@ import {
 
 // Import supabase client
 import { createClient } from '../utils/supabase/client';
-import { User } from "@supabase/supabase-js";
+import { User, AuthChangeEvent, Session } from "@supabase/supabase-js";
 
 
 // Sample data for the demo - REMOVED
@@ -147,9 +147,9 @@ export default function Home() {
   
       getSession();
 
-      const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => { // Use _event
+      // Use explicit types for listener callback parameters
+      const { data: listener } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => { 
         setUser(session?.user ?? null);
-        // No need to setLoading here, getSession handles initial load
       });
 
       return () => {
