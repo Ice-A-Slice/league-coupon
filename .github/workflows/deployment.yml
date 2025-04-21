@@ -8,6 +8,10 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      
     steps:
       - uses: actions/checkout@v4
       
@@ -28,6 +32,7 @@ jobs:
         
       - name: Build
         run: npm run build
+
         
       # Example deployment step - adjust based on your hosting provider
       # For Vercel:
