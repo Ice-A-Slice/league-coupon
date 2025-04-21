@@ -37,11 +37,7 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
   // Validate selections using the Zod schema (for immediate validation on demand)
   const validateSelections = () => {
     // Use the new validateCoupon function that combines structure and completeness validation
-    console.log('Validating selections:', selections);
-    console.log('Current matches:', matches);
-    
     const result = validateCoupon(matches, selections);
-    console.log('Validation result:', result);
     
     if (!result.isValid && result.errors) {
       setErrors(result.errors);
@@ -56,43 +52,27 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
   const handleSelect = (matchId: string | number, selection: SelectionType) => {
     const matchIdStr = matchId.toString();
     
-    console.log(`🎮 handleSelect called - Match: ${matchIdStr}, Selection: ${selection}`);
-    console.log(`🔍 Current selections before update:`, JSON.stringify(selections, null, 2));
-    console.log(`🔍 Current selection for this match:`, selections[matchIdStr]);
-    
     // Create new selections object
     let newSelections: Selections;
     
     if (selections[matchIdStr] === selection) {
       // If the same option is clicked again, toggle it off (remove the selection)
-      console.log(`🔄 TOGGLE OFF - Removing selection for match ${matchIdStr}`);
       
       // Create a copy and remove the key for this match
       newSelections = { ...selections };
       delete newSelections[matchIdStr];
       
-      // Log that the selection was removed
-      console.log(`🗑️ Selection removed for match ${matchIdStr}`);
     } else {
-      // If a different option is clicked, update the selection
-      console.log(`🔄 TOGGLE/SET - Setting selection for match ${matchIdStr} to ${selection}`);
       
       // Create new selections object with the new selection
       newSelections = {
         ...selections,
         [matchIdStr]: selection,
       };
-      
-      // Add extra debugging for new/changed selection
-      console.log(`✏️ Selection ${selections[matchIdStr] ? 'changed' : 'added'} for match ${matchIdStr} from ${selections[matchIdStr] || 'none'} to ${selection}`);
     }
-    
-    // Log the new selections state
-    console.log(`📊 New selections state:`, JSON.stringify(newSelections, null, 2));
     
     // Restore immediate error clearing for the specific match
     if (errors[matchIdStr]) {
-      console.log(`🧹 Clearing error for match ${matchIdStr}`);
       setErrors(prev => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { [matchIdStr]: _, ...rest } = prev;
@@ -101,15 +81,12 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
     }
     
     // Update state immediately
-    console.log(`💾 Updating selections state`);
     setSelections(newSelections);
     
     // Call the callback function immediately if it exists
     if (onSelectionChange) {
-      console.log(`📞 Calling onSelectionChange callback with new selections`);
       onSelectionChange(newSelections);
     } else {
-      console.log(`❌ No onSelectionChange callback provided`);
     }
   };
 
@@ -151,9 +128,6 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
         const currentSelection = selections[matchIdStr];
         const hasError = !!errors[matchIdStr];
         const isSelected = currentSelection !== null && currentSelection !== undefined;
-
-        // Debug output for selections
-        console.log(`Match ${matchIdStr}: Selected=${isSelected}, Value=${currentSelection}, HasError=${hasError}`);
 
         return (
           <div 
