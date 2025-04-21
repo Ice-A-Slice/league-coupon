@@ -8,6 +8,7 @@ import { Selections } from "@/components/BettingCoupon/types";
 import Questionnaire from '@/components/Questionnaire/Questionnaire';
 import { Prediction } from "@/components/Questionnaire/types";
 import { Button } from "@/components/ui/button";
+import { LoginButton } from '@/components/auth';
 // Import mock data from the new file
 import { 
   sampleMatches, 
@@ -16,6 +17,7 @@ import {
   initialPredictions, 
   initialSampleSelections // Assuming this was also defined inline before
 } from '@/data/mockData';
+
 
 // Sample data for the demo - REMOVED
 // const sampleMatches: Match[] = [...];
@@ -151,6 +153,7 @@ export default function Home() {
 
       {/* Main content area with the coupon */}
       <main className="flex flex-col gap-4 sm:gap-[32px] row-start-2 items-center justify-center w-full max-w-full">
+      <LoginButton />
         {!isSubmitted ? (
           <>
             <div className="flex justify-center w-full">
