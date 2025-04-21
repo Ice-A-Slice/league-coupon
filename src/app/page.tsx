@@ -69,8 +69,8 @@ export default function Home() {
   }
   const bettingCouponRef = useRef<BettingCouponRef>(null);
   
-  // Initialize supabase client using useState for stability
-  const [supabase] = useState(() => createClient());
+  // Remove unused Supabase client state
+  // const [supabase, setSupabase] = useState<SupabaseClient | null>(null); 
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   
@@ -132,31 +132,29 @@ export default function Home() {
   
   // Authentication useEffect
   useEffect(() => {
-    // Initialize supabase client
-    // const supabase = createClient() // Removed from here
-    // const [user, setUser] = useState<any>(null) // Moved outside
-    // const [loading, setLoading] = useState(true) // Moved outside
-  
-    // useEffect(() => { // Removed nested useEffect
-      const getSession = async () => {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error) console.error('Auth error:', error);
-        setUser(session?.user ?? null);
-        setLoading(false);
-      };
-  
-      getSession();
+    // Initialize supabase client inside useEffect
+    const client = createClient();
+    // setSupabase(client); // Remove setting unused state
 
-      // Use explicit types for listener callback parameters
-      const { data: listener } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => { 
-        setUser(session?.user ?? null);
-      });
+    const getSession = async () => {
+      // Use the local client variable for initialization
+      const { data: { session }, error } = await client.auth.getSession(); 
+      if (error) console.error('Auth error:', error);
+      setUser(session?.user ?? null);
+      setLoading(false);
+    };
+  
+    getSession();
 
-      return () => {
-        listener?.subscription.unsubscribe(); // Add optional chaining
-      };
-    // }, [supabase]) // Dependency array remains the same
-  }, [supabase]); // Dependency array remains the same
+    // Use the local client variable for listener
+    const { data: listener } = client.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => { 
+      setUser(session?.user ?? null);
+    });
+
+    return () => {
+      listener?.subscription.unsubscribe(); 
+    };
+  }, []); // Empty dependency array: run only once on mount
 
   // Check if we're in a test environment
   const isTestEnvironment = process.env.NODE_ENV === 'test';
