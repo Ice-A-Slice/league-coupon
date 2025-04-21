@@ -9,6 +9,7 @@ import Questionnaire from '@/components/Questionnaire/Questionnaire';
 import { Prediction } from "@/components/Questionnaire/types";
 import { Button } from "@/components/ui/button";
 import { LoginButton } from '@/components/auth';
+
 // Import mock data from the new file
 import { 
   sampleMatches, 
@@ -17,6 +18,9 @@ import {
   initialPredictions, 
   initialSampleSelections // Assuming this was also defined inline before
 } from '@/data/mockData';
+
+// Import supabase client
+import { createClient } from '@/utils/supabase/client';
 
 
 // Sample data for the demo - REMOVED
@@ -34,6 +38,7 @@ interface ErrorsState {
 }
 
 export default function Home() {
+
   // State for selections and predictions - Initial state uses imported value
   const [selections, setSelections] = useState<Selections>(initialSampleSelections);
   const [predictions, setPredictions] = useState<Prediction>(initialPredictions);
@@ -144,6 +149,32 @@ export default function Home() {
     setIsSubmitting(false);
   };
 
+    // Initialize supabase client
+    const supabase = createClient()
+    const [user, setUser] = useState<any>(null)
+    const [loading, setLoading] = useState(true)
+  
+    useEffect(() => {
+      const getSession = async () => {
+        const { data: { session }, error } = await supabase.auth.getSession()
+        if (error) console.error('Auth error:', error)
+        setUser(session?.user ?? null)
+        setLoading(false)
+      }
+  
+      getSession()
+
+      const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+        setUser(session?.user ?? null)
+      })
+
+      return () => {
+        listener.subscription.unsubscribe()
+      }
+    }, [supabase])
+
+    if (loading) return <p>Laddar...</p>
+
   return (
     <div className="grid grid-rows-[auto_1fr_auto] items-center justify-items-center min-h-screen p-4 sm:p-8 pb-20 gap-8 sm:gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)] overflow-x-hidden">
       {/* Header (simplified for demo) */}
@@ -154,9 +185,11 @@ export default function Home() {
       {/* Main content area with the coupon */}
       <main className="flex flex-col gap-4 sm:gap-[32px] row-start-2 items-center justify-center w-full max-w-full">
       <LoginButton />
-        {!isSubmitted ? (
-          <>
-            <div className="flex justify-center w-full">
+      {user ? (
+        <>
+          {!isSubmitted ? (
+            <>
+              <div className="flex justify-center w-full">
               <div className="w-full max-w-lg">
                 <BettingCoupon 
                   ref={bettingCouponRef}
@@ -254,6 +287,11 @@ export default function Home() {
             </div>
           </div>
         )}
+      </>
+      ): (
+        <p className="mt-6 text-gray-600">Logga in för att kunna tippa.</p>
+      )}
+     
       </main>
       
       {/* Footer (simplified for demo) */}
