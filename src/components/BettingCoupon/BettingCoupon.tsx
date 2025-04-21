@@ -91,7 +91,6 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
   };
 
   // Sync state if initialSelections prop changes externally
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     if (initialSelections && JSON.stringify(initialSelections) !== JSON.stringify({})) {

@@ -3,11 +3,11 @@
 import React from 'react'
 import { useEffect, useState } from 'react'
 import { createClient } from '../../utils/supabase/client'
-import { Button } from '@/components/ui/button'
+import { User } from '@supabase/supabase-js'
 
 export default function LoginButton() {
   const supabase = createClient()
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<User | null>(null)
 
   useEffect(() => {
     const getUser = async () => {

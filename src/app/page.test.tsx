@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor, within, act } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Page from './page'; 
 // Import actual mock data
@@ -16,10 +16,10 @@ import { sampleTeams, samplePlayers } from '@/data/mockData';
 
 // --- Render Helper ---
 // Basic render helper.
-const renderPage = () => {
-  // Since Page now imports its own data, no need to pass props here for the mock data
-  return render(<Page />);
-};
+// const renderPage = () => {
+//   // Since Page now imports its own data, no need to pass props here for the mock data
+//   return render(<Page />);
+// };
 
 // Add window.scrollTo mock 
 window.scrollTo = jest.fn();

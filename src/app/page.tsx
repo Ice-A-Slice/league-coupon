@@ -6,7 +6,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import BettingCoupon from '@/components/BettingCoupon/BettingCoupon';
 import { Selections } from "@/components/BettingCoupon/types";
 import Questionnaire from '@/components/Questionnaire/Questionnaire';
-import { Prediction } from "@/components/Questionnaire/types";
+// import { Prediction } from "@/components/Questionnaire/types"; // Removed unused import
 import { Button } from "@/components/ui/button";
 import { LoginButton } from '@/components/auth';
 
@@ -21,6 +21,7 @@ import {
 
 // Import supabase client
 import { createClient } from '../utils/supabase/client';
+import { User } from "@supabase/supabase-js";
 
 
 // Sample data for the demo - REMOVED
@@ -41,7 +42,7 @@ export default function Home() {
 
   // State for selections and predictions - Initial state uses imported value
   const [selections, setSelections] = useState<Selections>(initialSampleSelections);
-  const [predictions, setPredictions] = useState<Prediction>(initialPredictions);
+  // const [predictions, setPredictions] = useState<Prediction>(initialPredictions); // Removed unused state
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [showQuestionnaire, setShowQuestionnaire] = useState(true);
   const [isQuestionnaireContentVisible, setIsQuestionnaireContentVisible] = useState(true);
@@ -70,19 +71,13 @@ export default function Home() {
   
   // Initialize supabase client using useState for stability
   const [supabase] = useState(() => createClient());
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   
   // Handler for selection changes
   const handleSelectionChange = (newSelections: Selections) => {
     console.log('Selection change detected:', newSelections);
     setSelections({...newSelections});
-    setValidationErrors({}); // Reset structured errors
-  };
-  
-  // Handler for prediction changes
-  const handlePredictionChange = (newPredictions: Prediction) => {
-    setPredictions(newPredictions);
     setValidationErrors({}); // Reset structured errors
   };
   
@@ -203,7 +198,7 @@ export default function Home() {
                     teams={sampleTeams} // Use imported mock data
                     players={samplePlayers} // Use imported mock data
                     initialPredictions={initialPredictions} // Use imported mock data
-                    onPredictionChange={handlePredictionChange}
+                    onPredictionChange={() => setValidationErrors({})} // Simplified callback
                     onToggleVisibility={handleQuestionnaireToggle}
                   />
                 </div>
@@ -269,7 +264,6 @@ export default function Home() {
                   onClick={() => {
                     setIsSubmitted(false);
                     setSelections(initialSampleSelections); // Reset using imported value
-                    setPredictions(initialPredictions); // Reset using imported value
                     setValidationErrors({});
                   }}
                   style={{ 
