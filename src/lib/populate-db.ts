@@ -1,5 +1,7 @@
 import { fetchFixtures, fetchLeagueByIdAndSeason } from '@/services/football-api/client';
-import type { ApiFixtureResponseItem, ApiLeagueInfo, ApiSeason } from '@/services/football-api/types';
+// Remove unused types: ApiFixtureResponseItem, ApiLeagueInfo, ApiSeason
+// Keep types used later in the file if any (re-check needed if logic changes)
+import type { /* ApiFixtureResponseItem, ApiLeagueInfo, ApiSeason */ } from '@/services/football-api/types';
 import { supabaseServerClient } from './supabase/server';
 
 /**
@@ -189,15 +191,15 @@ export async function populateFixturesForSeason(leagueId: number, seasonYear: nu
 
         if (fixtureError) throw new Error(`Fixture upsert failed for API ID ${fixture.id}: ${fixtureError.message}`);
 
-      } catch (innerError: any) {
-        console.error(`Failed processing fixture API ID ${item.fixture?.id}: ${innerError.message}`);
+      } catch (innerError: unknown) {
+        console.error(`Failed processing fixture API ID ${item.fixture?.id}: ${innerError instanceof Error ? innerError.message : innerError}`);
       }
     } // End loop through fixtures
 
     console.log(`Successfully finished processing fixtures for league ${leagueId}, season ${seasonYear}.`);
 
-  } catch (error: any) {
-    console.error(`Error in populateFixturesForSeason for league ${leagueId}, season ${seasonYear}: ${error.message}`);
+  } catch (error: unknown) {
+    console.error(`Error in populateFixturesForSeason for league ${leagueId}, season ${seasonYear}: ${error instanceof Error ? error.message : error}`);
   }
 }
 

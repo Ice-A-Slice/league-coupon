@@ -45,10 +45,12 @@ export async function GET(request: Request) {
     // Return the successfully fetched matches
     return NextResponse.json(matches);
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error in /api/fixtures route:', error);
+    // Type check before accessing message
+    const message = error instanceof Error ? error.message : 'An unknown error occurred';
     return NextResponse.json(
-      { error: 'Internal server error fetching fixtures', details: error.message }, 
+      { error: 'Internal server error fetching fixtures', details: message }, 
       { status: 500 } 
     );
   }

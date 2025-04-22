@@ -25,11 +25,11 @@ export default async function TestFetchPage() {
       console.warn('API call succeeded but response structure might be unexpected:', data);
     }
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('--- Error fetching fixtures: ---');
     console.error(error);
     fetchStatus = 'Failed to fetch fixtures. Check server console for error details.';
-    errorMessage = error.message || 'An unknown error occurred.';
+    errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
   }
 
   console.log('--- Fixture fetch attempt finished ---');

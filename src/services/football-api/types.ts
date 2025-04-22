@@ -14,8 +14,8 @@ export interface ApiCountry {
  */
 export interface ApiCountriesResponse {
   get: string; // e.g., "countries"
-  parameters: Record<string, any>; // Use Record<string, any> for flexible parameters
-  errors: any[]; // Or define more strictly if error structure is known
+  parameters: Record<string, unknown>; // Changed any to unknown
+  errors: unknown[]; // Changed any[] to unknown[]
   results: number;
   paging: {
     current: number;
@@ -86,8 +86,8 @@ export interface ApiLeagueResponseItem {
  */
 export interface ApiLeaguesResponse {
   get: string; // e.g., "leagues"
-  parameters: Record<string, any>;
-  errors: any[];
+  parameters: Record<string, unknown>; // Changed any to unknown
+  errors: unknown[]; // Changed any[] to unknown[]
   results: number;
   paging: {
     current: number;
@@ -213,8 +213,8 @@ export interface ApiFixtureResponseItem {
  */
 export interface ApiFixturesResponse {
   get: string; // e.g., "fixtures"
-  parameters: Record<string, any>;
-  errors: any[];
+  parameters: Record<string, unknown>; // Changed any to unknown
+  errors: unknown[]; // Changed any[] to unknown[]
   results: number;
   paging: {
     current: number;

@@ -1,7 +1,6 @@
 import {
   ApiFixturesResponse,
   ApiLeaguesResponse,
-  ApiCountriesResponse,
 } from './types';
 
 const API_BASE_URL = 'https://v3.football.api-sports.io';
@@ -44,7 +43,7 @@ async function fetchFromApi<T>(endpoint: string, params?: URLSearchParams): Prom
       throw new Error(`API request failed with status ${response.status}: ${response.statusText}`);
     }
 
-    const data = await response.json() as T & { errors?: any[] | Record<string, any> }; // Assume general structure with potential errors field
+    const data = await response.json() as T & { errors?: unknown[] | Record<string, unknown> };
 
     // Check for API-level errors in the response body
     if (data.errors && (Array.isArray(data.errors) ? data.errors.length > 0 : Object.keys(data.errors).length > 0)) {

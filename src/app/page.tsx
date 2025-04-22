@@ -181,12 +181,14 @@ export default function Home() {
         }
         
         const data: Match[] = await response.json();
-        setMatchesForCoupon(data || []); // Update state with fetched matches
+        setMatchesForCoupon(data || []);
         console.log('Client-side fetch: Successfully fetched fixtures.', data);
 
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Client-side fetch error:', error);
-        setFixtureError(error.message || 'Failed to load fixtures.');
+        // Type check before accessing message
+        const message = error instanceof Error ? error.message : 'Failed to load fixtures.';
+        setFixtureError(message);
         setMatchesForCoupon([]); // Clear matches on error
       } finally {
         setFixtureLoading(false);
