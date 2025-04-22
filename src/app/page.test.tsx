@@ -2,8 +2,6 @@ import React from 'react';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Page from './page'; 
-// Import actual mock data
-import { sampleTeams, samplePlayers } from '@/data/mockData';
 // Import necessary types
 import type { Match } from '@/components/BettingCoupon/types';
 import type { Team, Player } from '@/components/Questionnaire/types';
@@ -60,28 +58,28 @@ const mockFetch = fetch as jest.Mock;
 beforeEach(() => {
   mockFetch.mockClear();
   // Default mock implementation (can be overridden in specific tests)
-  mockFetch.mockImplementation((url): Promise<any> => {
+  mockFetch.mockImplementation((url): Promise<Response> => {
     console.log(`[TEST] Intercepted fetch: ${url}`);
     if (url.toString().includes('/api/fixtures')) {
       return Promise.resolve({
         ok: true,
         status: 200,
         json: async () => mockMatches,
-      });
+      } as Response);
     }
     if (url.toString().includes('/api/teams')) {
       return Promise.resolve({
         ok: true,
         status: 200,
         json: async () => mockTeams,
-      });
+      } as Response);
     }
     if (url.toString().includes('/api/players')) {
       return Promise.resolve({
         ok: true,
         status: 200,
         json: async () => mockPlayers,
-      });
+      } as Response);
     }
     // Fallback for unhandled requests
     return Promise.reject(new Error(`Unhandled fetch request in test: ${url}`));
@@ -97,12 +95,11 @@ describe('Page Validation Flow Integration Tests', () => {
     // Arrange
     render(<Page />);
     
-    // Assert - Now use getByRole as elements should be present
-    // Note: The Round 1 heading might be commented out in the current implementation
-    // expect(screen.getByRole('heading', { name: /Round 1/i })).toBeInTheDocument();
-    expect(await screen.findByTestId('toggle-button-1-1')).toBeInTheDocument();
-    expect(await screen.findByRole('heading', { name: /Questions/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Submit$/i })).toBeInTheDocument();
+    // Assert - Use findBy* for elements appearing after async fetch
+    expect(await screen.findByTestId('toggle-button-1-1')).toBeInTheDocument(); // Wait for coupon
+    expect(await screen.findByRole('heading', { name: /Questions/i })).toBeInTheDocument(); // Questionnaire heading
+    expect(await screen.findByRole('combobox', { name: /Select a team for league-winner/i })).toBeInTheDocument(); // Wait for questionnaire data
+    expect(screen.getByRole('button', { name: /^Submit$/i })).toBeInTheDocument(); // Submit button is usually static
   });
 
   // --- Test Case: Valid Submission (Subtask 10.2) ---
@@ -382,6 +379,7 @@ describe('Page Validation Flow Integration Tests', () => {
     await user.click(screen.getByRole('button', { name: /^Submit$/i }));
 
     // --- Assert 1: Errors ARE visible ---
+    // Use waitFor to ensure error messages appear after state updates
     await waitFor(() => {
       // Coupon Errors (within summary)
       const couponSection = screen.getByRole('heading', { name: /Round 1/i }).closest('section');
@@ -399,7 +397,6 @@ describe('Page Validation Flow Integration Tests', () => {
 
     // --- Act 2: Fix Errors ---
     // Fix Coupon (m2, m3, m4)
-    // Use findByTestId before clicking
     await user.click(await screen.findByTestId('toggle-button-2-X'));
     await user.click(await screen.findByTestId('toggle-button-3-2'));
     await user.click(await screen.findByTestId('toggle-button-4-1'));
@@ -412,14 +409,17 @@ describe('Page Validation Flow Integration Tests', () => {
     await user.click(screen.getByRole('combobox', { name: /Select a player for top-scorer/i }));
     await user.click(await screen.findByRole('option', { name: mockPlayers[0].name })); // Lautaro Martínez
 
-    // --- Act 3: Resubmit ---
-    // Use findByRole if necessary
-    await user.click(await screen.findByRole('button', { name: /^Submit$/i }));
-
-    // --- Assert 3: Submission is Successful ---
-    await waitFor(() => {
+    // --- Act 3 & Assert 3: Resubmit and Check Success ---
+    // Wrap the final interaction and assertion in waitFor
+    await waitFor(async () => {
+      // Resubmit
+      await user.click(await screen.findByRole('button', { name: /^Submit$/i }));
+      
+      // Assert: Submission is Successful
       expect(screen.getByText(/Success!/i)).toBeInTheDocument();
     });
+    
+    // Assert: Errors are gone (outside waitFor is fine, as state should be stable)
     expect(screen.queryByText(/Please fix all errors/i)).not.toBeInTheDocument();
   });
 
