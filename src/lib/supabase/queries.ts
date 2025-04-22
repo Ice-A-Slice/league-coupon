@@ -1,4 +1,3 @@
-import 'server-only';
 import { supabaseServerClient } from './server';
 import type { Match } from '@/components/BettingCoupon/types'; // Use the existing UI type
 
