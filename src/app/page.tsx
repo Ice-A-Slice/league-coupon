@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 // Remove unused Image import
 // Import the component and types
 import BettingCoupon from '@/components/BettingCoupon/BettingCoupon';
-import { Selections } from "@/components/BettingCoupon/types";
+import type { Match, Selections } from "@/components/BettingCoupon/types";
 import Questionnaire from '@/components/Questionnaire/Questionnaire';
 // import { Prediction } from "@/components/Questionnaire/types"; // Removed unused import
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,6 @@ import { LoginButton } from '@/components/auth';
 
 // Import mock data from the new file
 import { 
-  sampleMatches, 
   sampleTeams, 
   samplePlayers, 
   initialPredictions, 
@@ -23,6 +22,8 @@ import {
 import { createClient } from '../utils/supabase/client';
 import { User, AuthChangeEvent, Session } from "@supabase/supabase-js";
 
+// Remove FixtureLoader import
+// import FixtureLoader from '@/components/FixtureLoader/FixtureLoader';
 
 // Sample data for the demo - REMOVED
 // const sampleMatches: Match[] = [...];
@@ -72,7 +73,12 @@ export default function Home() {
   // Remove unused Supabase client state
   // const [supabase, setSupabase] = useState<SupabaseClient | null>(null); 
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(true); // Separate loading state for auth
+  
+  // Add state for the fetched matches
+  const [matchesForCoupon, setMatchesForCoupon] = useState<Match[]>([]);
+  const [fixtureLoading, setFixtureLoading] = useState(true); // Loading state for fixtures
+  const [fixtureError, setFixtureError] = useState<string | null>(null); // Error state for fixtures
   
   // Handler for selection changes
   const handleSelectionChange = (newSelections: Selections) => {
@@ -141,7 +147,7 @@ export default function Home() {
       const { data: { session }, error } = await client.auth.getSession(); 
       if (error) console.error('Auth error:', error);
       setUser(session?.user ?? null);
-      setLoading(false);
+      setAuthLoading(false);
     };
   
     getSession();
@@ -156,11 +162,45 @@ export default function Home() {
     };
   }, []); // Empty dependency array: run only once on mount
 
+  // --- useEffect for Fetching Fixtures (Client-Side) --- 
+  useEffect(() => {
+    async function loadFixtures() {
+      setFixtureLoading(true);
+      setFixtureError(null);
+      // Define params for the API call
+      const leagueId = 39;
+      const seasonYear = 2024;
+      const roundName = "Regular Season - 1";
+
+      try {
+        const response = await fetch(`/api/fixtures?league=${leagueId}&season=${seasonYear}&round=${encodeURIComponent(roundName)}`);
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({})); // Try to get error details
+          throw new Error(errorData.error || `HTTP error! Status: ${response.status}`);
+        }
+        
+        const data: Match[] = await response.json();
+        setMatchesForCoupon(data || []); // Update state with fetched matches
+        console.log('Client-side fetch: Successfully fetched fixtures.', data);
+
+      } catch (error: any) {
+        console.error('Client-side fetch error:', error);
+        setFixtureError(error.message || 'Failed to load fixtures.');
+        setMatchesForCoupon([]); // Clear matches on error
+      } finally {
+        setFixtureLoading(false);
+      }
+    }
+
+    loadFixtures();
+  }, []); // Fetch fixtures once on mount
+
   // Check if we're in a test environment
   const isTestEnvironment = process.env.NODE_ENV === 'test';
   
-  // In test environment, bypass the loading and authentication check
-  if (loading && !isTestEnvironment) return <p>Laddar...</p>;
+  // Combine loading states
+  if ((authLoading || fixtureLoading) && !isTestEnvironment) return <p>Laddar...</p>;
 
   return (
     <div className="grid grid-rows-[auto_1fr_auto] items-center justify-items-center min-h-screen p-4 sm:p-8 pb-20 gap-8 sm:gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)] overflow-x-hidden">
@@ -179,12 +219,17 @@ export default function Home() {
             <>
               <div className="flex justify-center w-full">
                 <div className="w-full max-w-lg">
-                  <BettingCoupon 
-                    ref={bettingCouponRef}
-                    matches={sampleMatches} // Use imported mock data
-                    initialSelections={initialSampleSelections} // Use imported mock data
-                    onSelectionChange={handleSelectionChange} 
-                  />
+                  {/* Render BettingCoupon directly again, passing state */}
+                  {fixtureError ? (
+                    <div className="text-red-500 p-4">Error: {fixtureError}</div>
+                  ) : (
+                    <BettingCoupon
+                      ref={bettingCouponRef}
+                      matches={matchesForCoupon} // <-- Use state data
+                      initialSelections={initialSampleSelections}
+                      onSelectionChange={handleSelectionChange}
+                    />
+                  )}
                 </div>
               </div>
               
@@ -193,10 +238,10 @@ export default function Home() {
                   <Questionnaire
                     ref={questionnaireRef}
                     showQuestionnaire={true}
-                    teams={sampleTeams} // Use imported mock data
-                    players={samplePlayers} // Use imported mock data
-                    initialPredictions={initialPredictions} // Use imported mock data
-                    onPredictionChange={() => setValidationErrors({})} // Simplified callback
+                    teams={sampleTeams}
+                    players={samplePlayers}
+                    initialPredictions={initialPredictions}
+                    onPredictionChange={() => setValidationErrors({})}
                     onToggleVisibility={handleQuestionnaireToggle}
                   />
                 </div>
@@ -216,8 +261,7 @@ export default function Home() {
                     <p className="font-semibold mb-1">Coupon Errors:</p>
                     <ul className="list-disc pl-5">
                       {Object.entries(validationErrors.coupon).map(([matchId, error]) => {
-                         // Find match details to show more context (optional)
-                         const match = sampleMatches.find(m => m.id.toString() === matchId);
+                         const match = matchesForCoupon.find(m => m.id.toString() === matchId); 
                          const matchLabel = match ? `${match.homeTeam} vs ${match.awayTeam}` : `Match ${matchId}`;
                         return <li key={`coupon-err-${matchId}`}>{matchLabel}: {error}</li>;
                       })}
