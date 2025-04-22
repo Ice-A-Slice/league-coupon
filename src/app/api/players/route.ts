@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getPlayersForSeason } from '@/lib/supabase/queries';
 import { supabaseServerClient } from '@/lib/supabase/server';
-import 'server-only';
+
+// Add the conditional server-only check
+if (process.env.NODE_ENV !== 'test') {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  require('server-only');
+}
 
 // Helper function to find seasonId (can be moved to queries.ts later if reused)
 // Duplicated here for simplicity, consider extracting if used elsewhere
