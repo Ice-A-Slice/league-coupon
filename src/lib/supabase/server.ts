@@ -1,4 +1,12 @@
-import 'server-only';
+// Remove the conditional check entirely
+// if (process.env.NODE_ENV !== 'test') {
+//   // eslint-disable-next-line @typescript-eslint/no-var-requires
+//   require('server-only');
+// }
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+require('server-only');
+
 import { createClient } from '@supabase/supabase-js';
 
 // Ensure these environment variables are set in your .env.local
