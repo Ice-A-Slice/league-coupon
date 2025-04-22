@@ -77,7 +77,8 @@
     "next": "^15.3.0",
     "tailwindcss": "^4",
     "ts-jest": "^29.3.2",
-    "typescript": "^5"
+    "typescript": "^5",
+    "whatwg-fetch": "^3.6.20"
   },
   "type": "module"
 }

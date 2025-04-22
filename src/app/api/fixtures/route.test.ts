@@ -1,6 +1,6 @@
 import { GET } from './route'; // Import the handler
 // Keep NextResponse import for type checking if needed, but we mock its functionality
-import { NextResponse } from 'next/server'; 
+// REMOVE: import { NextResponse } from 'next/server'; 
 import { getFixturesForRound } from '@/lib/supabase/queries'; // Import the function to mock
 import type { Match } from '@/components/BettingCoupon/types';
 
@@ -16,7 +16,7 @@ const mockNextResponseJson = jest.fn(); // Simple tracker
 jest.mock('next/server', () => ({
   NextResponse: {
     // Make sure the mock returns something simple, not undefined
-    json: (body: any, init?: { status?: number }) => {
+    json: (body: unknown, init?: { status?: number }) => {
        mockNextResponseJson(body, init); // Track the call
        return { status: init?.status ?? 200, body }; // Return a plain object
     },

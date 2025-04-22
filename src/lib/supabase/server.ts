@@ -4,7 +4,10 @@
 //   require('server-only');
 // }
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+require('server-only');
+
+import { createClient } from '@supabase/supabase-js';
 
 // Ensure these environment variables are set in your .env.local
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

@@ -3,7 +3,7 @@ import { getFixturesForRound } from '@/lib/supabase/queries';
 
 // Apply the conditional check here as well
 if (process.env.NODE_ENV !== 'test') {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   require('server-only');
 }
 

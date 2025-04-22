@@ -4,7 +4,7 @@ import { supabaseServerClient } from '@/lib/supabase/server';
 
 // Add the conditional server-only check for the test environment
 if (process.env.NODE_ENV !== 'test') {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   require('server-only');
 }
 

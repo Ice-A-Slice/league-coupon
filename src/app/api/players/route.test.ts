@@ -22,13 +22,20 @@ jest.mock('@/lib/supabase/server', () => ({
   },
 }));
 
+// Define an interface for our mocked NextResponse *before* mocking
+interface MockedNextResponse {
+  _jsonMock: jest.Mock;
+  json: (body: unknown, init?: { status?: number }) => { status: number; body: unknown };
+}
+
 // Mock next/server, assigning jest.fn() directly
 jest.mock('next/server', () => ({
   NextResponse: {
     // Store the mock function reference separately for tracking.
     _jsonMock: jest.fn(),
-    json: function(body: any, init?: { status?: number }) {
-      (this as any)._jsonMock(body, init); // Call the tracker
+    json: function(body: unknown, init?: { status?: number }) { // Use unknown
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (this as any)._jsonMock(body, init); // Use type assertion here if needed
       return { status: init?.status ?? 200, body }; // Return plain object
     },
   },
@@ -36,10 +43,13 @@ jest.mock('next/server', () => ({
 
 // --- Access Mocks ---
 // Now require the mocked modules to get access to the mock functions
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { getPlayersForSeason } = require('@/lib/supabase/queries') as { getPlayersForSeason: jest.Mock };
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { supabaseServerClient } = require('@/lib/supabase/server') as { supabaseServerClient: { from: jest.Mock; select: jest.Mock; eq: jest.Mock; single: jest.Mock; } };
-const { NextResponse } = require('next/server') as any;
-const mockNextResponseJson = NextResponse._jsonMock as jest.Mock;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { NextResponse } = require('next/server') as { NextResponse: MockedNextResponse }; // Use the interface
+const mockNextResponseJson = NextResponse._jsonMock; // Access directly now
 
 
 // --- Mock Data ---
