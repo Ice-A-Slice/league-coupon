@@ -1,5 +1,6 @@
-// Import jest-dom's custom assertions
+// Use require for CommonJS modules
 require('@testing-library/jest-dom');
+require('whatwg-fetch'); // Use require for the polyfill
 
 // Mock environment variables required by Supabase client
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost:54321';
@@ -34,78 +35,61 @@ Element.prototype.scrollIntoView = jest.fn();
 
 // Mock Supabase client and auth methods
 jest.mock('@/utils/supabase/client', () => {
-  // Store the listener callback so tests can trigger it
-  let authStateChangeListener = null;
-
-  console.log('[MOCK_SETUP] Setting up Supabase client mock factory');
-  
+  const mockSupabaseClient = {
+    auth: {
+      getSession: jest.fn().mockResolvedValue({ data: { session: { user: { id: 'test-user-id', email: 'test@example.com' }} }, error: null }),
+      onAuthStateChange: jest.fn().mockReturnValue({ data: { subscription: { unsubscribe: jest.fn() } } }),
+      signInWithOAuth: jest.fn().mockResolvedValue({ error: null }),
+      signOut: jest.fn().mockResolvedValue({ error: null }),
+    },
+    // Add mock implementations for other Supabase methods if needed by tests
+    from: jest.fn(() => mockSupabaseClient), // Return mock client for chaining
+    select: jest.fn(() => mockSupabaseClient),
+    insert: jest.fn(() => mockSupabaseClient),
+    update: jest.fn(() => mockSupabaseClient),
+    delete: jest.fn(() => mockSupabaseClient),
+    eq: jest.fn(() => mockSupabaseClient),
+    in: jest.fn(() => mockSupabaseClient),
+    // Add more mocked methods as required by your tests
+  };
+  console.log('[MOCK_SETUP] Creating mocked Supabase client instance');
   return {
     createClient: jest.fn(() => {
-      console.log('[MOCK_SETUP] Creating mocked Supabase client instance');
-      return {
-        auth: {
-          // Mock getSession to be async and return a user
-          getSession: jest.fn().mockImplementation(async () => {
-            console.log('[MOCK_RUNTIME] getSession called');
-            // Simulate minimal async delay
-            await new Promise(resolve => setTimeout(resolve, 0)); 
-            console.log('[MOCK_RUNTIME] getSession returning session');
-            return {
-              data: { session: { user: { id: 'test-user-id', email: 'test@example.com' } } },
-              error: null
-            };
-          }),
+      // Extend mock methods dynamically if needed per test suite
+      // Mock getSession to return a session by default for authenticated tests
+      mockSupabaseClient.auth.getSession = jest.fn().mockImplementation(() => {
+          console.log('[MOCK_RUNTIME] getSession called');
+          // Simulate returning a session by default
+          // Tests needing unauthenticated state can override this mock
+          console.log('[MOCK_RUNTIME] getSession returning session');
+          return Promise.resolve({ data: { session: { user: { id: 'test-user-id', email: 'test@example.com' }} }, error: null });
+        });
+      mockSupabaseClient.auth.onAuthStateChange = jest.fn().mockImplementation(() => {
+          console.log('[MOCK_RUNTIME] onAuthStateChange listener registered');
+          // Return a mock subscription object
+          return { data: { subscription: { unsubscribe: jest.fn(() => console.log('[MOCK_RUNTIME] onAuthStateChange listener unsubscribed')) } } };
+        });
 
-          // Mock onAuthStateChange to store the callback
-          onAuthStateChange: jest.fn().mockImplementation((callback) => {
-            console.log('[MOCK_RUNTIME] onAuthStateChange listener registered');
-            authStateChangeListener = callback;
-            // Simulate initial check (often null before sign-in)
-            // Or trigger immediately based on getSession mock? Let's start by NOT calling it here.
-            // callback(null, null); // Or callback('INITIAL_SESSION', null)?
-            
-            return {
-              data: {
-                subscription: {
-                  unsubscribe: jest.fn(() => {
-                    console.log('[MOCK_RUNTIME] onAuthStateChange listener unsubscribed');
-                    authStateChangeListener = null;
-                  }),
-                },
-              },
-              error: null
-            };
-          }),
-
-          // Mock other methods if needed by tests, e.g.:
-          signInWithOAuth: jest.fn().mockResolvedValue({ data: {}, error: null }),
-          signOut: jest.fn().mockResolvedValue({ error: null }),
-
-          // --- Helper for tests to trigger the listener --- 
-          // Not part of real Supabase API, but useful for testing
-          __triggerAuthStateChange: (event, session) => {
-             console.log(`[MOCK_RUNTIME] Test trying to trigger auth change: ${event}`);
-             if (authStateChangeListener) {
-               console.log(`[MOCK_RUNTIME] Triggering listener with:`, event, session);
-               authStateChangeListener(event, session);
-             } else {
-                console.log(`[MOCK_RUNTIME] No auth listener to trigger.`);
-             }
-          },
-        },
-        // Mock other Supabase methods if needed (e.g., from, rpc)
-        from: jest.fn(() => { // Basic mock for .from()
-           console.log('[MOCK_RUNTIME] supabase.from() called');
-           return {
-            select: jest.fn().mockResolvedValue({ data: [], error: null }),
-            insert: jest.fn().mockResolvedValue({ data: [], error: null }),
-            update: jest.fn().mockResolvedValue({ data: [], error: null }),
-            delete: jest.fn().mockResolvedValue({ data: [], error: null }),
-           };
-        }),
-      };
+      return mockSupabaseClient;
     })
   };
 });
+
+// Global cleanup function
+afterEach(() => {
+  // Clean up mocks or other resources after each test if needed
+  // For example, ensure listener mocks are cleared
+  // if (window.scrollTo) {
+  //   (window.scrollTo as jest.Mock).mockClear();
+  // }
+});
+
+// Mock console methods globally if needed, or use jest.spyOn in specific tests
+// global.console = {
+//   ...console,
+//   log: jest.fn(),
+//   warn: jest.fn(),
+//   error: jest.fn(),
+// };
 
 // Add any global setup needed for your tests here 

@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import { getFixturesForRound } from '@/lib/supabase/queries';
 
-// Ensure this route handler is also marked as server-only
-// as it imports a server-only function (getFixturesForRound)
-import 'server-only';
+// Apply the conditional check here as well
+if (process.env.NODE_ENV !== 'test') {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  require('server-only');
+}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);

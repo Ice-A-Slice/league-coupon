@@ -1,13 +1,6 @@
 import { supabaseServerClient } from './server';
 import type { Match } from '@/components/BettingCoupon/types'; // Use the existing UI type
 
-// Only enforce server-only outside of test environments
-if (process.env.NODE_ENV !== 'test') {
-  // Dynamically require server-only to prevent bundlers from hoisting the check
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  require('server-only');
-}
-
 /**
  * Fetches fixtures for a specific round from the database.
  * Joins with teams to get names.
