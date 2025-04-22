@@ -1,4 +1,4 @@
-import { fetchFixtures, fetchLeagueByIdAndSeason } from '@/services/football-api/client';
+import { fetchFixtures, fetchLeagueByIdAndSeason, fetchTeamsByLeagueAndSeason } from '@/services/football-api/client';
 // Remove unused types: ApiFixtureResponseItem, ApiLeagueInfo, ApiSeason
 // Keep types used later in the file if any (re-check needed if logic changes)
 import type { /* ApiFixtureResponseItem, ApiLeagueInfo, ApiSeason */ } from '@/services/football-api/types';
@@ -75,6 +75,47 @@ export async function populateFixturesForSeason(leagueId: number, seasonYear: nu
     const seasonId = seasonDb.id;
     console.log(`Upserted season: ${seasonData.year} (DB ID: ${seasonId})`);
 
+    // 1b. Fetch and Upsert All Teams for the Season
+    console.log(`Fetching teams for league ${leagueId}, season ${seasonYear}...`);
+    const teamsApiResponse = await fetchTeamsByLeagueAndSeason(leagueId, seasonYear);
+    const upsertedTeamIds = new Map<number, number>(); // Map api_team_id to its DB ID
+
+    if (teamsApiResponse && teamsApiResponse.response) {
+      console.log(`Fetched ${teamsApiResponse.results} teams. Upserting...`);
+      for (const teamItem of teamsApiResponse.response) {
+        const teamData = teamItem.team;
+        if (!teamData) continue;
+
+        const { data: teamDb, error: teamError } = await supabaseServerClient
+          .from('teams')
+          .upsert({
+            api_team_id: teamData.id,
+            name: teamData.name,
+            logo_url: teamData.logo,
+            // Add the new fields
+            code: teamData.code,
+            country: teamData.country,
+            founded: teamData.founded,
+            national: teamData.national,
+          }, { onConflict: 'api_team_id' })
+          .select('id')
+          .single();
+
+        if (teamError) {
+          console.error(`Team upsert failed for API ID ${teamData.id} (${teamData.name}): ${teamError.message}`);
+          // Optionally decide whether to continue or throw
+        } else if (teamDb && typeof teamDb.id === 'number') {
+          upsertedTeamIds.set(teamData.id, teamDb.id); // Store the DB ID
+          // console.log(`Upserted team: ${teamData.name} (DB ID: ${teamDb.id})`); // Less verbose logging
+        } else {
+          console.warn(`Team upsert for API ID ${teamData.id} did not return a valid ID.`);
+        }
+      }
+      console.log(`Finished upserting ${teamsApiResponse.results} teams.`);
+    } else {
+      console.warn(`No teams found via API for league ${leagueId}, season ${seasonYear}.`);
+    }
+
     // --- Now Fetch Fixtures ---
     console.log(`Fetching fixtures for league ${leagueId}, season ${seasonYear}...`);
     const fixturesApiResponse = await fetchFixtures(leagueId, seasonYear);
@@ -88,9 +129,9 @@ export async function populateFixturesForSeason(leagueId: number, seasonYear: nu
 
     // Store IDs returned from upserts to use as foreign keys (scoped to this run)
     const upsertedRoundIds = new Map<string, number>(); // Map round name to its DB ID
-    const upsertedTeamIds = new Map<number, number>(); // Map api_team_id to its DB ID
 
-    // Process fixtures one by one (can be optimized with batching later)
+    // Team IDs are now pre-populated in upsertedTeamIds
+    // Process fixtures one by one
     for (const item of fixturesApiResponse.response) {
       // Ensure we have basic data to proceed
       if (!item.league || !item.fixture || !item.teams?.home || !item.teams?.away || !item.league.round) {
@@ -103,7 +144,7 @@ export async function populateFixturesForSeason(leagueId: number, seasonYear: nu
       try {
         // 4. Upsert Round (cached based on round name for this run)
         let roundId = upsertedRoundIds.get(fixtureLeagueInfo.round);
-        if (roundId === undefined) { // Check for undefined specifically
+        if (roundId === undefined) {
           const { data: roundData, error: roundError } = await supabaseServerClient
             .from('rounds')
             .upsert({
@@ -120,44 +161,14 @@ export async function populateFixturesForSeason(leagueId: number, seasonYear: nu
           console.log(`Upserted round: ${fixtureLeagueInfo.round} (DB ID: ${roundId})`);
         }
 
-        // 5. Upsert Home Team (cached based on api_team_id for this run)
-        let homeTeamId = upsertedTeamIds.get(teams.home.id);
-        if (homeTeamId === undefined) {
-          const { data: homeTeamData, error: homeTeamError } = await supabaseServerClient
-            .from('teams')
-            .upsert({
-              api_team_id: teams.home.id,
-              name: teams.home.name,
-              logo_url: teams.home.logo,
-            }, { onConflict: 'api_team_id' })
-            .select('id')
-            .single();
+        // 5. Get Team DB IDs (Should exist from step 1b)
+        const homeTeamId = upsertedTeamIds.get(teams.home.id);
+        const awayTeamId = upsertedTeamIds.get(teams.away.id);
 
-          if (homeTeamError) throw new Error(`Home Team upsert failed for ${teams.home.name}: ${homeTeamError.message}`);
-          if (!homeTeamData || typeof homeTeamData.id !== 'number') throw new Error('Home Team upsert did not return a valid ID.');
-          homeTeamId = homeTeamData.id;
-          upsertedTeamIds.set(teams.home.id, homeTeamId);
-          console.log(`Upserted team: ${teams.home.name} (DB ID: ${homeTeamId})`);
-        }
-
-        // 6. Upsert Away Team (cached based on api_team_id for this run)
-        let awayTeamId = upsertedTeamIds.get(teams.away.id);
-        if (awayTeamId === undefined) {
-          const { data: awayTeamData, error: awayTeamError } = await supabaseServerClient
-            .from('teams')
-            .upsert({
-              api_team_id: teams.away.id,
-              name: teams.away.name,
-              logo_url: teams.away.logo,
-            }, { onConflict: 'api_team_id' })
-            .select('id')
-            .single();
-
-          if (awayTeamError) throw new Error(`Away Team upsert failed for ${teams.away.name}: ${awayTeamError.message}`);
-          if (!awayTeamData || typeof awayTeamData.id !== 'number') throw new Error('Away Team upsert did not return a valid ID.');
-          awayTeamId = awayTeamData.id;
-          upsertedTeamIds.set(teams.away.id, awayTeamId);
-          console.log(`Upserted team: ${teams.away.name} (DB ID: ${awayTeamId})`);
+        if (homeTeamId === undefined || awayTeamId === undefined) {
+          console.warn(`Could not find pre-fetched DB ID for home (${teams.home.id}) or away (${teams.away.id}) team for fixture ${fixture.id}. Skipping fixture upsert.`);
+          // Optional: Add fallback upsert here if needed, but ideally shouldn't happen
+          continue;
         }
 
         // 7. Upsert Fixture

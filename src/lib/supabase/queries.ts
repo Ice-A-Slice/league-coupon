@@ -86,4 +86,67 @@ export async function getFixturesForRound(
     console.error('An error occurred in getFixturesForRound:', error);
     return null;
   }
+}
+
+/**
+ * Fetches teams associated with a specific season from the database.
+ *
+ * @param seasonId The database ID of the season.
+ * @returns A promise resolving to an array of team objects ({ id, name }) or null on error.
+ */
+export async function getTeamsForSeason(seasonId: number): Promise<{ id: number; name: string; }[] | null> {
+  console.log(`Query: Fetching teams for season ID ${seasonId}`);
+
+  try {
+    // We need to join fixtures to link teams to a season indirectly
+    // Select distinct teams linked to fixtures within the target season's rounds
+    
+    // 1. Get round IDs for the season
+    const { data: rounds, error: roundsError } = await supabaseServerClient
+      .from('rounds')
+      .select('id')
+      .eq('season_id', seasonId);
+
+    if (roundsError) throw new Error(`Failed to fetch rounds for season ${seasonId}: ${roundsError.message}`);
+    if (!rounds || rounds.length === 0) {
+      console.log(`Query: No rounds found for season ID ${seasonId}. Returning empty array.`);
+      return [];
+    }
+    const roundIds = rounds.map(r => r.id);
+
+    // 2. Get distinct team IDs from fixtures in those rounds
+    const { data: fixtureTeams, error: fixtureTeamsError } = await supabaseServerClient
+      .from('fixtures')
+      .select('home_team_id, away_team_id')
+      .in('round_id', roundIds);
+
+    if (fixtureTeamsError) throw new Error(`Failed to fetch teams from fixtures for season ${seasonId}: ${fixtureTeamsError.message}`);
+    
+    const teamIds = new Set<number>();
+    (fixtureTeams || []).forEach(f => {
+      if (f.home_team_id) teamIds.add(f.home_team_id);
+      if (f.away_team_id) teamIds.add(f.away_team_id);
+    });
+
+    if (teamIds.size === 0) {
+        console.log(`Query: No teams found linked to fixtures for season ID ${seasonId}. Returning empty array.`);
+        return [];
+    }
+
+    // 3. Fetch team details for the unique IDs
+    const { data: teams, error: teamsError } = await supabaseServerClient
+      .from('teams')
+      .select('id, name') // Select only id and name for now
+      .in('id', Array.from(teamIds))
+      .order('name', { ascending: true });
+
+    if (teamsError) throw new Error(`Failed to fetch team details: ${teamsError.message}`);
+
+    console.log(`Query: Found ${teams?.length ?? 0} teams for season ID ${seasonId}.`);
+    return teams || []; // Return the fetched teams or an empty array
+
+  } catch (error: unknown) {
+    console.error(`Error in getTeamsForSeason(${seasonId}):`, error instanceof Error ? error.message : error);
+    return null; // Indicate an error occurred
+  }
 } 
