@@ -1,4 +1,4 @@
-import { fetchFixtures, fetchLeagueByIdAndSeason, fetchTeamsByLeagueAndSeason } from '@/services/football-api/client';
+import { fetchFixtures, fetchLeagueByIdAndSeason, fetchTeamsByLeagueAndSeason, fetchAllPlayersByLeagueAndSeason } from '@/services/football-api/client';
 // Remove unused types: ApiFixtureResponseItem, ApiLeagueInfo, ApiSeason
 // Keep types used later in the file if any (re-check needed if logic changes)
 import type { /* ApiFixtureResponseItem, ApiLeagueInfo, ApiSeason */ } from '@/services/football-api/types';
@@ -114,6 +114,100 @@ export async function populateFixturesForSeason(leagueId: number, seasonYear: nu
       console.log(`Finished upserting ${teamsApiResponse.results} teams.`);
     } else {
       console.warn(`No teams found via API for league ${leagueId}, season ${seasonYear}.`);
+    }
+
+    // 1c. Fetch and Upsert All Players for the Season
+    console.log(`Fetching players for league ${leagueId}, season ${seasonYear}...`);
+    const allPlayersApiResponse = await fetchAllPlayersByLeagueAndSeason(leagueId, seasonYear);
+
+    if (allPlayersApiResponse) {
+      console.log(`Fetched ${allPlayersApiResponse.length} player entries. Upserting player profiles and stats links...`);
+      
+      const BATCH_SIZE = 100; 
+      let upsertPromises: Promise<void>[] = [];
+
+      for (let i = 0; i < allPlayersApiResponse.length; i++) {
+        const playerItem = allPlayersApiResponse[i];
+        const playerData = playerItem.player;
+        const statsData = playerItem.statistics;
+        if (!playerData || !statsData) continue; // Skip if core player or stats array is missing
+
+        // Chain the promises: First upsert player, then process stats
+        const processPlayerAndStats = async () => {
+          // 1. Upsert Player Profile
+          const { data: playerDb, error: playerError } = await supabaseServerClient
+            .from('players')
+            .upsert({
+              api_player_id: playerData.id,
+              name: playerData.name,
+              firstname: playerData.firstname,
+              lastname: playerData.lastname,
+              age: playerData.age,
+              nationality: playerData.nationality,
+              height: playerData.height,
+              weight: playerData.weight,
+              injured: playerData.injured,
+              photo_url: playerData.photo,
+              last_api_update: new Date().toISOString(),
+            }, { onConflict: 'api_player_id' })
+            .select('id') // Select the DB ID
+            .single();
+
+          if (playerError) {
+            console.error(`Player profile upsert failed for API ID ${playerData.id} (${playerData.name}): ${playerError.message}`);
+            return; // Stop processing stats for this player if profile upsert failed
+          }
+          if (!playerDb || typeof playerDb.id !== 'number') {
+            console.warn(`Player profile upsert for API ID ${playerData.id} did not return a valid DB ID. Cannot link stats.`);
+            return; // Stop processing stats
+          }
+          const playerDbId = playerDb.id;
+
+          // 2. Process Statistics (Link Player-Team-Season)
+          for (const stat of statsData) {
+            if (!stat.team || !stat.league || stat.league.season !== seasonYear) continue; // Skip if team missing or stat is for wrong season
+            
+            const teamApiId = stat.team.id;
+            if (teamApiId === null) continue; // Skip if no team API ID
+            
+            const teamDbId = upsertedTeamIds.get(teamApiId); // Get Team DB ID from map populated earlier
+
+            if (teamDbId === undefined) {
+              console.warn(`Cannot link player ${playerData.id} to team ${teamApiId} for season ${seasonId}: Team DB ID not found in map.`);
+              continue; // Skip this stat link if team wasn't found/upserted earlier
+            }
+
+            // 3. Upsert into player_statistics linking table
+            const { error: statsLinkError } = await supabaseServerClient
+              .from('player_statistics')
+              .upsert({
+                player_id: playerDbId,
+                team_id: teamDbId,
+                season_id: seasonId, // Use the seasonId from the beginning of the main function
+                // Add basic stats later if needed, e.g.:
+                // appearances: stat.games?.appearences,
+                // position: stat.games?.position,
+              }, { onConflict: 'player_id, team_id, season_id' }); // Unique constraint
+
+            if (statsLinkError) {
+              console.error(`Failed to upsert player_statistics link for player ${playerDbId}, team ${teamDbId}, season ${seasonId}: ${statsLinkError.message}`);
+            }
+          }
+        };
+        
+        upsertPromises.push(processPlayerAndStats()); // Add the async function call to the batch
+
+        // If the batch is full or it's the last item, execute the batch
+        if (upsertPromises.length >= BATCH_SIZE || i === allPlayersApiResponse.length - 1) {
+          console.log(`Executing batch of ${upsertPromises.length} player profile/stats upserts...`);
+          await Promise.all(upsertPromises);
+          upsertPromises = []; // Reset promises for the next batch
+        }
+      }
+
+      console.log(`Finished upserting player profiles and stats links.`);
+    } else {
+      console.warn(`Could not fetch players for league ${leagueId}, season ${seasonYear}.`);
     }
 
     // --- Now Fetch Fixtures ---

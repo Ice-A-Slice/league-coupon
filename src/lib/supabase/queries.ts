@@ -149,4 +149,67 @@ export async function getTeamsForSeason(seasonId: number): Promise<{ id: number;
     console.error(`Error in getTeamsForSeason(${seasonId}):`, error instanceof Error ? error.message : error);
     return null; // Indicate an error occurred
   }
+}
+
+/**
+ * Fetches players associated with a specific season from the database.
+ *
+ * @param seasonId The database ID of the season.
+ * @returns A promise resolving to an array of player objects ({ id, name, photo_url }) or null on error.
+ */
+export async function getPlayersForSeason(
+  seasonId: number
+): Promise<{ id: number; name: string | null; photo_url: string | null; }[] | null> {
+  console.log(`Query: Fetching players for season ID ${seasonId}`);
+
+  try {
+    // Fetch distinct players linked to the season via the player_statistics table
+    const { data, error } = await supabaseServerClient
+      .from('player_statistics')
+      .select(`
+        players!inner(
+          id,
+          name,
+          photo_url
+        )
+      `)
+      .eq('season_id', seasonId);
+
+    if (error) {
+      throw new Error(`Failed to fetch players for season ${seasonId}: ${error.message}`);
+    }
+
+    if (!data) {
+      console.log(`Query: No player statistics data found for season ID ${seasonId}.`);
+      return [];
+    }
+
+    // The result will have duplicates if a player played for multiple teams.
+    // We need to deduplicate based on the player's ID.
+    const uniquePlayersMap = new Map<number, { id: number; name: string | null; photo_url: string | null; }>();
+    
+    data.forEach(item => {
+      // Type guard for the joined players table data
+      const playerData = Array.isArray(item.players) ? item.players[0] : item.players;
+      
+      if (playerData && typeof playerData === 'object' && playerData.id && !uniquePlayersMap.has(playerData.id)) {
+        uniquePlayersMap.set(playerData.id, {
+          id: playerData.id,
+          name: playerData.name,
+          photo_url: playerData.photo_url
+        });
+      }
+    });
+
+    // Convert map values to an array and sort by name
+    const uniquePlayersArray = Array.from(uniquePlayersMap.values());
+    uniquePlayersArray.sort((a, b) => a.name?.localeCompare(b.name ?? '') ?? 0);
+
+    console.log(`Query: Found ${uniquePlayersArray.length} unique players for season ID ${seasonId}.`);
+    return uniquePlayersArray;
+
+  } catch (error: unknown) {
+    console.error(`Error in getPlayersForSeason(${seasonId}):`, error instanceof Error ? error.message : error);
+    return null; // Indicate an error occurred
+  }
 } 
