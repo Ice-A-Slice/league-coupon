@@ -222,3 +222,200 @@ export interface ApiFixturesResponse {
   };
   response: ApiFixtureResponseItem[];
 }
+
+// --- Team Types ---
+
+/**
+ * Represents the core team details object from the /teams API response.
+ */
+export interface ApiTeamDetails {
+  id: number;
+  name: string;
+  code: string | null; // e.g., "MUN"
+  country: string | null;
+  founded: number | null;
+  national: boolean | null;
+  logo: string | null;
+}
+
+/**
+ * Represents the venue details object from the /teams API response.
+ */
+export interface ApiVenueDetails {
+  id: number | null;
+  name: string | null;
+  address: string | null;
+  city: string | null;
+  capacity: number | null;
+  surface: string | null; // e.g., "grass"
+  image: string | null;
+}
+
+/**
+ * Represents a single item in the main 'response' array of the /teams API.
+ */
+export interface ApiTeamResponseItem {
+  team: ApiTeamDetails;
+  venue: ApiVenueDetails;
+}
+
+/**
+ * Represents the overall structure of the /teams API response.
+ */
+export interface ApiTeamsResponse {
+  get: string; // e.g., "teams"
+  parameters: Record<string, unknown>;
+  errors: unknown[];
+  results: number;
+  paging: {
+    current: number;
+    total: number;
+  };
+  response: ApiTeamResponseItem[];
+}
+
+// --- Player Types ---
+
+export interface ApiPlayerBirth {
+  date: string | null;
+  place: string | null;
+  country: string | null;
+}
+
+export interface ApiPlayerDetails {
+  id: number;
+  name: string;
+  firstname: string | null;
+  lastname: string | null;
+  age: number | null;
+  birth: ApiPlayerBirth | null;
+  nationality: string | null;
+  height: string | null; // e.g., "178 cm"
+  weight: string | null; // e.g., "74 kg"
+  injured: boolean | null;
+  photo: string | null;
+}
+
+export interface ApiPlayerStatsTeam {
+  id: number | null;
+  name: string | null;
+  logo: string | null;
+}
+
+export interface ApiPlayerStatsLeague {
+  id: number | null;
+  name: string | null;
+  country: string | null;
+  logo: string | null;
+  flag: string | null;
+  season: number | null;
+}
+
+export interface ApiPlayerStatsGames {
+  appearences: number | null;
+  lineups: number | null;
+  minutes: number | null;
+  number: number | null;
+  position: string | null; // e.g., "Attacker"
+  rating: string | null; // Often a string representation
+  captain: boolean | null;
+}
+
+export interface ApiPlayerStatsSubstitutes {
+  in: number | null;
+  out: number | null;
+  bench: number | null;
+}
+
+export interface ApiPlayerStatsShots {
+  total: number | null;
+  on: number | null;
+}
+
+export interface ApiPlayerStatsGoals {
+  total: number | null;
+  conceded: number | null;
+  assists: number | null;
+  saves: number | null;
+}
+
+export interface ApiPlayerStatsPasses {
+  total: number | null;
+  key: number | null;
+  accuracy: number | null; // Percentage or value?
+}
+
+export interface ApiPlayerStatsTackles {
+  total: number | null;
+  blocks: number | null;
+  interceptions: number | null;
+}
+
+export interface ApiPlayerStatsDuels {
+  total: number | null;
+  won: number | null;
+}
+
+export interface ApiPlayerStatsDribbles {
+  attempts: number | null;
+  success: number | null;
+  past: number | null;
+}
+
+export interface ApiPlayerStatsFouls {
+  drawn: number | null;
+  committed: number | null;
+}
+
+export interface ApiPlayerStatsCards {
+  yellow: number | null;
+  yellowred: number | null;
+  red: number | null;
+}
+
+export interface ApiPlayerStatsPenalty {
+  won: number | null;
+  commited: number | null; // Note: Often spelled 'committed' in code
+  scored: number | null;
+  missed: number | null;
+  saved: number | null;
+}
+
+export interface ApiPlayerStats {
+  team: ApiPlayerStatsTeam | null;
+  league: ApiPlayerStatsLeague | null;
+  games: ApiPlayerStatsGames | null;
+  substitutes: ApiPlayerStatsSubstitutes | null;
+  shots: ApiPlayerStatsShots | null;
+  goals: ApiPlayerStatsGoals | null;
+  passes: ApiPlayerStatsPasses | null;
+  tackles: ApiPlayerStatsTackles | null;
+  duels: ApiPlayerStatsDuels | null;
+  dribbles: ApiPlayerStatsDribbles | null;
+  fouls: ApiPlayerStatsFouls | null;
+  cards: ApiPlayerStatsCards | null;
+  penalty: ApiPlayerStatsPenalty | null;
+}
+
+/**
+ * Represents a single item in the main 'response' array of the /players API.
+ */
+export interface ApiPlayerResponseItem {
+  player: ApiPlayerDetails;
+  statistics: ApiPlayerStats[]; // Array of stats (e.g., for transfers)
+}
+
+/**
+ * Represents the overall structure of the /players API response.
+ */
+export interface ApiPlayersResponse {
+  get: string; // e.g., "players"
+  parameters: Record<string, unknown>;
+  errors: unknown[];
+  results: number;
+  paging: {
+    current: number;
+    total: number;
+  };
+  response: ApiPlayerResponseItem[];
+}

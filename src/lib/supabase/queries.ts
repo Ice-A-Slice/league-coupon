@@ -159,7 +159,7 @@ export async function getTeamsForSeason(seasonId: number): Promise<{ id: number;
  */
 export async function getPlayersForSeason(
   seasonId: number
-): Promise<{ id: number; name: string | null; photo_url: string | null; }[] | null> {
+): Promise<{ id: number; name: string; }[] | null> {
   console.log(`Query: Fetching players for season ID ${seasonId}`);
 
   try {
@@ -186,27 +186,36 @@ export async function getPlayersForSeason(
 
     // The result will have duplicates if a player played for multiple teams.
     // We need to deduplicate based on the player's ID.
-    const uniquePlayersMap = new Map<number, { id: number; name: string | null; photo_url: string | null; }>();
-    
+    const teamIds = new Set<number>();
     data.forEach(item => {
       // Type guard for the joined players table data
       const playerData = Array.isArray(item.players) ? item.players[0] : item.players;
       
-      if (playerData && typeof playerData === 'object' && playerData.id && !uniquePlayersMap.has(playerData.id)) {
-        uniquePlayersMap.set(playerData.id, {
-          id: playerData.id,
-          name: playerData.name,
-          photo_url: playerData.photo_url
-        });
+      if (playerData && typeof playerData === 'object' && playerData.id) {
+        teamIds.add(playerData.id);
       }
     });
 
-    // Convert map values to an array and sort by name
-    const uniquePlayersArray = Array.from(uniquePlayersMap.values());
-    uniquePlayersArray.sort((a, b) => a.name?.localeCompare(b.name ?? '') ?? 0);
+    if (teamIds.size === 0) {
+        console.log(`Query: No teams found linked to fixtures for season ID ${seasonId}. Returning empty array.`);
+        return [];
+    }
+
+    // Fetch player details, ensuring name is not null
+    const { data: teams, error: teamsError } = await supabaseServerClient
+      .from('players')
+      .select('id, name') // Select only id and name
+      .not('name', 'is', null) // Ensure name is not null
+      .in('id', Array.from(teamIds))
+      .order('name', { ascending: true });
+
+    if (teamsError) throw new Error(`Failed to fetch team details: ${teamsError.message}`);
+
+    // The type now matches { id: number; name: string } implicitly due to the .not() filter
+    const uniquePlayersArray = teams || []; // Use directly as it should be unique players now
 
     console.log(`Query: Found ${uniquePlayersArray.length} unique players for season ID ${seasonId}.`);
-    return uniquePlayersArray;
+    return uniquePlayersArray; // Type matches now
 
   } catch (error: unknown) {
     console.error(`Error in getPlayersForSeason(${seasonId}):`, error instanceof Error ? error.message : error);

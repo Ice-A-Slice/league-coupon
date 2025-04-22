@@ -1,6 +1,9 @@
 import {
   ApiFixturesResponse,
   ApiLeaguesResponse,
+  ApiTeamsResponse,
+  ApiPlayersResponse,
+  ApiPlayerResponseItem,
 } from './types';
 
 const API_BASE_URL = 'https://v3.football.api-sports.io';
@@ -92,6 +95,78 @@ export async function fetchLeagueByIdAndSeason(
     season: season.toString(),
   });
   return fetchFromApi<ApiLeaguesResponse>('/leagues', params);
+}
+
+/**
+ * Fetches all teams for a given league and season.
+ * @param leagueId The ID of the league.
+ * @param season The year of the season (e.g., 2024).
+ * @returns A promise resolving to the teams data.
+ */
+export async function fetchTeamsByLeagueAndSeason(
+  leagueId: number,
+  season: number
+): Promise<ApiTeamsResponse> {
+  const params = new URLSearchParams({
+    league: leagueId.toString(),
+    season: season.toString(),
+  });
+  return fetchFromApi<ApiTeamsResponse>('/teams', params);
+}
+
+/**
+ * Fetches ALL players for a given league and season, handling pagination.
+ * @param leagueId The ID of the league.
+ * @param season The year of the season (e.g., 2024).
+ * @returns A promise resolving to an array containing ALL player response items, or null on error.
+ */
+export async function fetchAllPlayersByLeagueAndSeason(
+  leagueId: number,
+  season: number
+): Promise<ApiPlayerResponseItem[] | null> {
+  console.log(`Fetching ALL players for league ${leagueId}, season ${season}...`);
+  let allPlayers: ApiPlayerResponseItem[] = [];
+  let currentPage = 1;
+  let totalPages = 1; // Assume 1 initially
+  const MAX_PAGES = 100; // Safety break to prevent infinite loops
+
+  try {
+    do {
+      const params = new URLSearchParams({
+        league: leagueId.toString(),
+        season: season.toString(),
+        page: currentPage.toString(),
+      });
+
+      console.log(`Fetching page ${currentPage} of players...`);
+      const apiResponse = await fetchFromApi<ApiPlayersResponse>('/players', params);
+
+      if (!apiResponse || !apiResponse.response) {
+        console.warn(`No response data received for page ${currentPage}.`);
+        // Decide if we should continue or break
+        break; 
+      }
+
+      allPlayers = allPlayers.concat(apiResponse.response);
+      totalPages = apiResponse.paging.total; // Update total pages from the first response
+
+      console.log(`Fetched ${apiResponse.response.length} players from page ${currentPage}/${totalPages}. Total collected: ${allPlayers.length}`);
+
+      currentPage++;
+
+    } while (currentPage <= totalPages && currentPage < MAX_PAGES);
+
+    if (currentPage >= MAX_PAGES) {
+        console.warn(`Stopped fetching players at page ${MAX_PAGES} due to safety limit.`);
+    }
+
+    console.log(`Finished fetching players. Total found: ${allPlayers.length}`);
+    return allPlayers;
+
+  } catch (error) {
+    console.error(`Failed to fetch all players for league ${leagueId}, season ${season}:`, error);
+    return null; // Indicate an error occurred during the process
+  }
 }
 
 // TODO: Add functions for fetching leagues, countries, teams, players, standings as needed
