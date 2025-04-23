@@ -288,6 +288,55 @@ describe('Questionnaire Component with Combobox', () => {
       expect(screen.queryByText(/required/i)).not.toBeInTheDocument();
     });
   });
+
+  // New test for getAnswers method
+  it('formats answers correctly for API submission with getAnswers()', async () => {
+    const { ref } = setupQuestionnaire({
+      initialPredictions: {
+        leagueWinner: '1',
+        lastPlace: '2',
+        bestGoalDifference: '3',
+        topScorer: '101'
+      }
+    });
+    
+    // Get answers via ref
+    let answers;
+    await act(async () => {
+      if (ref.current) {
+        answers = ref.current.getAnswers();
+      }
+    });
+    
+    // Check the structure matches what the API expects
+    expect(answers).toBeDefined();
+    expect(answers).toHaveLength(4);
+    
+    // Check each answer's format
+    expect(answers).toContainEqual({
+      question_type: 'league_winner',
+      answered_team_id: 1, // Should be converted to number
+      answered_player_id: null
+    });
+    
+    expect(answers).toContainEqual({
+      question_type: 'last_place',
+      answered_team_id: 2,
+      answered_player_id: null
+    });
+    
+    expect(answers).toContainEqual({
+      question_type: 'best_goal_difference',
+      answered_team_id: 3,
+      answered_player_id: null
+    });
+    
+    expect(answers).toContainEqual({
+      question_type: 'top_scorer', 
+      answered_team_id: null,
+      answered_player_id: 101
+    });
+  });
 });
 
 describe('Questionnaire', () => {
