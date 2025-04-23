@@ -1,6 +1,7 @@
+
 "use client";
 
-import React, { useState, useMemo, forwardRef, useImperativeHandle } from "react";
+import React, { useState, forwardRef, useImperativeHandle } from "react";
 // import debounce from 'lodash.debounce'; // REMOVED debounce import
 import TeamSelect from "./TeamSelect";
 import PlayerSelect from "./PlayerSelect";
@@ -9,7 +10,6 @@ import SectionContainer from "@/components/layout";
 import { validatePrediction } from "@/schemas/questionnaireSchema";
 import ValidationStatusIndicator from '@/components/ui/ValidationStatusIndicator';
 import { cn } from '@/lib/utils';
-import { Team } from '@/lib/types';
 // import { Combobox } from '@headlessui/react';
 // import { CheckIcon, ChevronUpDownIcon } from '@heroicons/react/20/solid';
 

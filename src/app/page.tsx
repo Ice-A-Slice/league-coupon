@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState, Suspense, useCallback } from 'react';
+import React, { useEffect, useRef, useState, Suspense } from 'react';
 import BettingCoupon, { BettingCouponRef } from '@/components/BettingCoupon/BettingCoupon';
 // Correct type imports from component definitions
 import type { Match, Selections, SelectionType } from "@/components/BettingCoupon/types"; // Correct type name
@@ -220,11 +220,11 @@ export default function Page() {
   const handleCombinedSubmit = async () => {
     if (!bettingCouponRef.current || !questionnaireRef.current) return;
 
-    setSubmitStatus(null); // Reset status
-    setValidationErrors({}); // Reset errors
-    let combinedErrors: ErrorsState = {};
+    setSubmitStatus(null);
+    setValidationErrors({});
+    const combinedErrors: ErrorsState = {};
     let couponData: Selections | undefined;
-    let answersData: SeasonAnswers[] | undefined;
+    const answersData: SeasonAnswers[] | undefined = questionnaireRef.current.getAnswers();
     let isCouponValid = false;
     let isQuestionnaireValid = false;
 
@@ -243,11 +243,9 @@ export default function Page() {
       }
     }
 
-    // 2. Validate Questionnaire (basic check)
-    answersData = questionnaireRef.current.getAnswers();
-    // Simple validation: Check if all 4 main answers are non-null/empty
-    const allAnswered = answersData?.every(ans => ans.prediction !== null && ans.prediction !== '');
-    if (!allAnswered || answersData.length < 4) {
+    // 2. Validate Questionnaire
+    const allAnswered = answersData?.every(ans => ans.answered_team_id !== null || ans.answered_player_id !== null);
+    if (!allAnswered || !answersData || answersData.length < 4) {
         console.error('Questionnaire Validation failed', answersData);
         combinedErrors.questionnaire = { form: 'Please answer all season questions.' };
     } else {
@@ -332,6 +330,12 @@ export default function Page() {
       <div className="w-full max-w-4xl flex flex-col gap-8">
         <h1 className="text-3xl font-bold text-center">League Coupon</h1>
 
+        {/* Display Questionnaire Data Error */}
+        {questionnaireDataError && (
+          <div className="p-4 rounded-md bg-red-100 text-red-700 mt-4">
+            Error loading questionnaire data: {questionnaireDataError}
+          </div>
+        )}
         {/* Questionnaire Section */}
         <Suspense fallback={<div>Loading Questionnaire...</div>}>
           <Questionnaire
@@ -343,13 +347,20 @@ export default function Page() {
             onToggleVisibility={handleQuestionnaireToggle}
           />
         </Suspense>
-        {/* Display General Validation Summary Error - Simple Div */}
+
+        {/* Display General Validation Summary Error */}
         {validationErrors.summary && (
           <div className="p-4 rounded-md bg-red-100 text-red-700 mt-4">
             {validationErrors.summary}
           </div>
         )}
 
+        {/* Display Fixture Data Error */}
+        {fixtureError && (
+          <div className="p-4 rounded-md bg-red-100 text-red-700 mt-4">
+            Error loading fixtures: {fixtureError}
+          </div>
+        )}
         {/* Betting Coupon Section */}
         <Suspense fallback={<div>Loading Betting Coupon...</div>}>
           <BettingCoupon
@@ -359,6 +370,7 @@ export default function Page() {
             onSelectionChange={handleSelectionChange}
           />
         </Suspense>
+
         {/* Combined Submit Button and Status Display */}
         {submitStatus && (
           <div className={`p-4 my-2 rounded-md ${submitStatus.type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
@@ -370,7 +382,7 @@ export default function Page() {
           disabled={isSubmitting || isLoading || !user} // Use renamed loading state
           className="w-full md:w-auto self-center mt-4"
         >
-          {isSubmitting || isLoading ? 'Submitting...' : 'Submit Selections'} {/* Updated button text */}
+          {isSubmitting || isLoading ? 'Submitting...' : 'Submit Coupon'} {/* Updated button text */}
         </Button>
 
       </div>
