@@ -24,8 +24,19 @@ export default function LoginButton() {
   }, [supabase])
 
   const handleLogin = async () => {
+    // Explicitly set the redirect URL for local development
+    // This is necessary because Vercel CLI environment variables might override .env.local
+    // for NEXT_PUBLIC_SITE_URL when determining the default redirect URL.
+    // TODO: Investigate Vercel env variable precedence vs .env.local for OAuth redirects.
+    const redirectURL = process.env.NODE_ENV === 'development' 
+      ? 'http://localhost:3000/auth/callback' 
+      : undefined; // Let Supabase handle it in production (using Site URL or Vercel URL)
+
     await supabase.auth.signInWithOAuth({
       provider: 'google',
+      options: {
+        redirectTo: redirectURL,
+      },
     })
   }
 

@@ -126,7 +126,7 @@ describe('GET /api/fixtures', () => {
     expect(getFixturesForRound).toHaveBeenCalledWith(roundName, parseInt(seasonYear), parseInt(leagueId));
     expect(mockNextResponseJson).toHaveBeenCalledTimes(1);
     // Assert arguments passed to our tracker mock
-    expect(mockNextResponseJson).toHaveBeenCalledWith({ error: 'Failed to fetch fixtures from database' }, { status: 500 });
+    expect(mockNextResponseJson).toHaveBeenCalledWith({ error: 'Failed to fetch fixtures from database for the specified round' }, { status: 500 });
   });
 
   // Optional: Test case for when getFixturesForRound returns an empty array (still a success)
