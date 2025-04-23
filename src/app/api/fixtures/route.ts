@@ -13,7 +13,6 @@ export async function GET(request: Request) {
   const seasonYearParam = searchParams.get('season');
   const roundName = searchParams.get('round');
 
-  // Basic validation
   if (!leagueIdParam || !seasonYearParam || !roundName) {
     return NextResponse.json(
       { error: 'Missing required query parameters: league, season, round' }, 
@@ -31,15 +30,16 @@ export async function GET(request: Request) {
     );
   }
 
-  console.log(`API Route /api/fixtures: Fetching for league ${leagueId}, season ${seasonYear}, round "${roundName}"`);
+  console.log(`API Route /api/fixtures: Fetching specific round "${roundName}" for league ${leagueId}, season ${seasonYear}`);
 
   try {
+    // Fetch fixtures using the provided round name
     const matches = await getFixturesForRound(roundName, seasonYear, leagueId);
 
     if (matches === null) {
       // This indicates an error occurred within getFixturesForRound
       return NextResponse.json(
-        { error: 'Failed to fetch fixtures from database' }, 
+        { error: 'Failed to fetch fixtures from database for the specified round' }, 
         { status: 500 } 
       );
     }

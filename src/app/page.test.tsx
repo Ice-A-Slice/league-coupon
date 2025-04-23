@@ -58,30 +58,44 @@ const mockFetch = fetch as jest.Mock;
 beforeEach(() => {
   mockFetch.mockClear();
   // Default mock implementation (can be overridden in specific tests)
-  mockFetch.mockImplementation((url): Promise<Response> => {
-    console.log(`[TEST] Intercepted fetch: ${url}`);
-    if (url.toString().includes('/api/fixtures')) {
+  mockFetch.mockImplementation((url, options): Promise<Response> => {
+    console.log(`[TEST] Intercepted fetch: ${url}${options?.method ? ` (${options.method})` : ''}`); // Log method too
+    const urlString = url.toString();
+
+    if (urlString.includes('/api/fixtures')) {
       return Promise.resolve({
         ok: true,
         status: 200,
         json: async () => mockMatches,
       } as Response);
     }
-    if (url.toString().includes('/api/teams')) {
+    if (urlString.includes('/api/teams')) {
       return Promise.resolve({
         ok: true,
         status: 200,
         json: async () => mockTeams,
       } as Response);
     }
-    if (url.toString().includes('/api/players')) {
+    if (urlString.includes('/api/players')) {
       return Promise.resolve({
         ok: true,
         status: 200,
         json: async () => mockPlayers,
       } as Response);
     }
+    // --- ADDED: Handle POST to /api/bets ---
+    if (urlString.includes('/api/bets') && options?.method === 'POST') {
+      // Simulate a successful submission response
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ message: 'Bets submitted successfully!' }), // Match API response
+      } as Response);
+    }
+    // --- END ADDED ---
+    
     // Fallback for unhandled requests
+    console.error(`Unhandled fetch request in test: ${url}`); // Log as error
     return Promise.reject(new Error(`Unhandled fetch request in test: ${url}`));
   });
 });
@@ -176,8 +190,16 @@ describe('Page Validation Flow Integration Tests', () => {
     // --- Assert ---
     // Check for summary error
     expect(await screen.findByText(/Please fix all errors/i)).toBeInTheDocument();
-    // Check for specific coupon error (needs coupon to expose errors accessibly or via testid)
-    // For now, just check summary error
+    
+    // OLD: Check for specific coupon error (needs coupon to expose errors accessibly or via testid)
+    // OLD: For now, just check summary error
+    // NEW: Check that one of the invalid match rows has the error styling
+    await waitFor(() => {
+      const match2Button = screen.getByTestId('toggle-button-2-X');
+      const match2Row = match2Button.closest('div.flex.w-full') as HTMLElement;
+      expect(match2Row).toHaveClass('bg-red-50', 'border-l-red-500');
+    });
+
     expect(screen.queryByText(/Success!/i)).not.toBeInTheDocument();
   });
 
@@ -204,9 +226,12 @@ describe('Page Validation Flow Integration Tests', () => {
     await user.click(submitButton);
 
     // --- Assert ---
-    expect(await screen.findByText(/Please fix all errors/i)).toBeInTheDocument();
-    // Check for specific questionnaire error (needs questionnaire to expose errors accessibly or via testid)
-    // For now, just check summary error
+    // OLD: await waitFor(() => { expect(screen.getByText(/Expected string, received null/i)).toBeInTheDocument(); });
+    // NEW: Check that one of the invalid questionnaire inputs has the error styling
+    await waitFor(() => {
+      const lastPlaceInput = screen.getByRole('combobox', { name: /Select a team for last-place/i });
+      expect(lastPlaceInput).toHaveClass('border-red-300'); // Check for error class
+    });
     expect(screen.queryByText(/Success!/i)).not.toBeInTheDocument();
   });
 

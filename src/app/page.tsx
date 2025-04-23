@@ -62,6 +62,7 @@ export default function Home() {
   // Create ref for the betting coupon component
   interface BettingCouponRef {
     validate: () => { isValid: boolean; errors?: Record<string, string> };
+    getSelections: () => Selections;
   }
   const bettingCouponRef = useRef<BettingCouponRef>(null);
   
@@ -94,47 +95,117 @@ export default function Home() {
   };
   
   // Handler for form submission
-  const handleSubmit = () => {
-    setIsSubmitting(true); // State update
-    setValidationErrors({}); // State update
+  const handleSubmit = async () => { // Make the handler async
+    // console.log("[HANDLE SUBMIT] Starting..."); // REMOVED LOG
+    setIsSubmitting(true); 
+    setValidationErrors({}); 
 
     let isFormValid = true;
-    const combinedErrors: ErrorsState = {}; // Use const
-
-    // console.log("🧾 Current selections:", JSON.stringify(selections, null, 2));
-    // console.log("🔮 Current predictions:", JSON.stringify(predictions, null, 2));
+    const combinedErrors: ErrorsState = {};
 
     // Validate betting coupon
+    let couponData: Selections | undefined;
+    // console.log("[HANDLE SUBMIT] Checking couponRef..."); // REMOVED LOG
     if (bettingCouponRef.current) {
+      // console.log("[HANDLE SUBMIT] Validating coupon..."); // REMOVED LOG
       const couponValidation = bettingCouponRef.current.validate();
+      // console.log("[HANDLE SUBMIT] Coupon validation result:", couponValidation); // REMOVED LOG
       if (!couponValidation.isValid) {
+        // console.log("[HANDLE SUBMIT] Coupon invalid."); // REMOVED LOG
         isFormValid = false;
         if (couponValidation.errors) {
-          combinedErrors.coupon = couponValidation.errors; // Store detailed coupon errors
+          combinedErrors.coupon = couponValidation.errors;
         }
+      } else {
+         // console.log("[HANDLE SUBMIT] Coupon valid. Getting selections..."); // REMOVED LOG
+         couponData = bettingCouponRef.current.getSelections(); 
+         // console.log("[HANDLE SUBMIT] Got coupon selections:", couponData); // REMOVED LOG
       }
+    } else {
+        // console.warn("[HANDLE SUBMIT] bettingCouponRef is null!"); // REMOVED WARN LOG
     }
 
     // Validate questionnaire
+    // console.log("[HANDLE SUBMIT] Checking questionnaireRef..."); // REMOVED LOG
     if (showQuestionnaire && questionnaireRef.current) {
+      // console.log("[HANDLE SUBMIT] Validating questionnaire..."); // REMOVED LOG
       const questionnaireValidation = questionnaireRef.current.validatePredictions();
+      // console.log("[HANDLE SUBMIT] Questionnaire validation result:", questionnaireValidation); // REMOVED LOG
       if (!questionnaireValidation.isValid) {
+        // console.log("[HANDLE SUBMIT] Questionnaire invalid."); // REMOVED LOG
         isFormValid = false;
         combinedErrors.questionnaire = questionnaireValidation.errors || { form: "Please complete all predictions" };
       }
+      // Note: Questionnaire data retrieval and submission will be handled separately later
+    } else {
+        // console.warn("[HANDLE SUBMIT] questionnaireRef is null or questionnaire hidden!"); // REMOVED WARN LOG
     }
 
     // Update state with combined errors and potentially a summary
+    // console.log(`[HANDLE SUBMIT] Overall form validity: ${isFormValid}`); // REMOVED LOG
     if (!isFormValid) {
+      // console.log("[HANDLE SUBMIT] Form invalid. Setting errors."); // REMOVED LOG
       combinedErrors.summary = "Please fix all errors in both sections before submitting";
       setValidationErrors(combinedErrors);
       window.scrollTo({ top: 0, behavior: 'smooth' });
+      // setIsSubmitting(false); // Let final one handle it
     } else {
-      // Submit logic...
-      setIsSubmitted(true);
-    }
+      // console.log("[HANDLE SUBMIT] Form valid. Proceeding to submission logic."); // REMOVED LOG
+      // Format coupon data for the API
+      // console.log("[HANDLE SUBMIT] Checking couponData before fetch..."); // REMOVED LOG
+      if (couponData && Object.keys(couponData).length > 0) {
+        // console.log("[HANDLE SUBMIT] Formatting payload..."); // REMOVED LOG
+        const payload = Object.entries(couponData).map(([fixtureId, prediction]) => ({
+          fixture_id: parseInt(fixtureId, 10), // Convert key back to number
+          prediction: prediction,
+        }));
+        
+        // console.log("[HANDLE SUBMIT] Entering fetch try block..."); // REMOVED LOG
+        try {
+          // console.log('[HANDLE SUBMIT] Submitting bets payload:', JSON.stringify(payload, null, 2)); // Keep this one? Maybe remove later.
+          const response = await fetch('/api/bets', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+          });
+          // console.log(`[HANDLE SUBMIT] Fetch response status: ${response.status}`); // REMOVED LOG
 
-    setIsSubmitting(false);
+          if (!response.ok) {
+            // console.log("[HANDLE SUBMIT] Fetch response NOT OK."); // REMOVED LOG
+            // Handle API errors (e.g., round locked, unauthorized, server error)
+            const errorData = await response.json().catch(() => ({ error: 'Unknown error occurred' }));
+            console.error('[HANDLE SUBMIT] API submission error:', errorData); // Keep error log
+            setValidationErrors({ summary: `Submission failed: ${errorData.error || response.statusText}` });
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            setIsSubmitted(false); // Keep form visible on error
+          } else {
+            // console.log("[HANDLE SUBMIT] Fetch response OK."); // REMOVED LOG
+            // Handle success
+            setIsSubmitted(true); // Show success UI
+            // Optionally reset selections/predictions here if needed
+            // setSelections(initialSampleSelections); 
+            // TODO: Add prediction reset if needed
+          }
+        } catch (error) {
+          console.error('[HANDLE SUBMIT] Network or unexpected error during submission:', error); // Keep error log
+          setValidationErrors({ summary: 'An unexpected error occurred. Please try again.' });
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          setIsSubmitted(false);
+        }
+      } else {
+           // This case should theoretically not happen if validation passes, but good to handle
+           console.warn('[HANDLE SUBMIT] Form was valid, but no coupon data found to submit.'); // Keep warn log
+           setValidationErrors({ summary: 'No betting selections found to submit.' });
+           setIsSubmitted(false);
+      }
+      // Submit logic... - REMOVED Placeholder
+      // setIsSubmitted(true);
+    }
+    
+    // console.log("[HANDLE SUBMIT] Setting isSubmitting to false."); // REMOVED FINAL LOG
+    setIsSubmitting(false); // Ensure this runs after API call completes or validation fails
   };
   
   // Authentication useEffect
@@ -173,11 +244,13 @@ export default function Home() {
 
       const leagueId = 39;
       const seasonYear = 2024;
-      const roundName = "Regular Season - 1"; // Keep this for fixtures
+      // Re-introduce roundName and set it to 35
+      const roundName = "Regular Season - 35"; 
 
       try {
         // Fetch all data concurrently
         const [fixtureRes, teamsRes, playersRes] = await Promise.all([
+          // Restore round parameter in the fetch URL
           fetch(`/api/fixtures?league=${leagueId}&season=${seasonYear}&round=${encodeURIComponent(roundName)}`),
           fetch(`/api/teams?league=${leagueId}&season=${seasonYear}`),
           fetch(`/api/players?league=${leagueId}&season=${seasonYear}`)
@@ -331,7 +404,9 @@ export default function Home() {
                 <Button
                   type="button"
                   className="w-full"
-                  onClick={handleSubmit}
+                  // Restore the original handleSubmit handler
+                  // onClick={() => console.log('[TEST] Submit Button Clicked!')} 
+                  onClick={handleSubmit} 
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? 'Submitting...' : 'Submit'}

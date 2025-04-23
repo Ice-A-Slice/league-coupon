@@ -10,6 +10,7 @@ import ValidationStatusIndicator from '@/components/ui/ValidationStatusIndicator
 // Define the ref interface
 export interface BettingCouponRef {
   validate: () => { isValid: boolean; errors?: Record<string, string> };
+  getSelections: () => Selections;
 }
 
 // Define the component with props and ref
@@ -31,6 +32,9 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
     validate: () => {
       const result = validateSelections();
       return result;
+    },
+    getSelections: () => {
+      return selections;
     }
   }));
 
