@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, forwardRef, useImperativeHandle } from "react";
+import React, { useState, useMemo, forwardRef, useImperativeHandle } from "react";
 // import debounce from 'lodash.debounce'; // REMOVED debounce import
 import TeamSelect from "./TeamSelect";
 import PlayerSelect from "./PlayerSelect";
@@ -9,10 +9,21 @@ import SectionContainer from "@/components/layout";
 import { validatePrediction } from "@/schemas/questionnaireSchema";
 import ValidationStatusIndicator from '@/components/ui/ValidationStatusIndicator';
 import { cn } from '@/lib/utils';
+import { Team } from '@/lib/types';
+// import { Combobox } from '@headlessui/react';
+// import { CheckIcon, ChevronUpDownIcon } from '@heroicons/react/20/solid';
 
-// Update Ref type definition
+// Define the structure of the answers this component will provide
+export interface SeasonAnswers {
+  question_type: string;
+  answered_team_id: number | null;
+  answered_player_id: number | null; // Keep for future player questions
+}
+
+// Define the type for the exposed methods via the ref
 export interface QuestionnaireRef {
   validatePredictions: () => { isValid: boolean; errors?: Record<string, string> };
+  getAnswers: () => SeasonAnswers[];
 }
 
 const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
@@ -32,6 +43,12 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
   const [predictions, setPredictions] = useState<Prediction>(initialPredictions);
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const [isContentVisible, setIsContentVisible] = useState(true);
+  // Remove state related to the direct Headless UI combobox
+  // const [query, setQuery] = useState('');
+  // const [selectedLeagueWinner, setSelectedLeagueWinner] = useState<Team | null>(null);
+  // const [selectedRelegation1, setSelectedRelegation1] = useState<Team | null>(null);
+  // const [selectedRelegation2, setSelectedRelegation2] = useState<Team | null>(null);
+  // const [selectedRelegation3, setSelectedRelegation3] = useState<Team | null>(null);
   
   // Expose validation method returning the detailed result
   useImperativeHandle(ref, () => ({
@@ -45,8 +62,29 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
         setErrors({});
       }
       return result; // Return the full { isValid, errors? } object
+    },
+    getAnswers: () => {
+      // Base getAnswers on the existing predictions state
+      const answers: SeasonAnswers[] = [];
+      if (predictions.leagueWinner) {
+        answers.push({ question_type: 'league_winner', answered_team_id: parseInt(predictions.leagueWinner, 10), answered_player_id: null });
+      }
+      // Assuming we add state/logic for relegation questions similarly to leagueWinner/lastPlace eventually
+      // For now, only include what's in the predictions state
+      if (predictions.lastPlace) {
+          answers.push({ question_type: 'last_place', answered_team_id: parseInt(predictions.lastPlace, 10), answered_player_id: null });
+      }
+      if (predictions.bestGoalDifference) {
+          answers.push({ question_type: 'best_goal_difference', answered_team_id: parseInt(predictions.bestGoalDifference, 10), answered_player_id: null });
+      }
+      if (predictions.topScorer) {
+          // Assuming topScorer stores player ID as string
+          answers.push({ question_type: 'top_scorer', answered_team_id: null, answered_player_id: parseInt(predictions.topScorer, 10) });
+      }
+
+      return answers;
     }
-  }));
+  }), [predictions]); // Depend on predictions state
 
   // Update a specific prediction field
   const updatePrediction = (field: keyof Prediction, value: string | null) => {
@@ -81,6 +119,9 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
     setIsContentVisible(!isContentVisible);
   };
 
+  // Remove filteredTeams memo as it was only for the Headless UI combobox
+  // const filteredTeams = useMemo(() => ... );
+
   if (!showQuestionnaire) {
     return null;
   }
@@ -88,7 +129,7 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
   // Content for the questionnaire
   const questionnaireContent = (
     <div className="px-3 sm:px-4 py-3 sm:py-5 divide-y divide-gray-200 space-y-3 sm:space-y-4 w-full">
-      {/* League Winner Selection */}
+      {/* League Winner Selection - Reverted to use TeamSelect */}
       <div className="pt-3 sm:pt-4 first:pt-0">
         <div className="flex items-center mb-1">
           <label htmlFor="league-winner" className="block text-sm font-medium text-gray-700 mr-2">
