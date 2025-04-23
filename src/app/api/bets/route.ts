@@ -49,14 +49,20 @@ export async function POST(request: Request) {
   );
 
   // 1. Check Authentication
-  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  // Use getUser() for stronger server-side authentication check
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  // const { data: { session }, error: sessionError } = await supabase.auth.getSession(); // Old method
 
-  if (sessionError || !session?.user) {
-    console.error('Error getting session or no user found:', sessionError);
+  // Adjust check for user object and userError
+  if (userError || !user) { 
+    // console.error('Error getting session or no user found:', sessionError); // Old check
+    console.error('Error getting user or no user found:', userError);
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const userId = session.user.id;
+  // Get userId from the user object
+  // const userId = session.user.id; // Old way
+  const userId = user.id;
   console.log(`User ${userId} attempting to submit bets.`);
 
   // 2. Parse Request Body (Basic)
