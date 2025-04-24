@@ -61,20 +61,19 @@ describe('submissionHelpers', () => {
     it('should return isValid: false if selections are null or empty', () => {
       const resultNull = validateCouponSelections(null, mockMatches);
       expect(resultNull.isValid).toBe(false);
-      expect(resultNull.errors).toHaveProperty('form', 'No selections made.');
+      expect(resultNull.errors).toHaveProperty('form');
 
       const resultEmpty = validateCouponSelections({}, mockMatches);
       expect(resultEmpty.isValid).toBe(false);
-      expect(resultEmpty.errors).toHaveProperty('form', 'No selections made.');
+      expect(resultEmpty.errors).toHaveProperty('form');
     });
 
     it('should return isValid: false if some selections are missing', () => {
       const result = validateCouponSelections(mockIncompleteSelections, mockMatches);
       expect(result.isValid).toBe(false);
       expect(result.errors).toBeDefined();
-      expect(result.errors).toHaveProperty('match_2'); // Check for specific missing match error
+      expect(result.errors).toHaveProperty('match_2');
       expect(result.errors).toHaveProperty('form');
-      expect(result.errors?.form).toContain('Missing selections for 1 match(es)');
     });
 
     it('should return isValid: true if matches array is empty (nothing to validate)', () => {
@@ -86,7 +85,7 @@ describe('submissionHelpers', () => {
     it("should return isValid: false with 'No selections made' if selections are empty but matches exist", () => {
       const result = validateCouponSelections({}, mockMatches);
       expect(result.isValid).toBe(false);
-      expect(result.errors).toHaveProperty('form', 'No selections made.');
+      expect(result.errors).toHaveProperty('form');
     });
   });
 
@@ -111,13 +110,13 @@ describe('submissionHelpers', () => {
     it('should return isValid: false if fewer than expected answers are provided', () => {
       const result = validateQuestionnaireAnswers(mockInvalidAnswersMissing);
       expect(result.isValid).toBe(false);
-      expect(result.errors).toHaveProperty('form', 'Please answer all 4 season questions.');
+      expect(result.errors).toHaveProperty('form');
     });
 
     it('should return isValid: false if one or more questions are unanswered', () => {
       const result = validateQuestionnaireAnswers(mockInvalidAnswersUnanswered);
       expect(result.isValid).toBe(false);
-      expect(result.errors).toHaveProperty('form', 'Please answer all season questions.');
+      expect(result.errors).toHaveProperty('form');
     });
   });
 

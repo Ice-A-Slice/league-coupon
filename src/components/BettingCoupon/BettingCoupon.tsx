@@ -17,12 +17,13 @@ export interface BettingCouponRef {
 const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({ 
   matches, 
   initialSelections = {}, 
-  onSelectionChange 
+  onSelectionChange, 
+  validationErrors
 }, ref) => {
   // State for current selections
   const [selections, setSelections] = useState<Selections>(initialSelections);
-  // State for validation errors
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  // Use the passed-in errors, default to empty object
+  const errors = validationErrors || {};
 
   // Define button labels
   const selectionLabels: SelectionType[] = ['1', 'X', '2'];
@@ -43,11 +44,14 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
     // Use the new validateCoupon function that combines structure and completeness validation
     const result = validateCoupon(matches, selections);
     
-    if (!result.isValid && result.errors) {
-      setErrors(result.errors);
-    } else {
-      setErrors({});
-    }
+    // NOTE: Internal validation might still be useful for immediate feedback,
+    // but the primary validation now happens in the parent via helpers.
+    // We'll rely on the passed-in `validationErrors` for display.
+    // if (!result.isValid && result.errors) {
+    //   setInternalErrors(result.errors);
+    // } else {
+    //   setInternalErrors({});
+    // }
     
     return result;
   };
@@ -77,11 +81,10 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
     
     // Restore immediate error clearing for the specific match
     if (errors[matchIdStr]) {
-      setErrors(prev => {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { [matchIdStr]: _, ...rest } = prev;
-        return rest;
-      });
+      // NOTE: Clearing errors passed via props isn't ideal here.
+      // The parent component (`page.tsx`) is now responsible for clearing errors
+      // when handleCombinedSubmit is called again. We remove the internal clearing.
+      // setInternalErrors(prev => { ... }); 
     }
     
     // Update state immediately
@@ -109,27 +112,11 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
   // Content for the betting coupon
   const couponContent = (
     <div className="w-full flex flex-col items-stretch p-2 overflow-x-visible">
-      {/* Summary error message when validation errors exist */}
-      {Object.keys(errors).length > 0 && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm w-full" role="alert">
-          <p className="font-semibold mb-1">Please make selections for all matches:</p>
-          <ul className="list-disc pl-5">
-            {Object.entries(errors).map(([matchId, error]) => {
-              const match = matches.find(m => m.id.toString() === matchId);
-              return (
-                <li key={matchId}>
-                  {match ? `${match.homeTeam} vs ${match.awayTeam}` : `Match ${matchId}`}: {error}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
-      
       {matches.map((match: Match) => {
         const matchIdStr = match.id.toString();
         const currentSelection = selections[matchIdStr];
-        const hasError = !!errors[matchIdStr];
+        // Check for specific match error from props
+        const hasError = !!errors[`match_${matchIdStr}`] || !!errors[matchIdStr]; // Check both formats potentially used by helper
         const isSelected = currentSelection !== null && currentSelection !== undefined;
 
         return (

@@ -263,6 +263,7 @@ export default function Page() {
             initialPredictions={initialPredictions}
             onPredictionChange={() => { /* Handle if needed */ }}
             onToggleVisibility={handleQuestionnaireToggle}
+            validationErrors={validationErrors.questionnaire}
           />
         </Suspense>
 
@@ -286,6 +287,7 @@ export default function Page() {
             matches={matchesForCoupon} // Use matchesForCoupon from useFixtures hook
             initialSelections={initialSampleSelections}
             onSelectionChange={handleSelectionChange}
+            validationErrors={validationErrors.coupon}
           />
         </Suspense>
 

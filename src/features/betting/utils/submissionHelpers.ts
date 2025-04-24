@@ -1,5 +1,6 @@
 import type { Match, SelectionType, Selections } from "@/components/BettingCoupon/types";
 import type { SeasonAnswers } from "@/components/Questionnaire/Questionnaire";
+import type { Prediction } from "@/components/Questionnaire/types";
 
 // Define a structure for validation results
 interface ValidationResult {
@@ -32,7 +33,7 @@ export function validateCouponSelections(selections: Selections | undefined | nu
       errors[`match_${match.id}`] = `Selection missing for ${match.homeTeam} vs ${match.awayTeam}`;
     });
     // Add a general error message as well
-    errors.form = `Missing selections for ${missingSelections.length} match(es). Please select H, U, or B for all matches.`;
+    errors.form = `Missing selections for ${missingSelections.length} match(es). Please select 1, X, or 2 for all matches.`;
     return { isValid: false, errors };
   }
 
@@ -49,21 +50,31 @@ export function validateCouponSelections(selections: Selections | undefined | nu
  * @returns ValidationResult indicating if all questions are answered and any errors.
  */
 export function validateQuestionnaireAnswers(answers: SeasonAnswers[] | undefined | null): ValidationResult {
+  const expectedAnswers = 4;
+  // Define expected questions using their IDs (keys of Prediction) and corresponding question_type
+  const questions: { id: keyof Prediction; type: string }[] = [
+    { type: 'league_winner', id: 'leagueWinner' },
+    { type: 'last_place', id: 'lastPlace' },
+    { type: 'best_goal_difference', id: 'bestGoalDifference' },
+    { type: 'top_scorer', id: 'topScorer' },
+  ];
   const errors: Record<string, string> = {};
-  const expectedAnswers = 4; // Hardcoded based on current implementation
+  let allAnswered = true; // Assume true initially
+  const correctNumberOfAnswers = answers && answers.length === expectedAnswers;
 
-  // Check if answers array exists and has the expected number of items
-  if (!answers || answers.length < expectedAnswers) {
+  questions.forEach(q => {
+    // Find the answer only if the answers array exists
+    const correspondingAnswer = answers?.find(ans => ans.question_type === q.type);
+    const isAnswered = correspondingAnswer && (correspondingAnswer.answered_team_id !== null || correspondingAnswer.answered_player_id !== null);
+    if (!isAnswered) {
+      allAnswered = false;
+      errors[q.id] = 'Please select an answer.'; // Add specific error only if unanswered
+    }
+  });
+
+  if (!allAnswered || !correctNumberOfAnswers) {
+    // Set general error message if anything is wrong
     errors.form = `Please answer all ${expectedAnswers} season questions.`;
-    return { isValid: false, errors };
-  }
-
-  // Check if each answer has a selected team or player ID
-  const allAnswered = answers.every(ans => ans.answered_team_id !== null || ans.answered_player_id !== null);
-
-  if (!allAnswered) {
-    errors.form = 'Please answer all season questions.';
-    // We could add more specific errors per question if needed
     return { isValid: false, errors };
   }
 

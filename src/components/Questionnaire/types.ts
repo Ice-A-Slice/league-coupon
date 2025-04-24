@@ -26,6 +26,7 @@ export interface QuestionnaireProps {
   onPredictionChange?: (predictions: Prediction) => void;
   onSubmit?: (predictions: Prediction) => void;
   onToggleVisibility?: () => void;
+  validationErrors?: Record<string, string>;
 }
 
 export type QuestionId = 'leagueWinner' | 'lastPlace' | 'bestGoalDifference' | 'topScorer';

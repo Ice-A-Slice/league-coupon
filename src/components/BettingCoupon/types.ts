@@ -16,6 +16,7 @@ export interface BettingCouponProps {
   matches: Match[];
   initialSelections?: Selections;
   onSelectionChange?: (selections: Selections) => void;
+  validationErrors?: Record<string, string>; // Add optional validation errors prop
 }
 
 export {}; 
