@@ -93,19 +93,40 @@ export default function Page() {
   // Updated to clear specific match error
   const handleSelectionChange = (newSelections: Selections, matchId: string) => {
     console.log('Selection change detected for match:', matchId, newSelections);
+    const specificQuestionKeys: PredictionKeys[] = ['leagueWinner', 'lastPlace', 'bestGoalDifference', 'topScorer']; // Needed for check
     // Clear validation error for this specific match if it exists
     setValidationErrors(prev => {
-      // Check if coupon errors exist and the specific match error exists
-      if (prev.coupon && prev.coupon[`match_${matchId}`]) { // Check for helper format
-        const updatedCouponErrors = { ...prev.coupon };
-        delete updatedCouponErrors[`match_${matchId}`]; // Remove the specific error
-        return { ...prev, coupon: updatedCouponErrors };
-      } else if (prev.coupon && prev.coupon[matchId]) { // Check for direct ID format (fallback)
-         const updatedCouponErrors = { ...prev.coupon };
-        delete updatedCouponErrors[matchId]; // Remove the specific error
-        return { ...prev, coupon: updatedCouponErrors };
+      const updatedErrors = { ...prev }; // Copy the whole errors state
+
+      // --- Coupon Error Handling --- 
+      const updatedCouponErrors = prev.coupon ? { ...prev.coupon } : {};
+      let specificCouponErrorCleared = false;
+      const matchKey1 = `match_${matchId}`;
+      const matchKey2 = matchId; // Check direct ID format too
+
+      if (updatedCouponErrors[matchKey1]) {
+        delete updatedCouponErrors[matchKey1];
+        specificCouponErrorCleared = true;
+      } else if (updatedCouponErrors[matchKey2]) {
+        delete updatedCouponErrors[matchKey2];
+        specificCouponErrorCleared = true;
       }
-      return prev; // No change needed
+
+      updatedErrors.coupon = updatedCouponErrors;
+      
+      // --- Check if ALL errors are now cleared --- 
+      if (specificCouponErrorCleared) { // Only check if we actually cleared something
+         const remainingCouponErrors = Object.keys(updatedCouponErrors).filter(k => k !== 'form').length === 0;
+        const remainingQuestionnaireErrors = !updatedErrors.questionnaire || 
+                                            specificQuestionKeys.every(key => !updatedErrors.questionnaire![key]);
+
+        if (remainingCouponErrors && remainingQuestionnaireErrors && updatedErrors.summary) {
+          console.log("TEST_DEBUG: Clearing summary via handleSelectionChange");
+          delete updatedErrors.summary; // Clear summary if all specific errors gone
+        }
+      }
+
+      return updatedErrors; 
     });
     // setSubmitStatus(null); // Don't clear general status on selection change
   };
@@ -133,6 +154,16 @@ export default function Page() {
       // If all specific errors are cleared, also clear the general form error
       if (allSpecificErrorsCleared && updatedQuestionnaireErrors.form) {
         delete updatedQuestionnaireErrors.form;
+      }
+
+      // --- Check if ALL errors are now cleared --- 
+      const remainingCouponErrors = !updatedErrors.coupon || Object.keys(updatedErrors.coupon).filter(k => k !== 'form').length === 0;
+      // Re-check questionnaire specific errors after potential form error removal
+      const remainingQuestionnaireErrors = specificQuestionKeys.every(key => !updatedQuestionnaireErrors[key]);
+
+      if (remainingCouponErrors && remainingQuestionnaireErrors && updatedErrors.summary) {
+         console.log("TEST_DEBUG: Clearing summary via handlePredictionChange");
+         delete updatedErrors.summary; // Clear summary if all specific errors gone
       }
 
       // Update the main errors state with the modified questionnaire errors
@@ -233,8 +264,8 @@ export default function Page() {
     // 4. Check Overall Validity & Update UI
     if (!couponValidation.isValid || !answersValidation.isValid) {
       combinedErrors.summary = 'Please fix the errors highlighted below.';
+      console.log('TEST_DEBUG: Validation failed. Setting errors:', JSON.stringify(combinedErrors)); // Add debug log
       setValidationErrors(combinedErrors);
-      // Add validation error toast
       toast.error("Please fix the errors highlighted below.");
       setIsSubmitting(false);
       window.scrollTo({ top: 0, behavior: 'smooth' });
