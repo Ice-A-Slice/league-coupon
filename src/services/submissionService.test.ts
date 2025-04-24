@@ -37,10 +37,9 @@ describe('Submission Service', () => {
   });
 
   test('should submit both bets and answers successfully', async () => {
-    // ... (keep existing test implementation, uses fetchMock) ...
-    // Mock successful responses for both endpoints
-    const mockBetsResult = { success: true, message: 'Bets saved' };
-    const mockAnswersResult = { success: true, message: 'Answers saved' };
+    // Mock successful responses matching the refined ApiResponse
+    const mockBetsResult = { message: 'Bets submitted successfully!' }; 
+    const mockAnswersResult = { message: 'Answers saved successfully', data: mockAnswersData }; // Include data for answers
 
     fetchMock
       .mockResolvedValueOnce({ // Bets API call
@@ -63,11 +62,12 @@ describe('Submission Service', () => {
   });
 
   test('should throw error if bets submission fails', async () => {
+    // Mock failed response, ensure it includes an error property if possible
     const errorMsg = 'Bets API error';
-    // Mock failed response for bets endpoint
+    const mockErrorResponse = { error: errorMsg }; // Simulate error structure
     fetchMock.mockResolvedValueOnce({ // Bets API call - FAILS
       ok: false,
-      json: async () => ({ error: errorMsg }),
+      json: async () => mockErrorResponse,
       status: 400, statusText: 'Bad Request'
     });
 
@@ -88,8 +88,10 @@ describe('Submission Service', () => {
   });
 
   test('should throw error if answers submission fails after bets succeed', async () => {
-    const betsSuccessResult = { success: true };
+    // Bets success mock matching ApiResponse
+    const betsSuccessResult = { message: 'Bets saved successfully' }; 
     const answersErrorMsg = 'Answers API error';
+    const mockErrorResponse = { error: answersErrorMsg }; // Simulate error structure
 
     fetchMock
       .mockResolvedValueOnce({ // Bets API call - SUCCEEDS
@@ -99,7 +101,7 @@ describe('Submission Service', () => {
       })
       .mockResolvedValueOnce({ // Answers API call - FAILS
         ok: false,
-        json: async () => ({ error: answersErrorMsg }),
+        json: async () => mockErrorResponse,
         status: 500, statusText: 'Server Error'
       });
 

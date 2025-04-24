@@ -7,10 +7,17 @@ interface SubmissionPayload {
   answersData: SeasonAnswers[];
 }
 
-// Define a potential structure for the success response (can be customized)
+// TODO: Define more specific type for 'data' based on user_season_answers table schema if needed
+interface ApiResponse {
+  message: string; // Both successful routes return a message
+  data?: unknown;   // Optional data field (returned by season-answers)
+  error?: string;   // Keep for consistency in error handling
+}
+
+// Use the refined placeholder type for the success response
 interface SubmissionSuccess {
-  betsResult: any; // Replace 'any' with specific type if known
-  answersResult: any; // Replace 'any' with specific type if known
+  betsResult: ApiResponse;
+  answersResult: ApiResponse;
 }
 
 /**
@@ -27,8 +34,9 @@ export async function submitPredictions(
 
   console.log('Submitting predictions with payload:', payload);
 
-  let betsResult: any;
-  let answersResult: any;
+  // Use the placeholder type
+  let betsResult: ApiResponse;
+  let answersResult: ApiResponse;
 
   try {
     // 1. Submit Bets (Coupon Selections)
@@ -44,7 +52,8 @@ export async function submitPredictions(
       body: JSON.stringify(bets),
     });
 
-    betsResult = await betsResponse.json();
+    // Assume the response structure matches ApiResponse for now
+    betsResult = await betsResponse.json(); 
     if (!betsResponse.ok) {
       console.error('Coupon submission failed:', betsResult);
       // Use the error message from the API response if available
@@ -61,6 +70,7 @@ export async function submitPredictions(
       body: JSON.stringify(answersData),
     });
 
+    // Assume the response structure matches ApiResponse for now
     answersResult = await answersResponse.json();
     if (!answersResponse.ok) {
       console.error('Season answers submission failed:', answersResult);

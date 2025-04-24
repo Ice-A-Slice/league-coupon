@@ -1,9 +1,14 @@
-import { renderHook, act } from '@testing-library/react-hooks';
-import fetchMock from 'jest-fetch-mock';
+import { renderHook, waitFor, act } from '@testing-library/react';
+// import fetchMock from 'jest-fetch-mock'; // Remove if not used, fetch is globally mocked
 import { useFixtures } from './useFixtures';
-import { Match } from '../../../types/match';
+// Use the correct path for Match type based on previous successful runs
+import type { Match } from '@/components/BettingCoupon/types';
 
-// ... fetch mock setup ...
+// Mock the global fetch function
+global.fetch = jest.fn();
+
+// Add back the fetchMock helper constant definition
+const fetchMock = global.fetch as jest.Mock;
 
 // Sample props for the hook
 const defaultProps = {
@@ -28,76 +33,101 @@ const mockMatches: Match[] = [
 
 describe('useFixtures Hook', () => {
 
-  // ... beforeEach ...
+  beforeEach(() => {
+    fetchMock.mockClear();
+    jest.restoreAllMocks();
+  });
 
-  test('should return initial loading state and empty matches', () => { /* ... */ });
+  test('should return initial loading state and empty matches', () => {
+    fetchMock.mockReturnValue(new Promise(() => {}));
+    const { result } = renderHook(() => useFixtures(defaultProps));
+    expect(result.current.isLoading).toBe(true);
+    // ... rest of assertions ...
+    expect(result.current.matches).toEqual([]);
+    expect(result.current.error).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 
-  test('should fetch matches successfully and update state', async () => { /* ... */ });
+  test('should fetch matches successfully and update state', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => mockMatches, status: 200, statusText: 'OK' });
+    const { result } = renderHook(() => useFixtures(defaultProps));
+    await waitFor(() => { expect(result.current.isLoading).toBe(false); });
+    // ... rest of assertions ...
+    expect(result.current.matches).toEqual(mockMatches);
+    expect(result.current.error).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining(encodeURIComponent(defaultProps.round)));
+  });
 
-  test('should handle fetch error and update state', async () => { /* ... */ });
+  test('should handle fetch error and update state', async () => {
+    const errorMessage = 'Failed to fetch';
+    fetchMock.mockResolvedValueOnce({ ok: false, json: async () => ({ error: errorMessage }), status: 500, statusText: 'Internal Server Error' });
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useFixtures(defaultProps));
+    await waitFor(() => { expect(result.current.isLoading).toBe(false); });
+    // ... rest of assertions ...
+    expect(result.current.matches).toEqual([]);
+    expect(result.current.error).toContain(errorMessage);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(consoleErrorSpy).toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
 
-  test('should handle fetch throwing an error (e.g., network error)', async () => { /* ... */ });
+  test('should handle fetch throwing an error (e.g., network error)', async () => {
+    const networkError = new Error('Network error');
+    fetchMock.mockRejectedValueOnce(networkError);
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useFixtures(defaultProps));
+    await waitFor(() => { expect(result.current.isLoading).toBe(false); });
+    // ... rest of assertions ...
+    expect(result.current.matches).toEqual([]);
+    expect(result.current.error).toBe(networkError.message);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(consoleErrorSpy).toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
 
   test('should refetch data when refetch function is called', async () => {
-    // ... initial fetch setup ...
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockMatches,
-      // ... rest of mock response ...
-    });
-
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => mockMatches, status: 200, statusText: 'OK' });
     const { result } = renderHook(() => useFixtures(defaultProps));
-
-    // ... wait for initial load ...
-
-    // Mock the next fetch response - Corrected data structure
+    await waitFor(() => { expect(result.current.isLoading).toBe(false); });
     const updatedMatches: Match[] = [
         { id: 101, homeTeam: 'Team A', awayTeam: 'Team B' },
         { id: 102, homeTeam: 'Team C', awayTeam: 'Team D' },
-        { id: 103, homeTeam: 'Team E', awayTeam: 'Team F' }, // Added a match
+        { id: 103, homeTeam: 'Team E', awayTeam: 'Team F' },
     ];
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      json: async () => updatedMatches,
-      // ... rest of mock response ...
-    });
-
-    // ... call refetch and assertions ...
-    await act(async () => {
-      await result.current.refetch();
-    });
-
-    expect(fetchMock).toHaveBeenCalledTimes(2); 
-    expect(result.current.isLoading).toBe(false); 
-    expect(result.current.matches).toEqual(updatedMatches); 
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => updatedMatches, status: 200, statusText: 'OK' });
+    await act(async () => { await result.current.refetch(); });
+    // ... rest of assertions ...
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.matches).toEqual(updatedMatches);
     expect(result.current.error).toBeNull();
   });
 
   test('should refetch data when dependencies (props) change', async () => {
-    // ... initial fetch setup ...
-     fetchMock.mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockMatches,
-      // ... rest of mock response ...
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => mockMatches, status: 200, statusText: 'OK' });
+    const initialProps = { leagueId: 39, season: 2024, round: 'Round 1' };
+    // Ensure renderHook is called here
+    const { result, rerender } = renderHook((props) => useFixtures(props), {
+      initialProps: initialProps,
     });
+    await waitFor(() => { expect(result.current.isLoading).toBe(false); });
+    // ... assertions for initial load ...
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.current.matches).toEqual(mockMatches);
 
-    // ... initial render ...
-
-    // Mock the next fetch response - Corrected data structure
     const nextRoundMatches: Match[] = [
         { id: 201, homeTeam: 'Team G', awayTeam: 'Team H' }
     ];
-    fetchMock.mockResolvedValueOnce({
-        ok: true,
-        json: async () => nextRoundMatches,
-       // ... rest of mock response ...
-    });
-
-    // ... rerender with new props ...
-
-    // ... assertions ...
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => nextRoundMatches, status: 200, statusText: 'OK' });
+    const nextProps = { ...initialProps, round: 'Round 2' };
+    rerender(nextProps);
+    expect(result.current.isLoading).toBe(true);
+    await waitFor(() => { expect(result.current.isLoading).toBe(false); });
+    // ... rest of assertions ...
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    // ... other assertions ...
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining(encodeURIComponent(nextProps.round)));
     expect(result.current.matches).toEqual(nextRoundMatches);
     expect(result.current.error).toBeNull();
   });

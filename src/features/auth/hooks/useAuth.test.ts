@@ -1,20 +1,26 @@
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { useAuth } from './useAuth';
-import { createClient } from '@/utils/supabase/client';
-import type { User, Subscription } from '@supabase/supabase-js';
+// Remove direct import of createClient as it's fully mocked
+// import { createClient } from '@/utils/supabase/client'; 
+import type { User, Subscription, Session, AuthChangeEvent } from '@supabase/supabase-js';
+
+// Define a more specific type for the mocked onAuthStateChange
+type MockAuthChange = jest.Mock<void, [callback: (event: AuthChangeEvent, session: Session | null) => void]> & {
+    callback?: (event: AuthChangeEvent, session: Session | null) => void;
+};
 
 // Mock the Supabase client module
-// We need to mock the functions used within the hook: getUser and onAuthStateChange
 jest.mock('@/utils/supabase/client', () => {
   const mockUnsubscribe = jest.fn();
-  const mockOnAuthStateChange = jest.fn().mockImplementation((callback) => {
+  const mockOnAuthStateChange: MockAuthChange = jest.fn().mockImplementation((callback) => {
     // Store the callback to simulate events later
-    (mockOnAuthStateChange as any).callback = callback;
+    // No 'any' needed here due to MockAuthChange type
+    mockOnAuthStateChange.callback = callback;
     return {
       data: {
         subscription: {
           id: 'mock-subscription-id',
-          callback: jest.fn(),
+          callback: jest.fn(), // Keep mock callback
           unsubscribe: mockUnsubscribe,
         } as Subscription,
       },
@@ -23,6 +29,13 @@ jest.mock('@/utils/supabase/client', () => {
 
   const mockGetUser = jest.fn();
 
+  // Store the mocks in a variable accessible within the module scope
+  const mocks = {
+      mockGetUser,
+      mockOnAuthStateChange,
+      mockUnsubscribe,
+  };
+
   return {
     createClient: jest.fn(() => ({
       auth: {
@@ -30,35 +43,30 @@ jest.mock('@/utils/supabase/client', () => {
         onAuthStateChange: mockOnAuthStateChange,
       },
     })),
-    // Expose mocks for manipulation in tests
-    __mocks: {
-      mockGetUser,
-      mockOnAuthStateChange,
-      mockUnsubscribe,
-    },
+    // Expose mocks directly without require/dynamic import if possible within Jest mock
+    __mocks: mocks,
   };
 });
 
-// Helper function to get the mock implementations
-const getMocks = () => {
-  const clientModule = require('@/utils/supabase/client');
-  return clientModule.__mocks;
-};
+// Access mocks directly from the mocked module's __mocks property
+// No need for the helper function using require()
+const { __mocks: supabaseMocks } = jest.requireMock('@/utils/supabase/client');
 
 describe('useAuth Hook', () => {
   let mockGetUser: jest.Mock;
-  let mockOnAuthStateChange: jest.Mock & { callback?: Function };
+  let mockOnAuthStateChange: MockAuthChange; // Use the specific type
   let mockUnsubscribe: jest.Mock;
 
   beforeEach(() => {
     // Reset mocks before each test
-    const mocks = getMocks();
-    mockGetUser = mocks.mockGetUser;
-    mockOnAuthStateChange = mocks.mockOnAuthStateChange;
-    mockUnsubscribe = mocks.mockUnsubscribe;
+    // Access mocks retrieved via requireMock
+    mockGetUser = supabaseMocks.mockGetUser;
+    mockOnAuthStateChange = supabaseMocks.mockOnAuthStateChange;
+    mockUnsubscribe = supabaseMocks.mockUnsubscribe;
 
     // Clear any previously stored callback
-    delete (mockOnAuthStateChange as any).callback;
+    // No 'any' needed here
+    delete mockOnAuthStateChange.callback;
     // Reset call counts etc.
     mockGetUser.mockClear();
     mockOnAuthStateChange.mockClear();
@@ -125,7 +133,15 @@ describe('useAuth Hook', () => {
   test('should update user when onAuthStateChange provides a session', async () => {
     const initialUser = null;
     const laterUser = { id: '456', email: 'later@example.com' } as User;
-    const mockSession = { user: laterUser } as any; // Mock Session structure as needed
+    // Provide a more complete mock Session, casting as needed if properties are missing/optional
+    const mockSession = { 
+      user: laterUser, 
+      access_token: 'mock-token', 
+      refresh_token: 'mock-refresh', 
+      expires_in: 3600, 
+      expires_at: Date.now() + 3600*1000, 
+      token_type: 'bearer'
+    } as Session;
 
     // Mock initial getUser resolving with no user
     mockGetUser.mockResolvedValue({ data: { user: initialUser }, error: null });
@@ -141,6 +157,7 @@ describe('useAuth Hook', () => {
     // Simulate the onAuthStateChange callback being invoked with a new session
     act(() => {
       if (mockOnAuthStateChange.callback) {
+        // Use a valid AuthChangeEvent type
         mockOnAuthStateChange.callback('SIGNED_IN', mockSession);
       }
     });
@@ -169,6 +186,7 @@ describe('useAuth Hook', () => {
     // Simulate the onAuthStateChange callback being invoked with null (sign out)
     act(() => {
       if (mockOnAuthStateChange.callback) {
+        // Use a valid AuthChangeEvent type
         mockOnAuthStateChange.callback('SIGNED_OUT', mockSession);
       }
     });
