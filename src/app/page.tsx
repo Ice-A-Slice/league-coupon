@@ -3,9 +3,10 @@
 import React, { useEffect, useRef, useState, Suspense } from 'react';
 import BettingCoupon, { BettingCouponRef } from '@/components/BettingCoupon/BettingCoupon';
 // Correct type imports from component definitions
-import type { /* Match, */ Selections, SelectionType } from "@/components/BettingCoupon/types"; 
+import type { /* Match, */ Selections /*, SelectionType */ } from "@/components/BettingCoupon/types"; 
 import Questionnaire, { QuestionnaireRef as ImportedQuestionnaireRef } from '@/components/Questionnaire/Questionnaire'; // Removed SeasonAnswers import here
-import type { SeasonAnswers } from "@/components/Questionnaire/Questionnaire"; // Import SeasonAnswers directly
+// Removed unused type import
+// import type { SeasonAnswers } from "@/components/Questionnaire/Questionnaire";
 import type { /* Team as QuestionnaireTeam, Player, */ Prediction } from "@/components/Questionnaire/types"; 
 import { Button } from "@/components/ui/button"; // Verified location
 import { LoginButton } from '@/components/auth'; // Verified location
@@ -15,6 +16,16 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useFixtures } from '@/features/betting/hooks/useFixtures'; // Import useFixtures
 // Import useQuestionnaireData
 import { useQuestionnaireData } from '@/features/questionnaire/hooks/useQuestionnaireData';
+
+// Import helpers and service
+import {
+  validateCouponSelections,
+  validateQuestionnaireAnswers,
+  prepareBetSubmissionData,
+  prepareAnswersSubmissionData
+} from '@/features/betting/utils/submissionHelpers';
+// Corrected import to named export
+import { submitPredictions } from '@/services/submissionService'; 
 
 // Import Supabase client creator
 import { createClient } from '@/utils/supabase/client';
@@ -134,100 +145,90 @@ export default function Page() {
     };
   }, [user?.id, refetchFixtures]); // Depend on user ID and the refetch function itself
 
-  // Combined handler for submitting Coupon and Questionnaire (Will be updated later)
+  // Combined handler for submitting Coupon and Questionnaire (Refactored)
   const handleCombinedSubmit = async () => {
-    if (!bettingCouponRef.current || !questionnaireRef.current) return;
+    // Ensure refs are current
+    if (!bettingCouponRef.current || !questionnaireRef.current) {
+      console.error("Component refs not available");
+      setSubmitStatus({ type: 'error', message: 'An unexpected error occurred. Please try again.' });
+      return;
+    }
 
+    // Reset state
     setSubmitStatus(null);
-    setValidationErrors({});
+    setValidationErrors({}); // Reset errors
+    setIsSubmitting(true);
+
+    // 1. Get Data from Components
+    const currentSelections = bettingCouponRef.current.getSelections();
+    const currentAnswers = questionnaireRef.current.getAnswers();
+    const currentMatches = matchesForCoupon || []; // Get matches from useFixtures hook
+
+    // 2. Validate Data using Helpers
+    const couponValidation = validateCouponSelections(currentSelections, currentMatches);
+    const answersValidation = validateQuestionnaireAnswers(currentAnswers);
+
+    // 3. Aggregate Errors
     const combinedErrors: ErrorsState = {};
-    let couponData: Selections | undefined;
-    const answersData: SeasonAnswers[] | undefined = questionnaireRef.current.getAnswers();
-    let isCouponValid = false;
-    let isQuestionnaireValid = false;
-
-    // 1. Validate Coupon
-    const { isValid: couponIsValid, errors: couponErrors } = bettingCouponRef.current.validate();
-    if (!couponIsValid) {
-      console.error('Coupon Validation failed', couponErrors);
-      combinedErrors.coupon = couponErrors ?? { form: 'Coupon is invalid' };
-    } else {
-      couponData = bettingCouponRef.current.getSelections();
-      if (!couponData || Object.keys(couponData).length === 0) {
-        console.warn('Coupon valid, but no selections found.');
-        combinedErrors.coupon = { form: 'No selections made.' };
-      } else {
-        isCouponValid = true;
-      }
+    if (!couponValidation.isValid) {
+      combinedErrors.coupon = couponValidation.errors ?? { form: 'Coupon is invalid' };
+    }
+    if (!answersValidation.isValid) {
+      combinedErrors.questionnaire = answersValidation.errors ?? { form: 'Questionnaire is invalid' };
     }
 
-    // 2. Validate Questionnaire
-    const allAnswered = answersData?.every(ans => ans.answered_team_id !== null || ans.answered_player_id !== null);
-    if (!allAnswered || !answersData || answersData.length < 4) {
-        console.error('Questionnaire Validation failed', answersData);
-        combinedErrors.questionnaire = { form: 'Please answer all season questions.' };
-    } else {
-        isQuestionnaireValid = true;
-    }
-
-    // 3. Check Overall Validity & Update Summary Error
-    if (!isCouponValid || !isQuestionnaireValid) {
-      combinedErrors.summary = 'Please fix all errors before submitting.';
+    // 4. Check Overall Validity & Update UI
+    if (!couponValidation.isValid || !answersValidation.isValid) {
+      combinedErrors.summary = 'Please fix the errors highlighted below.';
       setValidationErrors(combinedErrors);
+      setIsSubmitting(false);
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
-    // 4. Prepare and Submit if both are valid
-    if (!couponData || !answersData) {
-      console.error('Data retrieval failed after validation passed. This should not happen.');
-      setSubmitStatus({ type: 'error', message: 'Internal error preparing data.' });
-      return;
+    // 5. Prepare Data for Submission using Helpers
+    // Ensure data is not null/undefined after validation check (shouldn't happen)
+    if (!currentSelections || !currentAnswers) {
+        console.error('Data missing after validation!');
+        setSubmitStatus({ type: 'error', message: 'Internal error preparing data.' });
+        setIsSubmitting(false);
+        return;
     }
+    const betsPayload = prepareBetSubmissionData(currentSelections);
+    const answersPayload = prepareAnswersSubmissionData(currentAnswers);
 
-    setIsSubmitting(true);
-    let submissionError = null;
-
+    // 6. Call Submission Service
     try {
-      // Submit Bets
-      const bets = Object.entries(couponData).map(([fixtureId, prediction]) => ({
-        fixture_id: parseInt(fixtureId, 10),
-        prediction: prediction as SelectionType,
-      }));
-      const betsResponse = await fetch('/api/bets', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(bets),
+      console.log('Submitting data:', { betsPayload, answersPayload });
+      // Assuming submissionService handles both bets and answers
+      // Adjust the call signature based on the actual service implementation
+      const submissionResult = await submitPredictions({ 
+          couponData: currentSelections, // Assuming submitPredictions expects this structure
+          answersData: currentAnswers,  // Assuming submitPredictions expects this structure
       });
-      const betsResult = await betsResponse.json();
-      if (!betsResponse.ok) {
-        submissionError = `Coupon submission failed: ${betsResult.error || 'Unknown error'}`;
-        throw new Error(submissionError);
+
+      // Handle potential partial success if the service indicates it
+      if (submissionResult.betsResult && submissionResult.answersResult) {
+        console.log('Combined submission successful:', submissionResult);
+        // Use messages from the results if available
+        const successMessage = submissionResult.answersResult.message || submissionResult.betsResult.message || 'Coupon and answers submitted successfully!';
+        setSubmitStatus({ type: 'success', message: successMessage });
+        // Optionally reset forms/selections here
+        // bettingCouponRef.current.resetSelections();
+        // questionnaireRef.current.resetAnswers(); 
+      } else { 
+        // This block might not be reached if the service throws on failure
+        console.error('Submission response format unexpected:', submissionResult);
+        setSubmitStatus({ type: 'error', message: 'An unexpected response was received from the server.' });
+        setValidationErrors(prev => ({ ...prev, summary: 'Unexpected server response.' }));
       }
-      console.log('Coupon submission successful:', betsResult);
 
-      // Submit Season Answers (only if coupon succeeded)
-      const answersResponse = await fetch('/api/season-answers', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(answersData),
-      });
-      const answersResult = await answersResponse.json();
-      if (!answersResponse.ok) {
-        submissionError = `Season answers submission failed: ${answersResult.error || 'Unknown error'}`;
-        // Note: Bets might have succeeded, but answers failed. Consider rollback or notification.
-        throw new Error(submissionError);
-      }
-      console.log('Season answers submission successful:', answersResult);
-
-      // Both succeeded
-      setSubmitStatus({ type: 'success', message: 'Coupon and answers submitted successfully!' });
-
-    } catch (error) {
-      console.error('Combined submission error:', error);
-      const errorMsg = submissionError || (error as Error).message || 'An error occurred during submission.';
-      setSubmitStatus({ type: 'error', message: errorMsg });
-      setValidationErrors(prev => ({ ...prev, summary: errorMsg }));
+    } catch (error: unknown) {
+      // Handle unexpected errors during the service call (e.g., network error or error thrown by submitPredictions)
+      console.error('Unexpected submission error:', error);
+      const message = error instanceof Error ? error.message : 'An unexpected network or server error occurred.';
+      setSubmitStatus({ type: 'error', message });
+      setValidationErrors(prev => ({ ...prev, summary: message }));
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setIsSubmitting(false);
