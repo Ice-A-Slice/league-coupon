@@ -1,0 +1,44 @@
+# PRD: Refactor src/app/page.tsx
+
+## 1. Goals
+- Improve the structure, readability, and maintainability of the main page component (`src/app/page.tsx`).
+- Apply clean code principles (Single Responsibility, DRY).
+- Align with React/Next.js best practices.
+- Make the component easier to test and reason about.
+
+## 2. Scope
+- Refactor existing logic within `src/app/page.tsx`.
+- Extract specific functionalities into reusable custom hooks and services.
+- Update component state management and data flow.
+- Address testing implications of the refactor.
+
+## 3. Approach
+- **Authentication:** Extract auth logic (fetching user, listening to state changes) into a `useAuth` hook within `src/features/auth/hooks/`.
+- **Fixture Data:** Extract fixture fetching logic (initial load, loading/error states, realtime updates) into a `useFixtures` hook within `src/features/betting/hooks/`.
+    - The hook will expose a `refetch` function.
+    - The Supabase realtime listener in `page.tsx` will be simplified to call this `refetch` function.
+- **Questionnaire Data:** Extract team and player fetching logic into a `useQuestionnaireData` hook within `src/features/questionnaire/hooks/`.
+- **Submission Logic:** Move the API call logic for submitting bets and answers (`fetch` calls to `/api/bets`, `/api/season-answers`) into a `submitPredictions` function within a new `src/services/submissionService.ts` file.
+- **Page Component (`page.tsx`) Refactor:**
+    - Replace direct state management and effects with calls to the new hooks (`useAuth`, `useFixtures`, `useQuestionnaireData`).
+    - Refactor `handleCombinedSubmit` to use helper functions for clarity and call the `submissionService.submitPredictions` function.
+    - Update JSX to correctly use loading/error states from hooks and display appropriate UI feedback.
+- **Readability:** Prioritize self-documenting code with meaningful names. Use JSDoc comments for exported hooks/functions and targeted comments only for explaining the "why" behind non-obvious logic.
+
+## 4. Testing Strategy
+- Review existing tests impacted by the refactor.
+- Update or remove tests tightly coupled to the old implementation details.
+- Ensure tests focus on user-facing behavior.
+- Add new unit/integration tests for the created hooks (`useAuth`, `useFixtures`, `useQuestionnaireData`) and the `submissionService`.
+
+## 5. Non-Goals
+- Implementing new user-facing features.
+- Significant changes to the UI design.
+- Changing the core backend API endpoints or database schema.
+
+## 6. Success Criteria
+- `src/app/page.tsx` is significantly smaller and focused on orchestration.
+- Data fetching, authentication, and submission logic are encapsulated in hooks/services.
+- Code adheres to established clean code and React/Next.js guidelines.
+- Existing user-facing functionality remains unchanged.
+- Test coverage is maintained or improved. 
