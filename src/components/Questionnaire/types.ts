@@ -12,18 +12,18 @@ export interface Player {
 }
 
 export interface Prediction {
-  leagueWinner: string | null;
-  lastPlace: string | null;
-  bestGoalDifference: string | null;
-  topScorer: string | null;
+  [key: string]: string | null; // Allow string keys
 }
+
+// Define PredictionKeys based on the Prediction interface
+export type PredictionKeys = keyof Prediction;
 
 export interface QuestionnaireProps {
   showQuestionnaire?: boolean;
   teams: Team[];
   players: Player[];
   initialPredictions?: Prediction;
-  onPredictionChange?: (predictions: Prediction) => void;
+  onPredictionChange?: (questionKey: PredictionKeys) => void;
   onSubmit?: (predictions: Prediction) => void;
   onToggleVisibility?: () => void;
   validationErrors?: Record<string, string>;

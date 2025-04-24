@@ -4,7 +4,7 @@ import React, { useState, forwardRef, useImperativeHandle } from "react";
 // import debounce from 'lodash.debounce'; // REMOVED debounce import
 import TeamSelect from "./TeamSelect";
 import PlayerSelect from "./PlayerSelect";
-import { Prediction, QuestionnaireProps } from "./types";
+import { Prediction, QuestionnaireProps, PredictionKeys } from "./types";
 import SectionContainer from "@/components/layout";
 import { validatePrediction } from "@/schemas/questionnaireSchema";
 import ValidationStatusIndicator from '@/components/ui/ValidationStatusIndicator';
@@ -35,7 +35,8 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
     bestGoalDifference: null,
     topScorer: null
   },
-  onPredictionChange = () => {},
+  // Prefix unused parameter with underscore for default function
+  onPredictionChange = (_questionKey: PredictionKeys) => {},
   onToggleVisibility,
   validationErrors
 }, ref) => {
@@ -89,8 +90,8 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
     }
   }), [predictions]); // Depend on predictions state
 
-  // Update a specific prediction field
-  const updatePrediction = (field: keyof Prediction, value: string | null) => {
+  // Update a specific prediction field and notify parent about the specific field changed
+  const updatePrediction = (field: PredictionKeys, value: string | null) => {
     // Restore immediate *internal* error clearing for the specific field
     if (internalErrors[field]) {
       setInternalErrors(prev => {
@@ -107,8 +108,8 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
     };
     setPredictions(updatedPredictions);
     
-    // Call the callback immediately
-    onPredictionChange(updatedPredictions);
+    // Call the callback immediately with the specific key that changed
+    onPredictionChange(field);
 
     // // Trigger debounced validation - REMOVED
     // debouncedValidate(updatedPredictions);
@@ -132,13 +133,6 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
   // Content for the questionnaire
   const questionnaireContent = (
     <div className="px-3 sm:px-4 py-3 sm:py-5 divide-y divide-gray-200 space-y-3 sm:space-y-4 w-full">
-      {/* Display the general form error passed via props */}
-      {errors.form && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm w-full" role="alert">
-          {errors.form}
-        </div>
-      )}
-
       {/* League Winner Selection - Reverted to use TeamSelect */}
       <div className="pt-3 sm:pt-4 first:pt-0">
         <div className="flex items-center mb-1">

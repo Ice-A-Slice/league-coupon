@@ -19,21 +19,21 @@ interface ValidationResult {
 export function validateCouponSelections(selections: Selections | undefined | null, matches: Match[]): ValidationResult {
   const errors: Record<string, string> = {};
 
-  if (!selections || Object.keys(selections).length === 0) {
-    errors.form = 'No selections made.';
-    return { isValid: false, errors };
-  }
+  let allSelected = true;
 
-  // Check if every match has a corresponding selection
-  const missingSelections = matches.filter(match => !selections[match.id]);
+  // Iterate through all matches to check for selections
+  matches.forEach(match => {
+    const matchIdStr = match.id.toString();
+    if (!selections || !selections[matchIdStr]) {
+      allSelected = false;
+      // Use a consistent key format, e.g., match_ID
+      errors[`match_${matchIdStr}`] = `Selection missing for ${match.homeTeam} vs ${match.awayTeam}`;
+    }
+  });
 
-  if (missingSelections.length > 0) {
-    missingSelections.forEach(match => {
-      // Use fixture ID as the key for specific error messages if needed
-      errors[`match_${match.id}`] = `Selection missing for ${match.homeTeam} vs ${match.awayTeam}`;
-    });
-    // Add a general error message as well
-    errors.form = `Missing selections for ${missingSelections.length} match(es). Please select 1, X, or 2 for all matches.`;
+  // If any selections are missing, add a general form error
+  if (!allSelected) {
+    errors.form = `Please select 1, X, or 2 for all matches.`;
     return { isValid: false, errors };
   }
 

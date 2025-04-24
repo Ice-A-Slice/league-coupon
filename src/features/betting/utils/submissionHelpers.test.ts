@@ -61,11 +61,19 @@ describe('submissionHelpers', () => {
     it('should return isValid: false if selections are null or empty', () => {
       const resultNull = validateCouponSelections(null, mockMatches);
       expect(resultNull.isValid).toBe(false);
+      expect(resultNull.errors).toBeDefined();
       expect(resultNull.errors).toHaveProperty('form');
+      expect(resultNull.errors).toHaveProperty('match_1');
+      expect(resultNull.errors).toHaveProperty('match_2');
+      expect(resultNull.errors).toHaveProperty('match_3');
 
       const resultEmpty = validateCouponSelections({}, mockMatches);
       expect(resultEmpty.isValid).toBe(false);
+      expect(resultEmpty.errors).toBeDefined();
       expect(resultEmpty.errors).toHaveProperty('form');
+      expect(resultEmpty.errors).toHaveProperty('match_1');
+      expect(resultEmpty.errors).toHaveProperty('match_2');
+      expect(resultEmpty.errors).toHaveProperty('match_3');
     });
 
     it('should return isValid: false if some selections are missing', () => {
@@ -80,12 +88,6 @@ describe('submissionHelpers', () => {
       const result = validateCouponSelections(mockCompleteSelections, []);
       expect(result.isValid).toBe(true);
       expect(result.errors).toBeUndefined();
-    });
-    
-    it("should return isValid: false with 'No selections made' if selections are empty but matches exist", () => {
-      const result = validateCouponSelections({}, mockMatches);
-      expect(result.isValid).toBe(false);
-      expect(result.errors).toHaveProperty('form');
     });
   });
 

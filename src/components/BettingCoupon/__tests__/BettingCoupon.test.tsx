@@ -76,9 +76,7 @@ describe('BettingCoupon', () => {
     fireEvent.click(homeWinButton);
     
     // Check that the selection was removed
-    expect(handleSelectionChange).toHaveBeenCalledWith({
-      '2': 'X'
-    });
+    expect(handleSelectionChange).toHaveBeenCalledWith({ '2': 'X' }, '1');
   });
   
   it('exposes validation function via ref', async () => {
@@ -143,18 +141,20 @@ describe('BettingCoupon', () => {
       />
     );
 
-    // Find the match rows. We expect the rows for match 1 and 3 to have error styling.
-    // Let's check for the border class `border-l-red-500` which is applied to the main div of the row.
+    // Get the rows
     const matchRows = screen.getAllByText(/Real Madrid|Inter|Newcastle/).map(el => el.closest('div.flex.w-full'));
 
+    // Find the inner divs containing the status indicator and team names
+    const innerDivs = matchRows.map(row => row?.querySelector('div.flex-1.flex.items-center'));
+
     // Match 1 row (index 0)
-    expect(matchRows[0]).toHaveClass('border-l-red-500');
+    expect(innerDivs[0]).toHaveClass('border-l-red-500'); // Check inner div
 
     // Match 2 row (index 1) - Should NOT have error styling
-    expect(matchRows[1]).not.toHaveClass('border-l-red-500');
+    expect(innerDivs[1]).not.toHaveClass('border-l-red-500'); // Check inner div
 
     // Match 3 row (index 2)
-    expect(matchRows[2]).toHaveClass('border-l-red-500');
+    expect(innerDivs[2]).toHaveClass('border-l-red-500'); // Check inner div
   });
   
   it('applies error styling but does not display summary text internally', () => {
@@ -184,11 +184,14 @@ describe('BettingCoupon', () => {
     const specificErrorText = screen.queryByText('Error for match 2');
     expect(specificErrorText).not.toBeInTheDocument();
     
-    // Check that error styling IS applied to the correct match row (match 2)
+    // Check the correct rows have the styling
     const matchRows = screen.getAllByText(/Real Madrid|Inter|Newcastle/).map(el => el.closest('div.flex.w-full'));
-    expect(matchRows[0]).not.toHaveClass('border-l-red-500');
-    expect(matchRows[1]).toHaveClass('border-l-red-500');
-    expect(matchRows[2]).not.toHaveClass('border-l-red-500');
+    // Find the inner divs containing the status indicator and team names
+    const innerDivs = matchRows.map(row => row?.querySelector('div.flex-1.flex.items-center'));
+
+    expect(innerDivs[0]).not.toHaveClass('border-l-red-500'); // Check inner div
+    expect(innerDivs[1]).toHaveClass('border-l-red-500');    // Check inner div
+    expect(innerDivs[2]).not.toHaveClass('border-l-red-500'); // Check inner div
   });
   
   it('maintains multiple selections across different matches', () => {

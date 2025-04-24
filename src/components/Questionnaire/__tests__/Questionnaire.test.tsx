@@ -133,7 +133,7 @@ describe('Questionnaire Component with Combobox', () => {
     const accessibleName = /Select a team for league-winner/i;
     await openDropdown(accessibleName); 
     await selectOption(/Arsenal/i); 
-    expect(mockOnPredictionChange).toHaveBeenCalledWith(expect.objectContaining({ leagueWinner: '1' }));
+    expect(mockOnPredictionChange).toHaveBeenCalledWith('leagueWinner');
     // Check displayed value using findByRole after selection
     const trigger = await screen.findByRole('combobox', { name: accessibleName });
     expect(trigger).toHaveTextContent(/Arsenal/i);
@@ -144,7 +144,7 @@ describe('Questionnaire Component with Combobox', () => {
     const accessibleName = /Select a player for top-scorer/i;
     await openDropdown(accessibleName);
     await selectOption(/Mohamed Salah/i);
-    expect(mockOnPredictionChange).toHaveBeenCalledWith(expect.objectContaining({ topScorer: '102' }));
+    expect(mockOnPredictionChange).toHaveBeenCalledWith('topScorer');
     const trigger = await screen.findByRole('combobox', { name: accessibleName });
     expect(trigger).toHaveTextContent(/Mohamed Salah/i);
   });
@@ -160,7 +160,7 @@ describe('Questionnaire Component with Combobox', () => {
     await screen.findByRole('option', { name: /Manchester United/i });
     expect(screen.queryByRole('option', { name: /Arsenal/i })).not.toBeInTheDocument();
     await selectOption(/Manchester City/i);
-    expect(mockOnPredictionChange).toHaveBeenCalledWith(expect.objectContaining({ leagueWinner: '4' })); 
+    expect(mockOnPredictionChange).toHaveBeenCalledWith('leagueWinner');
   });
   
   it('handles keyboard navigation correctly', async () => {
@@ -176,7 +176,7 @@ describe('Questionnaire Component with Combobox', () => {
     await userEvent.click(liverpoolOption);
     
     // Check the mock call matches the Liverpool ID ('3')
-    expect(mockOnPredictionChange).toHaveBeenCalledWith(expect.objectContaining({ leagueWinner: '3' }));
+    expect(mockOnPredictionChange).toHaveBeenCalledWith('leagueWinner');
 
     // Wait for the visual update on the trigger
     await waitFor(() => {
@@ -202,7 +202,7 @@ describe('Questionnaire Component with Combobox', () => {
     expect(clearButton).toBeInTheDocument(); // Ensure it's found before clicking
     await userEvent.click(clearButton);
 
-    expect(mockOnPredictionChange).toHaveBeenCalledWith(expect.objectContaining({ leagueWinner: null }));
+    expect(mockOnPredictionChange).toHaveBeenCalledWith('leagueWinner');
     // Check placeholder text is back
     await waitFor(() => {
       expect(leagueWinnerTrigger).toHaveTextContent(/Select league winner.../i);
@@ -362,7 +362,7 @@ describe('Questionnaire', () => {
     });
     await openDropdown(/Select a team for league-winner/i);
     await selectOption(/Arsenal/i);
-    expect(handlePredictionChange).toHaveBeenCalledWith(expect.objectContaining({ leagueWinner: '1' }));
+    expect(handlePredictionChange).toHaveBeenCalledWith('leagueWinner');
   });
   
   it('validates predictions correctly', async () => {

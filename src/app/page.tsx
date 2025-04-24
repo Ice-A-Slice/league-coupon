@@ -7,7 +7,7 @@ import type { /* Match, */ Selections /*, SelectionType */ } from "@/components/
 import Questionnaire, { QuestionnaireRef as ImportedQuestionnaireRef } from '@/components/Questionnaire/Questionnaire'; // Removed SeasonAnswers import here
 // Removed unused type import
 // import type { SeasonAnswers } from "@/components/Questionnaire/Questionnaire";
-import type { /* Team as QuestionnaireTeam, Player, */ Prediction } from "@/components/Questionnaire/types"; 
+import type { /* Team as QuestionnaireTeam, Player, */ Prediction, PredictionKeys } from "@/components/Questionnaire/types"; 
 import { Button } from "@/components/ui/button"; // Verified location
 import { LoginButton } from '@/components/auth'; // Verified location
 
@@ -26,6 +26,9 @@ import {
 } from '@/features/betting/utils/submissionHelpers';
 // Corrected import to named export
 import { submitPredictions } from '@/services/submissionService'; 
+
+// Import sonner toast function
+import { toast } from "sonner"
 
 // Import Supabase client creator
 import { createClient } from '@/utils/supabase/client';
@@ -87,9 +90,57 @@ export default function Page() {
   const bettingCouponRef = useRef<BettingCouponRef>(null);
 
   // --- Handlers --- 
-  const handleSelectionChange = (newSelections: Selections) => {
-    console.log('Selection change detected:', newSelections);
-    setValidationErrors({});
+  // Updated to clear specific match error
+  const handleSelectionChange = (newSelections: Selections, matchId: string) => {
+    console.log('Selection change detected for match:', matchId, newSelections);
+    // Clear validation error for this specific match if it exists
+    setValidationErrors(prev => {
+      // Check if coupon errors exist and the specific match error exists
+      if (prev.coupon && prev.coupon[`match_${matchId}`]) { // Check for helper format
+        const updatedCouponErrors = { ...prev.coupon };
+        delete updatedCouponErrors[`match_${matchId}`]; // Remove the specific error
+        return { ...prev, coupon: updatedCouponErrors };
+      } else if (prev.coupon && prev.coupon[matchId]) { // Check for direct ID format (fallback)
+         const updatedCouponErrors = { ...prev.coupon };
+        delete updatedCouponErrors[matchId]; // Remove the specific error
+        return { ...prev, coupon: updatedCouponErrors };
+      }
+      return prev; // No change needed
+    });
+    // setSubmitStatus(null); // Don't clear general status on selection change
+  };
+
+  // Handler to clear specific questionnaire errors on change
+  const handlePredictionChange = (questionKey: PredictionKeys) => {
+    console.log('Prediction change detected for question:', questionKey);
+    const specificQuestionKeys: PredictionKeys[] = ['leagueWinner', 'lastPlace', 'bestGoalDifference', 'topScorer'];
+    setValidationErrors(prev => {
+      if (!prev.questionnaire) return prev; // No questionnaire errors to begin with
+
+      const updatedErrors = { ...prev }; // Copy the whole errors state
+      const updatedQuestionnaireErrors = { ...prev.questionnaire }; // Copy questionnaire errors
+
+      // Clear the specific error if it exists
+      if (updatedQuestionnaireErrors[questionKey]) {
+        delete updatedQuestionnaireErrors[questionKey];
+      }
+
+      // Check if all *specific* question errors are now cleared
+      const allSpecificErrorsCleared = specificQuestionKeys.every(
+        key => !updatedQuestionnaireErrors[key]
+      );
+
+      // If all specific errors are cleared, also clear the general form error
+      if (allSpecificErrorsCleared && updatedQuestionnaireErrors.form) {
+        delete updatedQuestionnaireErrors.form;
+      }
+
+      // Update the main errors state with the modified questionnaire errors
+      updatedErrors.questionnaire = updatedQuestionnaireErrors;
+
+      return updatedErrors;
+    });
+    // setSubmitStatus(null); // Don't clear general status on prediction change
   };
 
   const handleQuestionnaireToggle = () => {
@@ -150,12 +201,14 @@ export default function Page() {
     // Ensure refs are current
     if (!bettingCouponRef.current || !questionnaireRef.current) {
       console.error("Component refs not available");
-      setSubmitStatus({ type: 'error', message: 'An unexpected error occurred. Please try again.' });
+      // Restore on-page status message
+      setSubmitStatus({ type: 'error', message: 'An unexpected error occurred (refs). Please try again.' });
+      toast.error('An unexpected error occurred (refs). Please try again.'); // Add toast too
       return;
     }
 
     // Reset state
-    setSubmitStatus(null);
+    // setSubmitStatus(null); // No longer needed, toasts will provide feedback
     setValidationErrors({}); // Reset errors
     setIsSubmitting(true);
 
@@ -181,6 +234,8 @@ export default function Page() {
     if (!couponValidation.isValid || !answersValidation.isValid) {
       combinedErrors.summary = 'Please fix the errors highlighted below.';
       setValidationErrors(combinedErrors);
+      // Add validation error toast
+      toast.error("Please fix the errors highlighted below.");
       setIsSubmitting(false);
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
@@ -190,7 +245,9 @@ export default function Page() {
     // Ensure data is not null/undefined after validation check (shouldn't happen)
     if (!currentSelections || !currentAnswers) {
         console.error('Data missing after validation!');
+        // Restore on-page status message
         setSubmitStatus({ type: 'error', message: 'Internal error preparing data.' });
+        toast.error('Internal error preparing data.'); // Add toast too
         setIsSubmitting(false);
         return;
     }
@@ -212,6 +269,9 @@ export default function Page() {
         console.log('Combined submission successful:', submissionResult);
         // Use messages from the results if available
         const successMessage = submissionResult.answersResult.message || submissionResult.betsResult.message || 'Coupon and answers submitted successfully!';
+        // Show success toast
+        toast.success(successMessage);
+        // Restore on-page status message
         setSubmitStatus({ type: 'success', message: successMessage });
         // Optionally reset forms/selections here
         // bettingCouponRef.current.resetSelections();
@@ -219,16 +279,22 @@ export default function Page() {
       } else { 
         // This block might not be reached if the service throws on failure
         console.error('Submission response format unexpected:', submissionResult);
-        setSubmitStatus({ type: 'error', message: 'An unexpected response was received from the server.' });
+        // Show error toast for unexpected response
+        toast.error('An unexpected response was received from the server.');
         setValidationErrors(prev => ({ ...prev, summary: 'Unexpected server response.' }));
+        // Restore on-page status message
+        setSubmitStatus({ type: 'error', message: 'An unexpected response was received from the server.' });
       }
 
     } catch (error: unknown) {
       // Handle unexpected errors during the service call (e.g., network error or error thrown by submitPredictions)
       console.error('Unexpected submission error:', error);
       const message = error instanceof Error ? error.message : 'An unexpected network or server error occurred.';
-      setSubmitStatus({ type: 'error', message });
+      // Show error toast
+      toast.error(message);
       setValidationErrors(prev => ({ ...prev, summary: message }));
+      // Restore on-page status message
+      setSubmitStatus({ type: 'error', message });
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setIsSubmitting(false);
@@ -254,6 +320,13 @@ export default function Page() {
             Error loading questionnaire data: {questionnaireDataError}
           </div>
         )}
+        {/* --- MOVED: Generic Validation Summary --- */}
+        {validationErrors.summary && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm w-full" role="alert">
+            {validationErrors.summary}
+          </div>
+        )}
+        {/* --- END MOVED SECTION --- */}
         {/* Questionnaire Section (uses data from useQuestionnaireData hook) */}
         <Suspense fallback={<div>Loading Questionnaire...</div>}>
           <Questionnaire
@@ -261,18 +334,11 @@ export default function Page() {
             teams={teamsForQuestionnaire ?? []} // Use data from hook, provide fallback
             players={playersForQuestionnaire ?? []} // Use data from hook, provide fallback
             initialPredictions={initialPredictions}
-            onPredictionChange={() => { /* Handle if needed */ }}
+            onPredictionChange={handlePredictionChange} // Pass the handler
             onToggleVisibility={handleQuestionnaireToggle}
             validationErrors={validationErrors.questionnaire}
           />
         </Suspense>
-
-        {/* Use validationErrors state */}
-        {validationErrors.summary && (
-          <div className="p-4 rounded-md bg-red-100 text-red-700 mt-4">
-            {validationErrors.summary}
-          </div>
-        )}
 
         {/* Use fixtureError from useFixtures hook */}
         {fixtureError && (
@@ -286,7 +352,9 @@ export default function Page() {
             ref={bettingCouponRef}
             matches={matchesForCoupon} // Use matchesForCoupon from useFixtures hook
             initialSelections={initialSampleSelections}
-            onSelectionChange={handleSelectionChange}
+            onSelectionChange={(newSelections: Selections, matchId: string) => 
+              handleSelectionChange(newSelections, matchId)
+            }
             validationErrors={validationErrors.coupon}
           />
         </Suspense>

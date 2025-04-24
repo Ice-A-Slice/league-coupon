@@ -17,7 +17,7 @@ export interface BettingCouponRef {
 const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({ 
   matches, 
   initialSelections = {}, 
-  onSelectionChange, 
+  onSelectionChange = () => {}, // Add default empty function
   validationErrors
 }, ref) => {
   // State for current selections
@@ -91,10 +91,8 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
     setSelections(newSelections);
     
     // Call the callback function immediately if it exists
-    if (onSelectionChange) {
-      onSelectionChange(newSelections);
-    } else {
-    }
+    // Pass both the new selections object and the specific matchId that changed
+    onSelectionChange(newSelections, matchIdStr); 
   };
 
   // Sync state if initialSelections prop changes externally
@@ -122,13 +120,16 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
         return (
           <div 
             key={matchIdStr} 
-            className={`flex w-full flex-row items-center justify-between p-2 sm:p-3 border-b border-gray-200 last:border-b-0 hover:bg-gray-50 transition-colors duration-150 ${
-              hasError ? 'bg-red-50 border-l-4 border-l-red-500' : 
-              (isSelected && !hasError) ? 'bg-green-50 border-l-4 border-l-green-500' : ''
-            }`}
+            className={`flex w-full flex-row items-center justify-between border-b border-gray-200 last:border-b-0 hover:bg-gray-50 transition-colors duration-150 py-2 sm:py-3`}
           >
-            {/* Match Info - Left aligned team names on separate lines with equal styling */}
-            <div className="flex-1 mr-2 sm:mr-3 flex items-center">
+            {/* Match Info - Apply conditional background/border/padding here */}
+            <div className={`flex-1 mr-2 sm:mr-3 flex items-center rounded-md transition-colors duration-150 ${
+              hasError 
+                ? 'border-l-4 border-l-red-500 px-2 sm:px-3 py-1'
+                : (isSelected && !hasError) 
+                  ? 'border-l-4 border-l-green-500 px-2 sm:px-3 py-1'
+                  : 'px-2 sm:px-3 py-1'
+            }`}>
               <ValidationStatusIndicator 
                 hasError={hasError}
                 isValid={isSelected && !hasError}
@@ -144,11 +145,6 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
                 {hasError && (
                   <span className="text-xs text-red-500 mt-1 font-medium">{errors[matchIdStr]}</span>
                 )}
-                {isSelected && !hasError && (
-                  <span className="text-xs text-green-600 mt-1 font-medium">
-                    You selected: {currentSelection}
-                  </span>
-                )}
                 {!isSelected && !hasError && (
                   <span className="text-xs text-gray-400 mt-1">
                     Choose: 1 (Home win), X (Draw), or 2 (Away win)
@@ -156,8 +152,8 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
                 )}
               </div>
             </div>
-            {/* Selection Buttons using ToggleButton */}
-            <div className="flex space-x-1.5 sm:space-x-3 flex-shrink-0 self-center">
+            {/* Selection Buttons using ToggleButton - Add padding to match inner div's horizontal padding */}
+            <div className="flex space-x-1.5 sm:space-x-3 flex-shrink-0 self-center px-2 sm:px-3">
               {selectionLabels.map((label) => {
                 const isSelected = currentSelection === label;
                 return (
