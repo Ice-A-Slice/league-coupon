@@ -3,14 +3,38 @@
 import React, { useEffect, useRef, useState, Suspense } from 'react';
 import BettingCoupon, { BettingCouponRef } from '@/components/BettingCoupon/BettingCoupon';
 // Correct type imports from component definitions
-import type { Match, Selections, SelectionType } from "@/components/BettingCoupon/types"; // Correct type name
-import Questionnaire, { QuestionnaireRef as ImportedQuestionnaireRef, SeasonAnswers } from '@/components/Questionnaire/Questionnaire';
-import type { Team as QuestionnaireTeam, Player, Prediction } from "@/components/Questionnaire/types"; // Verified location
+import type { /* Match, */ Selections /*, SelectionType */ } from "@/components/BettingCoupon/types"; 
+import Questionnaire, { QuestionnaireRef as ImportedQuestionnaireRef } from '@/components/Questionnaire/Questionnaire'; // Removed SeasonAnswers import here
+// Removed unused type import
+// import type { SeasonAnswers } from "@/components/Questionnaire/Questionnaire";
+import type { /* Team as QuestionnaireTeam, Player, */ Prediction, PredictionKeys } from "@/components/Questionnaire/types"; 
 import { Button } from "@/components/ui/button"; // Verified location
 import { LoginButton } from '@/components/auth'; // Verified location
 
+// Import the new hooks
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import { useFixtures } from '@/features/betting/hooks/useFixtures'; // Import useFixtures
+// Import useQuestionnaireData
+import { useQuestionnaireData } from '@/features/questionnaire/hooks/useQuestionnaireData';
+
+// Import helpers and service
+import {
+  validateCouponSelections,
+  validateQuestionnaireAnswers,
+  prepareBetSubmissionData,
+  prepareAnswersSubmissionData
+} from '@/features/betting/utils/submissionHelpers';
+// Corrected import to named export
+import { submitPredictions } from '@/services/submissionService'; 
+
+// Import sonner toast function
+import { toast } from "sonner"
+
+// Import Supabase client creator
 import { createClient } from '@/utils/supabase/client';
-import type { User, AuthChangeEvent, Session } from "@supabase/supabase-js";
+
+// Import the new Spinner component
+import { Spinner } from "@/components/ui/spinner"; 
 
 // Use a non-mock initial state for selections
 const initialSampleSelections: Selections = {};
@@ -34,282 +58,277 @@ interface ErrorsState {
 
 // Refactored component: Removed ServerComponentWrapper and initialProps
 export default function Page() {
-  // State initialization no longer relies on props
-  // const [props, setProps] = useState(initialProps); // Removed
-  const [isLoading, setIsLoading] = useState(false);
-  // Renamed state for combined submission
+  // --- Constants for Data Fetching (Example) ---
+  // TODO: Make these dynamic if needed (e.g., based on user selection or route)
+  const leagueId = 39;
+  const seasonYear = 2024;
+  const roundName = "Regular Season - 35"; // Example round
+
+  // --- Other State --- 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-
-  // State for selections and predictions - Initial state uses imported value
-  const [selections, setSelections] = useState<Selections>(initialSampleSelections);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [showQuestionnaire, setShowQuestionnaire] = useState(true);
   const [isQuestionnaireContentVisible, setIsQuestionnaireContentVisible] = useState(true);
-  // Use the new structured error state
   const [validationErrors, setValidationErrors] = useState<ErrorsState>({});
 
-  // Log initial selections on mount
-  useEffect(() => {
-    console.log('Initial selections loaded:', initialSampleSelections);
-    console.log('Current selections state:', selections);
-  }, [selections]);
+  // --- Use Custom Hooks --- 
+  const { user, isLoading: authLoading } = useAuth();
+  // Call useFixtures hook
+  const { 
+    matches: matchesForCoupon, // Rename to match existing usage 
+    isLoading: fixtureLoading, // Rename to match existing usage
+    error: fixtureError,       // Rename to match existing usage
+    refetch: refetchFixtures  // Add refetch back for listener
+  } = useFixtures({ leagueId, season: seasonYear, round: roundName });
 
-  // Create ref for the questionnaire component with proper IMPORTED type
+  // Call useQuestionnaireData hook
+  const { 
+    teams: teamsForQuestionnaire,           // Rename to match existing usage
+    players: playersForQuestionnaire,         // Rename to match existing usage
+    isLoading: questionnaireDataLoading,    // Rename to match existing usage
+    error: questionnaireDataError,           // Rename to match existing usage
+  } = useQuestionnaireData({ leagueId, season: seasonYear });
+
+  // --- Refs --- 
   const questionnaireRef = useRef<ImportedQuestionnaireRef>(null);
-
-  // Create ref for the betting coupon component with proper IMPORTED type
   const bettingCouponRef = useRef<BettingCouponRef>(null);
 
-  // Initialize user state to null
-  const [user, setUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState(true); // Separate loading state for auth
+  // --- Handlers --- 
+  // Updated to clear specific match error
+  const handleSelectionChange = (newSelections: Selections, matchId: string) => {
+    console.log('Selection change detected for match:', matchId, newSelections);
+    const specificQuestionKeys: PredictionKeys[] = ['leagueWinner', 'lastPlace', 'bestGoalDifference', 'topScorer']; // Needed for check
+    // Clear validation error for this specific match if it exists
+    setValidationErrors(prev => {
+      const updatedErrors = { ...prev }; // Copy the whole errors state
 
-  // Add state for the fetched matches
-  const [matchesForCoupon, setMatchesForCoupon] = useState<Match[]>([]); // Use Match type from BettingCoupon types
-  const [fixtureLoading, setFixtureLoading] = useState(true); // Loading state for fixtures
-  const [fixtureError, setFixtureError] = useState<string | null>(null); // Error state for fixtures
+      // --- Coupon Error Handling --- 
+      const updatedCouponErrors = prev.coupon ? { ...prev.coupon } : {};
+      let specificCouponErrorCleared = false;
+      const matchKey1 = `match_${matchId}`;
+      const matchKey2 = matchId; // Check direct ID format too
 
-  // Questionnaire Data State
-  const [teamsForQuestionnaire, setTeamsForQuestionnaire] = useState<QuestionnaireTeam[]>([]); // Use Team type from Questionnaire types
-  const [playersForQuestionnaire, setPlayersForQuestionnaire] = useState<Player[]>([]);
-  const [questionnaireDataLoading, setQuestionnaireDataLoading] = useState(true);
-  const [questionnaireDataError, setQuestionnaireDataError] = useState<string | null>(null);
+      if (updatedCouponErrors[matchKey1]) {
+        delete updatedCouponErrors[matchKey1];
+        specificCouponErrorCleared = true;
+      } else if (updatedCouponErrors[matchKey2]) {
+        delete updatedCouponErrors[matchKey2];
+        specificCouponErrorCleared = true;
+      }
 
-  // Handler for selection changes
-  const handleSelectionChange = (newSelections: Selections) => {
-    console.log('Selection change detected:', newSelections);
-    setSelections({...newSelections});
-    // Reset validation errors on any change for simplicity, or be more granular
-    setValidationErrors({});
+      updatedErrors.coupon = updatedCouponErrors;
+      
+      // --- Check if ALL errors are now cleared --- 
+      if (specificCouponErrorCleared) { // Only check if we actually cleared something
+         const remainingCouponErrors = Object.keys(updatedCouponErrors).filter(k => k !== 'form').length === 0;
+        const remainingQuestionnaireErrors = !updatedErrors.questionnaire || 
+                                            specificQuestionKeys.every(key => !updatedErrors.questionnaire![key]);
+
+        if (remainingCouponErrors && remainingQuestionnaireErrors && updatedErrors.summary) {
+          console.log("TEST_DEBUG: Clearing summary via handleSelectionChange");
+          delete updatedErrors.summary; // Clear summary if all specific errors gone
+        }
+      }
+
+      return updatedErrors; 
+    });
+    // setSubmitStatus(null); // Don't clear general status on selection change
   };
 
-  // Handler for questionnaire content toggle
+  // Handler to clear specific questionnaire errors on change
+  const handlePredictionChange = (questionKey: PredictionKeys) => {
+    console.log('Prediction change detected for question:', questionKey);
+    const specificQuestionKeys: PredictionKeys[] = ['leagueWinner', 'lastPlace', 'bestGoalDifference', 'topScorer'];
+    setValidationErrors(prev => {
+      if (!prev.questionnaire) return prev; // No questionnaire errors to begin with
+
+      const updatedErrors = { ...prev }; // Copy the whole errors state
+      const updatedQuestionnaireErrors = { ...prev.questionnaire }; // Copy questionnaire errors
+
+      // Clear the specific error if it exists
+      if (updatedQuestionnaireErrors[questionKey]) {
+        delete updatedQuestionnaireErrors[questionKey];
+      }
+
+      // Check if all *specific* question errors are now cleared
+      const allSpecificErrorsCleared = specificQuestionKeys.every(
+        key => !updatedQuestionnaireErrors[key]
+      );
+
+      // If all specific errors are cleared, also clear the general form error
+      if (allSpecificErrorsCleared && updatedQuestionnaireErrors.form) {
+        delete updatedQuestionnaireErrors.form;
+      }
+
+      // --- Check if ALL errors are now cleared --- 
+      const remainingCouponErrors = !updatedErrors.coupon || Object.keys(updatedErrors.coupon).filter(k => k !== 'form').length === 0;
+      // Re-check questionnaire specific errors after potential form error removal
+      const remainingQuestionnaireErrors = specificQuestionKeys.every(key => !updatedQuestionnaireErrors[key]);
+
+      if (remainingCouponErrors && remainingQuestionnaireErrors && updatedErrors.summary) {
+         console.log("TEST_DEBUG: Clearing summary via handlePredictionChange");
+         delete updatedErrors.summary; // Clear summary if all specific errors gone
+      }
+
+      // Update the main errors state with the modified questionnaire errors
+      updatedErrors.questionnaire = updatedQuestionnaireErrors;
+
+      return updatedErrors;
+    });
+    // setSubmitStatus(null); // Don't clear general status on prediction change
+  };
+
   const handleQuestionnaireToggle = () => {
     setIsQuestionnaireContentVisible(!isQuestionnaireContentVisible);
   };
 
-  // Authentication useEffect - Sets user state directly
+  // --- Effects --- 
+
+  // Realtime listener for bets changes
   useEffect(() => {
-    const client = createClient();
-    // Set loading true initially, outside the async/listener logic
-    setAuthLoading(true);
+    // Only run if the user is logged in and refetch function is available
+    if (!user?.id || !refetchFixtures) return;
 
-    // Perform initial user check
-    client.auth.getUser().then(({ data: { user: initialUser } }) => {
-        setUser(initialUser ?? null); // Set user state directly
-        setAuthLoading(false); // Set loading false after initial check
-    });
+    console.log('Setting up realtime listener for user:', user.id);
+    const supabase = createClient();
 
-    // Set up the listener
-    const { data: { subscription } } = client.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
-        const currentUser = session?.user ?? null;
-        setUser(currentUser); // Update user state on change
-        // We don't need to manage authLoading here anymore, initial check handles it
-    });
-
-    // Cleanup listener on unmount
-    return () => {
-        subscription?.unsubscribe();
-    };
-  }, []); // Use empty dependency array to run once on mount
-
-
-  // --- useEffect for Fetching ALL Data (Fixtures, Teams, Players) --- Corrected paths
-  useEffect(() => {
-    async function loadAllData() {
-      setFixtureLoading(true);
-      setQuestionnaireDataLoading(true);
-      setFixtureError(null);
-      setQuestionnaireDataError(null);
-
-      const leagueId = 39;
-      const seasonYear = 2024;
-      const roundName = "Regular Season - 35";
-
-      try {
-        // Fetch all data concurrently using direct API calls
-        const [fixtureRes, teamsRes, playersRes] = await Promise.all([
-          fetch(`/api/fixtures?league=${leagueId}&season=${seasonYear}&round=${encodeURIComponent(roundName)}`),
-          fetch(`/api/teams?league=${leagueId}&season=${seasonYear}`),
-          fetch(`/api/players?league=${leagueId}&season=${seasonYear}`)
-        ]);
-
-        // Process Fixtures
-        if (!fixtureRes.ok) {
-          const errorData = await fixtureRes.json().catch(() => ({}));
-          throw new Error(`Fixtures fetch failed: ${errorData.error || fixtureRes.statusText}`);
-        }
-        const fixtureData: Match[] = await fixtureRes.json(); // Use Match type from BettingCoupon
-        setMatchesForCoupon(fixtureData || []);
-        console.log('Client-side fetch: Successfully fetched fixtures.', fixtureData);
-
-        // Process Teams
-        if (!teamsRes.ok) {
-          const errorData = await teamsRes.json().catch(() => ({}));
-          throw new Error(`Teams fetch failed: ${errorData.error || teamsRes.statusText}`);
-        }
-        const teamsData: QuestionnaireTeam[] = await teamsRes.json(); // Use QuestionnaireTeam type
-        setTeamsForQuestionnaire(teamsData || []);
-        console.log('Client-side fetch: Successfully fetched teams.', teamsData);
-
-        // Process Players
-        if (!playersRes.ok) {
-          const errorData = await playersRes.json().catch(() => ({}));
-          throw new Error(`Players fetch failed: ${errorData.error || playersRes.statusText}`);
-        }
-        const playersData: Player[] = await playersRes.json();
-        setPlayersForQuestionnaire(playersData || []);
-        console.log('Client-side fetch: Successfully fetched players.', playersData);
-
-      } catch (error: unknown) {
-        console.error('Client-side data fetch error:', error);
-        const message = error instanceof Error ? error.message : 'Failed to load data.';
-        if (message.includes('Fixtures')) setFixtureError(message);
-        if (message.includes('Teams') || message.includes('Players')) setQuestionnaireDataError(message);
-        if (!message.includes('Fixtures') && !message.includes('Teams') && !message.includes('Players')){
-          setFixtureError('Failed to load fixture data.');
-          setQuestionnaireDataError('Failed to load questionnaire data.');
-        }
-        setMatchesForCoupon([]);
-        setTeamsForQuestionnaire([]);
-        setPlayersForQuestionnaire([]);
-      } finally {
-        setFixtureLoading(false);
-        setQuestionnaireDataLoading(false);
-      }
-    }
-
-    loadAllData();
-  }, []); // Fetch all data once on mount
-
-  // Realtime listener useEffect - Simplified dependencies
-  useEffect(() => {
-    const client = createClient();
-    const channel = client
-      .channel('realtime fixtures')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'fixtures' },
-        async (payload) => {
-          console.log('Realtime Change received!', payload);
-          if (payload.new) {
-            setIsLoading(true);
-            // Re-fetch data or update state based on payload
-            // Example: Re-fetch all fixtures for simplicity
-            try {
-                const fixtureResponse = await fetch(`/api/fixtures?league=39&season=2024&round=${encodeURIComponent("Regular Season - 35")}`);
-                if (!fixtureResponse.ok) throw new Error('Failed to re-fetch fixtures');
-                const fixturesData = await fixtureResponse.json();
-                setMatchesForCoupon(fixturesData || []);
-                // Removed setProps update
-            } catch (err) {
-                console.error("Error re-fetching fixtures after realtime update:", err);
-            }
-            setIsLoading(false);
-          }
+    const channel = supabase
+      .channel(`bets_changes_for_${user.id}`)
+      .on(
+        'postgres_changes',
+        { 
+          event: '*' as const, // Listen to INSERT, UPDATE, DELETE
+          schema: 'public', 
+          table: 'bets', 
+          filter: `user_id=eq.${user.id}` // Filter for the current user
+        },
+        (payload) => {
+          console.log('Realtime bet change received!', payload);
+          // Instead of directly manipulating state, call the refetch function from the hook.
+          // This assumes the /api/fixtures endpoint might reflect user's bets or
+          // that refetching fixtures is the desired action per Task 6 description.
+          refetchFixtures(); 
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Successfully subscribed to bets changes for user:', user.id);
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.error('Realtime subscription error:', status, err);
+          // Optional: Add error handling, e.g., notify user, retry subscription
+        }
+      });
 
+    // Cleanup function to remove the channel subscription when the component unmounts
+    // or when user.id or refetchFixtures changes.
     return () => {
-      client.removeChannel(channel);
-    };
-  }, []); // Simplified dependency array
-
-
-  // Combined handler for submitting Coupon and Questionnaire
-  const handleCombinedSubmit = async () => {
-    if (!bettingCouponRef.current || !questionnaireRef.current) return;
-
-    setSubmitStatus(null);
-    setValidationErrors({});
-    const combinedErrors: ErrorsState = {};
-    let couponData: Selections | undefined;
-    const answersData: SeasonAnswers[] | undefined = questionnaireRef.current.getAnswers();
-    let isCouponValid = false;
-    let isQuestionnaireValid = false;
-
-    // 1. Validate Coupon
-    const { isValid: couponIsValid, errors: couponErrors } = bettingCouponRef.current.validate();
-    if (!couponIsValid) {
-      console.error('Coupon Validation failed', couponErrors);
-      combinedErrors.coupon = couponErrors ?? { form: 'Coupon is invalid' };
-    } else {
-      couponData = bettingCouponRef.current.getSelections();
-      if (!couponData || Object.keys(couponData).length === 0) {
-        console.warn('Coupon valid, but no selections found.');
-        combinedErrors.coupon = { form: 'No selections made.' };
-      } else {
-        isCouponValid = true;
+      if (channel) {
+        console.log('Removing realtime listener for user:', user.id);
+        supabase.removeChannel(channel).catch(error => {
+          console.error('Error removing Supabase channel:', error);
+        });
       }
+    };
+  }, [user?.id, refetchFixtures]); // Depend on user ID and the refetch function itself
+
+  // Combined handler for submitting Coupon and Questionnaire (Refactored)
+  const handleCombinedSubmit = async () => {
+    // Ensure refs are current
+    if (!bettingCouponRef.current || !questionnaireRef.current) {
+      console.error("Component refs not available");
+      // Restore on-page status message
+      setSubmitStatus({ type: 'error', message: 'An unexpected error occurred (refs). Please try again.' });
+      toast.error('An unexpected error occurred (refs). Please try again.'); // Add toast too
+      return;
     }
 
-    // 2. Validate Questionnaire
-    const allAnswered = answersData?.every(ans => ans.answered_team_id !== null || ans.answered_player_id !== null);
-    if (!allAnswered || !answersData || answersData.length < 4) {
-        console.error('Questionnaire Validation failed', answersData);
-        combinedErrors.questionnaire = { form: 'Please answer all season questions.' };
-    } else {
-        isQuestionnaireValid = true;
+    // Reset state
+    // setSubmitStatus(null); // No longer needed, toasts will provide feedback
+    setValidationErrors({}); // Reset errors
+    setIsSubmitting(true);
+
+    // 1. Get Data from Components
+    const currentSelections = bettingCouponRef.current.getSelections();
+    const currentAnswers = questionnaireRef.current.getAnswers();
+    const currentMatches = matchesForCoupon || []; // Get matches from useFixtures hook
+
+    // 2. Validate Data using Helpers
+    const couponValidation = validateCouponSelections(currentSelections, currentMatches);
+    const answersValidation = validateQuestionnaireAnswers(currentAnswers);
+
+    // 3. Aggregate Errors
+    const combinedErrors: ErrorsState = {};
+    if (!couponValidation.isValid) {
+      combinedErrors.coupon = couponValidation.errors ?? { form: 'Coupon is invalid' };
+    }
+    if (!answersValidation.isValid) {
+      combinedErrors.questionnaire = answersValidation.errors ?? { form: 'Questionnaire is invalid' };
     }
 
-    // 3. Check Overall Validity & Update Summary Error
-    if (!isCouponValid || !isQuestionnaireValid) {
-      combinedErrors.summary = 'Please fix all errors before submitting.';
+    // 4. Check Overall Validity & Update UI
+    if (!couponValidation.isValid || !answersValidation.isValid) {
+      combinedErrors.summary = 'Please fix the errors highlighted below.';
+      console.log('TEST_DEBUG: Validation failed. Setting errors:', JSON.stringify(combinedErrors)); // Add debug log
       setValidationErrors(combinedErrors);
+      toast.error("Please fix the errors highlighted below.");
+      setIsSubmitting(false);
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
-    // 4. Prepare and Submit if both are valid
-    if (!couponData || !answersData) {
-      console.error('Data retrieval failed after validation passed. This should not happen.');
-      setSubmitStatus({ type: 'error', message: 'Internal error preparing data.' });
-      return;
+    // 5. Prepare Data for Submission using Helpers
+    // Ensure data is not null/undefined after validation check (shouldn't happen)
+    if (!currentSelections || !currentAnswers) {
+        console.error('Data missing after validation!');
+        // Restore on-page status message
+        setSubmitStatus({ type: 'error', message: 'Internal error preparing data.' });
+        toast.error('Internal error preparing data.'); // Add toast too
+        setIsSubmitting(false);
+        return;
     }
+    const betsPayload = prepareBetSubmissionData(currentSelections);
+    const answersPayload = prepareAnswersSubmissionData(currentAnswers);
 
-    setIsSubmitting(true);
-    let submissionError = null;
-
+    // 6. Call Submission Service
     try {
-      // Submit Bets
-      const bets = Object.entries(couponData).map(([fixtureId, prediction]) => ({
-        fixture_id: parseInt(fixtureId, 10),
-        prediction: prediction as SelectionType,
-      }));
-      const betsResponse = await fetch('/api/bets', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(bets),
+      console.log('Submitting data:', { betsPayload, answersPayload });
+      // Assuming submissionService handles both bets and answers
+      // Adjust the call signature based on the actual service implementation
+      const submissionResult = await submitPredictions({ 
+          couponData: currentSelections, // Assuming submitPredictions expects this structure
+          answersData: currentAnswers,  // Assuming submitPredictions expects this structure
       });
-      const betsResult = await betsResponse.json();
-      if (!betsResponse.ok) {
-        submissionError = `Coupon submission failed: ${betsResult.error || 'Unknown error'}`;
-        throw new Error(submissionError);
+
+      // Handle potential partial success if the service indicates it
+      if (submissionResult.betsResult && submissionResult.answersResult) {
+        console.log('Combined submission successful:', submissionResult);
+        // Use messages from the results if available
+        const successMessage = submissionResult.answersResult.message || submissionResult.betsResult.message || 'Coupon and answers submitted successfully!';
+        // Show success toast
+        toast.success(successMessage);
+        // Restore on-page status message
+        setSubmitStatus({ type: 'success', message: successMessage });
+        // Optionally reset forms/selections here
+        // bettingCouponRef.current.resetSelections();
+        // questionnaireRef.current.resetAnswers(); 
+      } else { 
+        // This block might not be reached if the service throws on failure
+        console.error('Submission response format unexpected:', submissionResult);
+        // Show error toast for unexpected response
+        toast.error('An unexpected response was received from the server.');
+        setValidationErrors(prev => ({ ...prev, summary: 'Unexpected server response.' }));
+        // Restore on-page status message
+        setSubmitStatus({ type: 'error', message: 'An unexpected response was received from the server.' });
       }
-      console.log('Coupon submission successful:', betsResult);
 
-      // Submit Season Answers (only if coupon succeeded)
-      const answersResponse = await fetch('/api/season-answers', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(answersData),
-      });
-      const answersResult = await answersResponse.json();
-      if (!answersResponse.ok) {
-        submissionError = `Season answers submission failed: ${answersResult.error || 'Unknown error'}`;
-        // Note: Bets might have succeeded, but answers failed. Consider rollback or notification.
-        throw new Error(submissionError);
-      }
-      console.log('Season answers submission successful:', answersResult);
-
-      // Both succeeded
-      setSubmitStatus({ type: 'success', message: 'Coupon and answers submitted successfully!' });
-
-    } catch (error) {
-      console.error('Combined submission error:', error);
-      const errorMsg = submissionError || (error as Error).message || 'An error occurred during submission.';
-      setSubmitStatus({ type: 'error', message: errorMsg });
-      setValidationErrors(prev => ({ ...prev, summary: errorMsg }));
+    } catch (error: unknown) {
+      // Handle unexpected errors during the service call (e.g., network error or error thrown by submitPredictions)
+      console.error('Unexpected submission error:', error);
+      const message = error instanceof Error ? error.message : 'An unexpected network or server error occurred.';
+      // Show error toast
+      toast.error(message);
+      setValidationErrors(prev => ({ ...prev, summary: message }));
+      // Restore on-page status message
+      setSubmitStatus({ type: 'error', message });
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setIsSubmitting(false);
@@ -319,70 +338,96 @@ export default function Page() {
   // Check if we're in a test environment
   const isTestEnvironment = process.env.NODE_ENV === 'test';
 
-  // Combine loading states - Use local component state
-  // Use authLoading directly here instead of relying on potentially stale props.user
-  if ((authLoading || fixtureLoading || questionnaireDataLoading) && !isTestEnvironment) return <p>Laddar...</p>;
+  // --- Render Logic --- 
 
-  // JSX return block - Use the corrected version provided previously
+  // Display a centered spinner while essential data is loading
+  if ((authLoading || fixtureLoading || questionnaireDataLoading) && !isTestEnvironment) {
+    return (
+      <div className="flex flex-1 justify-center items-center min-h-screen">
+        <Spinner size={32} className="mr-2" />
+        <p className="text-lg">Laddar...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 w-full flex flex-col gap-10 items-center px-4 py-8">
       <LoginButton />
       <div className="w-full max-w-4xl flex flex-col gap-8">
         <h1 className="text-3xl font-bold text-center">League Coupon</h1>
 
-        {/* Display Questionnaire Data Error */}
-        {questionnaireDataError && (
-          <div className="p-4 rounded-md bg-red-100 text-red-700 mt-4">
-            Error loading questionnaire data: {questionnaireDataError}
-          </div>
-        )}
-        {/* Questionnaire Section */}
-        <Suspense fallback={<div>Loading Questionnaire...</div>}>
-          <Questionnaire
-            ref={questionnaireRef}
-            teams={teamsForQuestionnaire}
-            players={playersForQuestionnaire}
-            initialPredictions={initialPredictions}
-            onPredictionChange={() => { /* Handle if needed */ }}
-            onToggleVisibility={handleQuestionnaireToggle}
-          />
-        </Suspense>
-
-        {/* Display General Validation Summary Error */}
+        {/* --- MOVED: Generic Validation Summary --- */}
         {validationErrors.summary && (
-          <div className="p-4 rounded-md bg-red-100 text-red-700 mt-4">
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm w-full" role="alert">
             {validationErrors.summary}
           </div>
         )}
-
-        {/* Display Fixture Data Error */}
-        {fixtureError && (
-          <div className="p-4 rounded-md bg-red-100 text-red-700 mt-4">
-            Error loading fixtures: {fixtureError}
+        {/* --- Consolidated Hook Error Display --- */}
+        {(fixtureError || questionnaireDataError) && (
+          <div className="mb-4 space-y-2"> {/* Container for multiple hook errors */}
+            {fixtureError && (
+               <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm w-full" role="alert">
+                 Fixtures Error: {fixtureError}
+               </div>
+            )}
+             {questionnaireDataError && (
+               <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm w-full" role="alert">
+                 Questionnaire Data Error: {questionnaireDataError}
+               </div>
+            )}
           </div>
         )}
-        {/* Betting Coupon Section */}
-        <Suspense fallback={<div>Loading Betting Coupon...</div>}>
-          <BettingCoupon
-            ref={bettingCouponRef}
-            matches={matchesForCoupon} // Use Match type from coupon
-            initialSelections={initialSampleSelections}
-            onSelectionChange={handleSelectionChange}
-          />
+        {/* --- END Consolidated Errors --- */}
+        {/* Questionnaire Section (uses data from useQuestionnaireData hook) */}
+        <Suspense fallback={<div className="flex justify-center py-4"><Spinner /></div>}> 
+          {/* Only render Questionnaire if there was no error fetching its data */} 
+          {!questionnaireDataError && (
+            <Questionnaire
+              ref={questionnaireRef}
+              teams={teamsForQuestionnaire ?? []} 
+              players={playersForQuestionnaire ?? []} 
+              initialPredictions={initialPredictions}
+              onPredictionChange={handlePredictionChange} 
+              onToggleVisibility={handleQuestionnaireToggle}
+              validationErrors={validationErrors.questionnaire}
+            />
+          )}
         </Suspense>
 
-        {/* Combined Submit Button and Status Display */}
+        {/* Betting Coupon Section */} 
+        <Suspense fallback={<div className="flex justify-center py-4"><Spinner /></div>}> 
+          {/* Only render BettingCoupon if there was no error fetching fixtures */} 
+          {!fixtureError && (
+            <BettingCoupon
+              ref={bettingCouponRef}
+              matches={matchesForCoupon} 
+              initialSelections={initialSampleSelections}
+              onSelectionChange={(newSelections: Selections, matchId: string) => 
+                handleSelectionChange(newSelections, matchId)
+              }
+              validationErrors={validationErrors.coupon}
+            />
+          )}
+        </Suspense>
+
+        {/* Use submitStatus state */}
         {submitStatus && (
           <div className={`p-4 my-2 rounded-md ${submitStatus.type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
             {submitStatus.message}
           </div>
         )}
         <Button
-          onClick={handleCombinedSubmit} // Use the new combined handler
-          disabled={isSubmitting || isLoading || !user} // Use renamed loading state
+          onClick={handleCombinedSubmit}
+          disabled={
+            isSubmitting || 
+            authLoading || 
+            !user || 
+            !!fixtureError || // Disable if fixtures failed to load
+            !!questionnaireDataError // Disable if questionnaire data failed to load
+          } 
           className="w-full md:w-auto self-center mt-4"
         >
-          {isSubmitting || isLoading ? 'Submitting...' : 'Submit Coupon'} {/* Updated button text */}
+          {(isSubmitting || authLoading) ? 'Submitting...' : 'Submit Coupon'} 
         </Button>
 
       </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import BettingCoupon, { BettingCouponRef } from '../BettingCoupon';
 import type { Match, Selections } from '../types';
 
@@ -76,9 +76,7 @@ describe('BettingCoupon', () => {
     fireEvent.click(homeWinButton);
     
     // Check that the selection was removed
-    expect(handleSelectionChange).toHaveBeenCalledWith({
-      '2': 'X'
-    });
+    expect(handleSelectionChange).toHaveBeenCalledWith({ '2': 'X' }, '1');
   });
   
   it('exposes validation function via ref', async () => {
@@ -125,84 +123,75 @@ describe('BettingCoupon', () => {
     expect(typeof validResult?.isValid).toBe('boolean');
   });
   
-  it('renders error messages for invalid selections', async () => {
+  it('applies error styling when validation errors are passed', () => {
     // Create a ref
     const ref = React.createRef<BettingCouponRef>();
     
+    // Mock errors passed from parent
+    const mockErrors = {
+      'match_1': 'Error for match 1',
+      'match_3': 'Error for match 3'
+    };
+
     render(
       <BettingCoupon 
         ref={ref}
         matches={mockMatches} 
+        validationErrors={mockErrors} // Pass mock errors
       />
     );
-    
-    // Trigger validation
-    await act(async () => {
-      ref.current?.validate();
-    });
-    
-    // Find error messages by checking specific message content within span elements
-    await waitFor(() => {
-      const errorSpans = screen.getAllByText((content, element) => {
-        return element?.tagName.toLowerCase() === 'span' && 
-               content.includes('Please select a result for');
-      });
-      
-      // We should have one error span per match
-      expect(errorSpans.length).toBe(3);
-      
-      // Verify specific team names in the error messages
-      expect(errorSpans[0].textContent).toContain('Real Madrid vs Arsenal');
-      expect(errorSpans[1].textContent).toContain('Inter vs Bayern München');
-      expect(errorSpans[2].textContent).toContain('Newcastle vs Crystal Palace');
-    });
+
+    // Get the rows
+    const matchRows = screen.getAllByText(/Real Madrid|Inter|Newcastle/).map(el => el.closest('div.flex.w-full'));
+
+    // Find the inner divs containing the status indicator and team names
+    const innerDivs = matchRows.map(row => row?.querySelector('div.flex-1.flex.items-center'));
+
+    // Match 1 row (index 0)
+    expect(innerDivs[0]).toHaveClass('border-l-red-500'); // Check inner div
+
+    // Match 2 row (index 1) - Should NOT have error styling
+    expect(innerDivs[1]).not.toHaveClass('border-l-red-500'); // Check inner div
+
+    // Match 3 row (index 2)
+    expect(innerDivs[2]).toHaveClass('border-l-red-500'); // Check inner div
   });
   
-  it('displays enhanced error UI with summary and styled matches', async () => {
+  it('applies error styling but does not display summary text internally', () => {
     // Create a ref
     const ref = React.createRef<BettingCouponRef>();
+    const mockErrors = {
+      form: 'General form error from parent',
+      match_2: 'Error for match 2'
+    };
     
     render(
       <BettingCoupon 
         ref={ref}
         matches={mockMatches} 
+        validationErrors={mockErrors}
       />
     );
+
+    // Check that the error summary passed via props IS NOT displayed by this component
+    const summaryHeading = screen.queryByText('General form error from parent');
+    expect(summaryHeading).not.toBeInTheDocument();
+
+    const summaryHeadingDefault = screen.queryByText('Please make selections for all matches:'); // Check old message too
+    expect(summaryHeadingDefault).not.toBeInTheDocument();
     
-    // Trigger validation to generate errors
-    await act(async () => {
-      ref.current?.validate();
-    });
+    // Check that specific error message TEXT is NOT displayed by this component
+    const specificErrorText = screen.queryByText('Error for match 2');
+    expect(specificErrorText).not.toBeInTheDocument();
     
-    // Check that the error summary is displayed
-    const summaryHeading = screen.getByText('Please make selections for all matches:');
-    expect(summaryHeading).toBeInTheDocument();
-    
-    // Check for error list items in the summary
-    const errorListItems = screen.getAllByRole('listitem');
-    expect(errorListItems.length).toBe(3); // One per match
-    
-    // Verify team names in error list
-    expect(errorListItems[0].textContent).toContain('Real Madrid vs Arsenal');
-    expect(errorListItems[1].textContent).toContain('Inter vs Bayern München');
-    expect(errorListItems[2].textContent).toContain('Newcastle vs Crystal Palace');
-    
-    // Check for inline error messages in each match row
-    const errorSpans = screen.getAllByText((content, element) => {
-      return element?.tagName.toLowerCase() === 'span' && 
-             content.includes('Please select a result for');
-    });
-    expect(errorSpans.length).toBe(3); // One per match
-    
-    // Check that error highlighting is applied to team names (text-red-700 style)
-    const highlightedTeamNames = screen.getAllByText((content, element) => {
-      return element?.tagName.toLowerCase() === 'span' && 
-            ['Real Madrid', 'Inter', 'Newcastle', 'Arsenal', 'Bayern München', 'Crystal Palace'].includes(content) && 
-            element.className.includes('text-red-700');
-    });
-    
-    // Should have 6 highlighted team names (both home and away for each match)
-    expect(highlightedTeamNames.length).toBe(6);
+    // Check the correct rows have the styling
+    const matchRows = screen.getAllByText(/Real Madrid|Inter|Newcastle/).map(el => el.closest('div.flex.w-full'));
+    // Find the inner divs containing the status indicator and team names
+    const innerDivs = matchRows.map(row => row?.querySelector('div.flex-1.flex.items-center'));
+
+    expect(innerDivs[0]).not.toHaveClass('border-l-red-500'); // Check inner div
+    expect(innerDivs[1]).toHaveClass('border-l-red-500');    // Check inner div
+    expect(innerDivs[2]).not.toHaveClass('border-l-red-500'); // Check inner div
   });
   
   it('maintains multiple selections across different matches', () => {

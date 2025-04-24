@@ -34,13 +34,39 @@ export function debounce<T extends (...args: unknown[]) => unknown>(
 }
 
 /**
- * Filter an array of Combobox options based on a search term
+ * Filter an array of Combobox options based on a search term.
+ * Allows filtering by 'contains', 'startsWith', or a simple 'fuzzy' match 
+ * (checks if search term characters appear in the option label in the correct order).
  * 
- * @param options - The array of options to filter
- * @param searchTerm - The search term to filter by
- * @param filterMode - The filtering mode to use
- * @param caseSensitive - Whether to use case-sensitive filtering
- * @returns An array of filtered options
+ * @param {ComboboxOption[]} options - The array of options to filter (each object should have at least a `label` property).
+ * @param {string} searchTerm - The search term to filter by.
+ * @param {'contains' | 'startsWith' | 'fuzzy'} [filterMode='contains'] - The filtering mode:
+ *   - 'contains': Default. Checks if the option label includes the search term.
+ *   - 'startsWith': Checks if the option label begins with the search term.
+ *   - 'fuzzy': Checks if all characters of the search term appear in the option label in the correct sequence, 
+ *                though not necessarily contiguously. E.g., "brn" would match "Bournemouth".
+ * @param {boolean} [caseSensitive=false] - Whether the filtering should be case-sensitive.
+ * @returns {ComboboxOption[]} An array of filtered options matching the criteria.
+ * 
+ * @example
+ * const options = [
+ *   { value: '1', label: 'Apple' },
+ *   { value: '2', label: 'Banana' },
+ *   { value: '3', label: 'Apricot' },
+ *   { value: '4', label: 'Avocado' }
+ * ];
+ * 
+ * filterComboboxOptions(options, 'Ap'); 
+ * // Returns: [{ value: '1', label: 'Apple' }, { value: '3', label: 'Apricot' }]
+ * 
+ * filterComboboxOptions(options, 'Ap', 'startsWith'); 
+ * // Returns: [{ value: '1', label: 'Apple' }, { value: '3', label: 'Apricot' }]
+ * 
+ * filterComboboxOptions(options, 'Ao', 'fuzzy'); 
+ * // Returns: [{ value: '4', label: 'Avocado' }]
+ * 
+ * filterComboboxOptions(options, 'apple', 'contains', true); 
+ * // Returns: [] (because of case sensitivity)
  */
 export function filterComboboxOptions(
   options: ComboboxOption[],

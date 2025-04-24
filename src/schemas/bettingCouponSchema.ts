@@ -3,9 +3,17 @@ import { z } from 'zod';
 import type { Selections, Match, SelectionType } from '@/components/BettingCoupon/types';
 
 // Define a schema for valid selection values
+/**
+ * Zod schema defining the valid selection types for a bet ('1', 'X', '2').
+ */
 export const SelectionSchema = z.enum(['1', 'X', '2'] as const);
 
 // Schema for validating selections
+/**
+ * Zod schema validating the overall structure of the betting selections object.
+ * Expects a record where keys are match IDs (string) and values are either
+ * a valid `SelectionSchema` type ('1', 'X', '2') or null.
+ */
 export const SelectionsSchema = z.record(
   // Keys are match IDs as strings
   z.string(),
@@ -14,6 +22,15 @@ export const SelectionsSchema = z.record(
 );
 
 // Function to create a validator that checks if all required matches have selections
+/**
+ * Creates a validator function specific to a list of matches.
+ * The returned validator checks if the provided selections object contains a non-null 
+ * entry for every match ID in the original list.
+ *
+ * @param {Match[]} matches - The list of matches that require a selection.
+ * @returns A function that takes a `Selections` object and returns a `ValidationResult` 
+ *          ({ isValid: boolean, errors?: Record<string, string> }). Errors are keyed by match ID.
+ */
 export const createSelectionsValidator = (matches: Match[]) => {
   return (selections: Selections) => {
     const errors: Record<string, string> = {};
@@ -46,6 +63,17 @@ export const createSelectionsValidator = (matches: Match[]) => {
 };
 
 // Validate the full coupon
+/**
+ * Validates the entire betting coupon.
+ * 
+ * Performs two checks:
+ * 1. **Structure Validation:** Ensures the `selections` object conforms to `SelectionsSchema` (correct keys and value types).
+ * 2. **Completeness Validation:** Uses `createSelectionsValidator` to ensure every match in the `matches` list has a non-null selection.
+ *
+ * @param {Match[]} matches - The list of matches included in the coupon.
+ * @param {Selections} selections - The user's submitted selections.
+ * @returns A `ValidationResult` object ({ isValid: boolean, errors?: Record<string, string> }).
+ */
 export const validateCoupon = (matches: Match[], selections: Selections) => {
   console.log('🔍 validateCoupon called with:');
   console.log('- matches:', matches.length);
