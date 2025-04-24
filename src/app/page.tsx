@@ -379,29 +379,35 @@ export default function Page() {
         )}
         {/* --- END Consolidated Errors --- */}
         {/* Questionnaire Section (uses data from useQuestionnaireData hook) */}
-        <Suspense fallback={<div>Loading Questionnaire...</div>}>
-          <Questionnaire
-            ref={questionnaireRef}
-            teams={teamsForQuestionnaire ?? []} // Use data from hook, provide fallback
-            players={playersForQuestionnaire ?? []} // Use data from hook, provide fallback
-            initialPredictions={initialPredictions}
-            onPredictionChange={handlePredictionChange} // Pass the handler
-            onToggleVisibility={handleQuestionnaireToggle}
-            validationErrors={validationErrors.questionnaire}
-          />
+        <Suspense fallback={<div className="flex justify-center py-4"><Spinner /></div>}> 
+          {/* Only render Questionnaire if there was no error fetching its data */} 
+          {!questionnaireDataError && (
+            <Questionnaire
+              ref={questionnaireRef}
+              teams={teamsForQuestionnaire ?? []} 
+              players={playersForQuestionnaire ?? []} 
+              initialPredictions={initialPredictions}
+              onPredictionChange={handlePredictionChange} 
+              onToggleVisibility={handleQuestionnaireToggle}
+              validationErrors={validationErrors.questionnaire}
+            />
+          )}
         </Suspense>
 
-        {/* Betting Coupon Section */}
-        <Suspense fallback={<div>Loading Betting Coupon...</div>}>
-          <BettingCoupon
-            ref={bettingCouponRef}
-            matches={matchesForCoupon} // Use matchesForCoupon from useFixtures hook
-            initialSelections={initialSampleSelections}
-            onSelectionChange={(newSelections: Selections, matchId: string) => 
-              handleSelectionChange(newSelections, matchId)
-            }
-            validationErrors={validationErrors.coupon}
-          />
+        {/* Betting Coupon Section */} 
+        <Suspense fallback={<div className="flex justify-center py-4"><Spinner /></div>}> 
+          {/* Only render BettingCoupon if there was no error fetching fixtures */} 
+          {!fixtureError && (
+            <BettingCoupon
+              ref={bettingCouponRef}
+              matches={matchesForCoupon} 
+              initialSelections={initialSampleSelections}
+              onSelectionChange={(newSelections: Selections, matchId: string) => 
+                handleSelectionChange(newSelections, matchId)
+              }
+              validationErrors={validationErrors.coupon}
+            />
+          )}
         </Suspense>
 
         {/* Use submitStatus state */}
@@ -411,8 +417,14 @@ export default function Page() {
           </div>
         )}
         <Button
-          onClick={handleCombinedSubmit} 
-          disabled={isSubmitting || authLoading || !user} 
+          onClick={handleCombinedSubmit}
+          disabled={
+            isSubmitting || 
+            authLoading || 
+            !user || 
+            !!fixtureError || // Disable if fixtures failed to load
+            !!questionnaireDataError // Disable if questionnaire data failed to load
+          } 
           className="w-full md:w-auto self-center mt-4"
         >
           {(isSubmitting || authLoading) ? 'Submitting...' : 'Submit Coupon'} 

@@ -351,6 +351,8 @@ describe('Page Component', () => {
     // Assert: Check that the specific fixture error message is displayed
     const errorMessage = await screen.findByText(/Fixtures Error: Network Error fetching fixtures/i);
     expect(errorMessage).toBeInTheDocument();
+    // Assert: Check that the BettingCoupon component is NOT rendered
+    expect(screen.queryByTestId('mock-betting-coupon')).not.toBeInTheDocument();
   });
 
   it('should display questionnaire data error when useQuestionnaireData hook returns an error', async () => {
@@ -369,6 +371,46 @@ describe('Page Component', () => {
     // Assert: Check that the specific questionnaire data error message is displayed
     const errorMessage = await screen.findByText(/Questionnaire Data Error: Database Error fetching questions/i);
     expect(errorMessage).toBeInTheDocument();
+    // Assert: Check that the Questionnaire component is NOT rendered
+    expect(screen.queryByTestId('mock-questionnaire')).not.toBeInTheDocument();
   });
+
+  it('should disable submit button if fixture hook returns an error', async () => {
+    // Arrange: Mock useFixtures to return an error
+    (jest.requireMock('@/features/betting/hooks/useFixtures') as {
+      useFixtures: jest.Mock;
+    }).useFixtures.mockReturnValue({
+      matches: [],
+      isLoading: false,
+      error: 'Network Error fetching fixtures',
+      refetch: jest.fn(),
+    });
+
+    render(<Page />);
+
+    // Assert: Check that the submit button is disabled
+    const submitButton = screen.getByRole('button', { name: /submit coupon/i });
+    expect(submitButton).toBeDisabled();
+  });
+
+  it('should disable submit button if questionnaire data hook returns an error', async () => {
+    // Arrange: Mock useQuestionnaireData to return an error
+    (jest.requireMock('@/features/questionnaire/hooks/useQuestionnaireData') as {
+      useQuestionnaireData: jest.Mock;
+    }).useQuestionnaireData.mockReturnValue({
+      teams: [],
+      players: [],
+      isLoading: false,
+      error: 'Database Error fetching questions',
+    });
+
+    render(<Page />);
+
+    // Assert: Check that the submit button is disabled
+    const submitButton = screen.getByRole('button', { name: /submit coupon/i });
+    expect(submitButton).toBeDisabled();
+  });
+
+  // TODO: Add tests for submission service failure
 
 }); 
