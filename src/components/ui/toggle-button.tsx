@@ -33,7 +33,6 @@ const ToggleButton: React.FC<ToggleButtonProps> = ({
   };
 
   // Create a handler with additional logging
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleClick = (_e: React.MouseEvent) => {
     console.log(`👆 BUTTON CLICKED - Match: ${matchId}, Selection: ${selection}, Current isSelected: ${isSelected}`);
     
@@ -53,6 +52,7 @@ const ToggleButton: React.FC<ToggleButtonProps> = ({
       disabled={disabled}
       data-selected={isSelected} 
       data-match-id={matchId}
+      aria-pressed={isSelected}
       data-selection={selection}
       data-testid={dataTestId}
       className={cn(

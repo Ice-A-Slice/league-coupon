@@ -1,11 +1,10 @@
-
 "use client";
 
 import React, { useState, forwardRef, useImperativeHandle } from "react";
 // import debounce from 'lodash.debounce'; // REMOVED debounce import
 import TeamSelect from "./TeamSelect";
 import PlayerSelect from "./PlayerSelect";
-import { Prediction, QuestionnaireProps } from "./types";
+import { Prediction, QuestionnaireProps, PredictionKeys } from "./types";
 import SectionContainer from "@/components/layout";
 import { validatePrediction } from "@/schemas/questionnaireSchema";
 import ValidationStatusIndicator from '@/components/ui/ValidationStatusIndicator';
@@ -36,12 +35,17 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
     bestGoalDifference: null,
     topScorer: null
   },
-  onPredictionChange = () => {},
+  // Prefix unused parameter with underscore for default function
+  onPredictionChange = (_questionKey: PredictionKeys) => {},
   onToggleVisibility,
+  validationErrors
 }, ref) => {
   // State for predictions
   const [predictions, setPredictions] = useState<Prediction>(initialPredictions);
-  const [errors, setErrors] = useState<{[key: string]: string}>({});
+  // Use the passed-in errors for display, default to empty object
+  const errors = validationErrors || {};
+  // Keep internal errors for immediate feedback from Zod validation (optional)
+  const [internalErrors, setInternalErrors] = useState<{[key: string]: string}>({});
   const [isContentVisible, setIsContentVisible] = useState(true);
   // Remove state related to the direct Headless UI combobox
   // const [query, setQuery] = useState('');
@@ -55,11 +59,11 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
     validatePredictions: () => {
       // Directly call the imported validator and return its full result
       const result = validatePrediction(predictions);
-      // Update internal errors state for inline display
+      // Update internal errors state for immediate inline display
       if (!result.isValid && result.errors) {
-        setErrors(result.errors);
+        setInternalErrors(result.errors);
       } else {
-        setErrors({});
+        setInternalErrors({});
       }
       return result; // Return the full { isValid, errors? } object
     },
@@ -86,11 +90,11 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
     }
   }), [predictions]); // Depend on predictions state
 
-  // Update a specific prediction field
-  const updatePrediction = (field: keyof Prediction, value: string | null) => {
-    // Restore immediate error clearing for the specific field
-    if (errors[field]) {
-      setErrors(prev => {
+  // Update a specific prediction field and notify parent about the specific field changed
+  const updatePrediction = (field: PredictionKeys, value: string | null) => {
+    // Restore immediate *internal* error clearing for the specific field
+    if (internalErrors[field]) {
+      setInternalErrors(prev => {
         const newErrors = {...prev};
         delete newErrors[field];
         return newErrors;
@@ -104,8 +108,8 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
     };
     setPredictions(updatedPredictions);
     
-    // Call the callback immediately
-    onPredictionChange(updatedPredictions);
+    // Call the callback immediately with the specific key that changed
+    onPredictionChange(field);
 
     // // Trigger debounced validation - REMOVED
     // debouncedValidate(updatedPredictions);
@@ -136,12 +140,14 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
             1. Which team will win the league?
           </label>
           <ValidationStatusIndicator 
-            hasError={!!errors.leagueWinner} 
-            isValid={predictions.leagueWinner !== null && !errors.leagueWinner}
+            // Use internal error for immediate feedback, passed error for submission validation
+            hasError={!!internalErrors.leagueWinner || !!errors.leagueWinner} 
+            isValid={predictions.leagueWinner !== null && !internalErrors.leagueWinner && !errors.leagueWinner}
           />
         </div>
-        {errors.leagueWinner && (
-          <p className="text-red-500 text-xs mt-1 mb-1" id="league-winner-error" role="alert">{errors.leagueWinner}</p>
+        {/* Show internal error preferentially for immediate feedback */}
+        {(internalErrors.leagueWinner || errors.leagueWinner) && (
+          <p className="text-red-500 text-xs mt-1 mb-1" id="league-winner-error" role="alert">{internalErrors.leagueWinner || errors.leagueWinner}</p>
         )}
         <TeamSelect
           teams={teams}
@@ -150,11 +156,11 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
           id="league-winner"
           placeholder="Select league winner..."
           className={cn(
-            errors.leagueWinner ? 'border-red-300 focus:ring-red-500 focus:border-red-500' :
-            (predictions.leagueWinner !== null && !errors.leagueWinner) ? 'border-green-300 focus:ring-green-500 focus:border-green-500' : ''
+            (internalErrors.leagueWinner || errors.leagueWinner) ? 'border-red-300 focus:ring-red-500 focus:border-red-500' :
+            (predictions.leagueWinner !== null && !internalErrors.leagueWinner && !errors.leagueWinner) ? 'border-green-300 focus:ring-green-500 focus:border-green-500' : ''
           )}
-          aria-invalid={!!errors.leagueWinner}
-          aria-describedby={errors.leagueWinner ? "league-winner-error" : undefined}
+          aria-invalid={!!internalErrors.leagueWinner || !!errors.leagueWinner}
+          aria-describedby={(internalErrors.leagueWinner || errors.leagueWinner) ? "league-winner-error" : undefined}
         />
       </div>
       
@@ -165,12 +171,13 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
             2. Which team will finish in last place?
           </label>
            <ValidationStatusIndicator 
-            hasError={!!errors.lastPlace} 
-            isValid={predictions.lastPlace !== null && !errors.lastPlace}
+            // Use internal error for immediate feedback, passed error for submission validation
+            hasError={!!internalErrors.lastPlace || !!errors.lastPlace} 
+            isValid={predictions.lastPlace !== null && !internalErrors.lastPlace && !errors.lastPlace}
           />
         </div>
-        {errors.lastPlace && (
-          <p className="text-red-500 text-xs mt-1 mb-1" id="last-place-error" role="alert">{errors.lastPlace}</p>
+        {(internalErrors.lastPlace || errors.lastPlace) && (
+          <p className="text-red-500 text-xs mt-1 mb-1" id="last-place-error" role="alert">{internalErrors.lastPlace || errors.lastPlace}</p>
         )}
         <TeamSelect
           teams={teams}
@@ -179,12 +186,12 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
           id="last-place"
           placeholder="Select last place team..."
           className={cn(
-            errors.lastPlace ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 
-            (predictions.lastPlace !== null && !errors.lastPlace) ? 'border-green-300 focus:ring-green-500 focus:border-green-500' : 
+            (internalErrors.lastPlace || errors.lastPlace) ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 
+            (predictions.lastPlace !== null && !internalErrors.lastPlace && !errors.lastPlace) ? 'border-green-300 focus:ring-green-500 focus:border-green-500' : 
             ''
           )}
-          aria-invalid={!!errors.lastPlace}
-          aria-describedby={errors.lastPlace ? "last-place-error" : undefined}
+          aria-invalid={!!internalErrors.lastPlace || !!errors.lastPlace}
+          aria-describedby={(internalErrors.lastPlace || errors.lastPlace) ? "last-place-error" : undefined}
         />
       </div>
       
@@ -195,12 +202,13 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
             3. Which team will have the best goal difference?
            </label>
             <ValidationStatusIndicator 
-             hasError={!!errors.bestGoalDifference} 
-             isValid={predictions.bestGoalDifference !== null && !errors.bestGoalDifference}
+             // Use internal error for immediate feedback, passed error for submission validation
+             hasError={!!internalErrors.bestGoalDifference || !!errors.bestGoalDifference} 
+             isValid={predictions.bestGoalDifference !== null && !internalErrors.bestGoalDifference && !errors.bestGoalDifference}
            />
          </div>
-        {errors.bestGoalDifference && (
-          <p className="text-red-500 text-xs mt-1 mb-1" id="best-goal-difference-error" role="alert">{errors.bestGoalDifference}</p>
+        {(internalErrors.bestGoalDifference || errors.bestGoalDifference) && (
+          <p className="text-red-500 text-xs mt-1 mb-1" id="best-goal-difference-error" role="alert">{internalErrors.bestGoalDifference || errors.bestGoalDifference}</p>
         )}
         <TeamSelect
           teams={teams}
@@ -209,12 +217,12 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
           id="best-goal-difference"
           placeholder="Select team with best goal difference..."
           className={cn(
-            errors.bestGoalDifference ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 
-            (predictions.bestGoalDifference !== null && !errors.bestGoalDifference) ? 'border-green-300 focus:ring-green-500 focus:border-green-500' : 
+            (internalErrors.bestGoalDifference || errors.bestGoalDifference) ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 
+            (predictions.bestGoalDifference !== null && !internalErrors.bestGoalDifference && !errors.bestGoalDifference) ? 'border-green-300 focus:ring-green-500 focus:border-green-500' : 
             ''
           )}
-          aria-invalid={!!errors.bestGoalDifference}
-          aria-describedby={errors.bestGoalDifference ? "best-goal-difference-error" : undefined}
+          aria-invalid={!!internalErrors.bestGoalDifference || !!errors.bestGoalDifference}
+          aria-describedby={(internalErrors.bestGoalDifference || errors.bestGoalDifference) ? "best-goal-difference-error" : undefined}
         />
       </div>
       
@@ -225,12 +233,13 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
             4. Who will be the top scorer in the league?
           </label>
            <ValidationStatusIndicator 
-             hasError={!!errors.topScorer} 
-             isValid={predictions.topScorer !== null && !errors.topScorer}
+             // Use internal error for immediate feedback, passed error for submission validation
+             hasError={!!internalErrors.topScorer || !!errors.topScorer} 
+             isValid={predictions.topScorer !== null && !internalErrors.topScorer && !errors.topScorer}
            />
         </div>
-        {errors.topScorer && (
-          <p className="text-red-500 text-xs mt-1 mb-1" id="top-scorer-error" role="alert">{errors.topScorer}</p>
+        {(internalErrors.topScorer || errors.topScorer) && (
+          <p className="text-red-500 text-xs mt-1 mb-1" id="top-scorer-error" role="alert">{internalErrors.topScorer || errors.topScorer}</p>
         )}
         <PlayerSelect
           players={players}
@@ -239,12 +248,12 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
           id="top-scorer"
           placeholder="Select top scorer..."
           className={cn(
-            errors.topScorer ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 
-            (predictions.topScorer !== null && !errors.topScorer) ? 'border-green-300 focus:ring-green-500 focus:border-green-500' : 
+            (internalErrors.topScorer || errors.topScorer) ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 
+            (predictions.topScorer !== null && !internalErrors.topScorer && !errors.topScorer) ? 'border-green-300 focus:ring-green-500 focus:border-green-500' : 
             ''
           )}
-          aria-invalid={!!errors.topScorer}
-          aria-describedby={errors.topScorer ? "top-scorer-error" : undefined}
+          aria-invalid={!!internalErrors.topScorer || !!errors.topScorer}
+          aria-describedby={(internalErrors.topScorer || errors.topScorer) ? "top-scorer-error" : undefined}
         />
       </div>
     </div>
