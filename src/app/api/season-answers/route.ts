@@ -3,17 +3,35 @@ import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
-// Define the expected structure for a single answer in the request body
+// Zod schema for validating a single answer object in the request body.
 const answerSchema = z.object({
+    /** The type identifier for the questionnaire question (e.g., 'league_winner'). */
     question_type: z.string(), // e.g., 'league_winner', 'top_scorer', etc.
+    /** The ID of the team selected as the answer (nullable). */
     answered_team_id: z.number().nullable().optional(),
+    /** The ID of the player selected as the answer (nullable). */
     answered_player_id: z.number().nullable().optional(),
-    // We might need to add validation to ensure one of the answer IDs is present based on question_type
+    // TODO: Add refinement to ensure either answered_team_id or answered_player_id is present depending on question_type.
+    // .refine(...) 
 });
 
-// Define the expected structure for the entire request body (an array of answers)
+// Zod schema for validating the entire request body, which should be an array of answer objects.
 const requestBodySchema = z.array(answerSchema);
 
+/**
+ * Handles POST requests to /api/season-answers for submitting user answers to season prediction questions.
+ * 
+ * This handler performs the following steps:
+ * 1. **Authentication:** Verifies the user is logged in using Supabase auth.
+ * 2. **Request Parsing & Validation:** Parses the JSON request body and validates it against the `requestBodySchema` (array of answers).
+ * 3. **Data Preparation:** Maps the validated answers into the structure required for the `user_season_answers` table, including `user_id` and a hardcoded `season_id` (TODO: make dynamic).
+ * 4. **Database Upsert:** Upserts the answers into the `user_season_answers` table using Supabase, 
+ *    handling conflicts based on `user_id`, `season_id`, and `question_type`.
+ * 5. **Response:** Returns a success message and the upserted data (200) or an appropriate error response (400, 401, 500).
+ *
+ * @param {NextRequest} request - The incoming Next.js request object.
+ * @returns {Promise<NextResponse>} A promise that resolves to a Next.js response object.
+ */
 export async function POST(request: NextRequest) {
     const cookieStore = await cookies();
     const supabase = createServerClient(

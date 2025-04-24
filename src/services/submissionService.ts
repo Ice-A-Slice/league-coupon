@@ -1,31 +1,56 @@
 import type { Selections, SelectionType } from "@/components/BettingCoupon/types"; // Adjust path if necessary
 import type { SeasonAnswers } from "@/components/Questionnaire/Questionnaire"; // Correct import path for SeasonAnswers
 
-// Define the structure for the data expected by the service function
+/**
+ * Defines the structure for the data expected by the service function.
+ */
 interface SubmissionPayload {
+  /** The betting coupon selections, mapping fixture ID to the selected outcome. */
   couponData: Selections;
+  /** An array containing the answers to the season questionnaire. */
   answersData: SeasonAnswers[];
 }
 
-// TODO: Define more specific type for 'data' based on user_season_answers table schema if needed
+/**
+ * Represents the standardized structure of API responses from the backend routes 
+ * (/api/bets, /api/season-answers).
+ * 
+ * @todo Define a more specific type for the optional `data` field based on actual API responses, 
+ * especially for `/api/season-answers` which returns upserted data.
+ */
 interface ApiResponse {
-  message: string; // Both successful routes return a message
+  /** A message indicating the outcome of the request (e.g., "Coupon submitted successfully"). */
+  message: string;
+  /** Optional data returned by the API (e.g., the data upserted by the season answers endpoint). */
   data?: unknown;   // Optional data field (returned by season-answers)
+  /** An optional error message string if the request failed at the API level. */
   error?: string;   // Keep for consistency in error handling
 }
 
-// Use the refined placeholder type for the success response
+/**
+ * Defines the structure returned by `submitPredictions` upon successful submission 
+ * of both coupon and answers.
+ */
 interface SubmissionSuccess {
+  /** The API response object from the `/api/bets` endpoint. */
   betsResult: ApiResponse;
+  /** The API response object from the `/api/season-answers` endpoint. */
   answersResult: ApiResponse;
 }
 
 /**
- * Submits the user's betting coupon selections and season answers to the backend API.
+ * Submits the user's betting coupon selections and season answers to their respective backend API routes.
+ * 
+ * This function orchestrates two separate API calls:
+ * 1. POST to `/api/bets` with the coupon selections.
+ * 2. If the first call is successful, POST to `/api/season-answers` with the questionnaire answers.
  *
- * @param payload - An object containing the couponData and answersData.
- * @returns A promise that resolves with the results on success.
- * @throws An error if any part of the submission fails.
+ * @param {SubmissionPayload} payload - An object containing the `couponData` (selections) and `answersData` (questionnaire answers).
+ * @returns {Promise<SubmissionSuccess>} A promise that resolves with an object containing the API responses 
+ *          from both endpoints (`betsResult` and `answersResult`) if both submissions are successful.
+ * @throws {Error} Throws an error if either the bets submission or the answers submission fails. 
+ *         The error message will indicate which part failed and include details from the API response if available. 
+ *         Note: If the answers submission fails, the bets submission might have already succeeded.
  */
 export async function submitPredictions(
   payload: SubmissionPayload

@@ -3,18 +3,25 @@ import type { SeasonAnswers } from "@/components/Questionnaire/Questionnaire";
 import type { Prediction } from "@/components/Questionnaire/types";
 
 // Define a structure for validation results
+/**
+ * Represents the result of a validation check.
+ */
 interface ValidationResult {
+  /** Indicates whether the validation passed. */
   isValid: boolean;
+  /** An optional record of specific validation errors, mapping field/item ID to error message. */
   errors?: Record<string, string>;
 }
 
 /**
  * Validates the betting coupon selections.
- * Checks if a selection exists for every match provided.
+ * Checks if a valid selection ('1', 'X', or '2') exists for every match in the provided list.
+ * Returns a general form error and specific match errors if validation fails.
  * 
- * @param selections The user's selections { [fixtureId]: SelectionType }.
- * @param matches The list of matches that should have selections.
- * @returns ValidationResult indicating if all matches have selections and any errors.
+ * @param {Selections | undefined | null} selections - The user's selections, mapping fixture ID (string) to the selection ('1', 'X', '2') or null/undefined.
+ * @param {Match[]} matches - The list of matches that are required to have selections.
+ * @returns {ValidationResult} An object indicating if validation passed (`isValid`) and a map of errors (`errors`) if it failed. 
+ *          Errors are keyed by `match_{matchId}` for specific missing selections and `form` for the general error message.
  */
 export function validateCouponSelections(selections: Selections | undefined | null, matches: Match[]): ValidationResult {
   const errors: Record<string, string> = {};
@@ -44,10 +51,13 @@ export function validateCouponSelections(selections: Selections | undefined | nu
 
 /**
  * Validates the questionnaire answers.
- * Checks if all expected questions have been answered.
+ * Checks if all expected questions (currently league winner, last place, best goal difference, top scorer) 
+ * have been answered and if the total number of answers matches the expected count.
+ * Returns a general form error and specific question errors if validation fails.
  * 
- * @param answers The user's season answers.
- * @returns ValidationResult indicating if all questions are answered and any errors.
+ * @param {SeasonAnswers[] | undefined | null} answers - The user's submitted season answers.
+ * @returns {ValidationResult} An object indicating if validation passed (`isValid`) and a map of errors (`errors`) if it failed.
+ *          Errors are keyed by the question ID (e.g., 'leagueWinner') for specific missing answers and `form` for the general error message.
  */
 export function validateQuestionnaireAnswers(answers: SeasonAnswers[] | undefined | null): ValidationResult {
   const expectedAnswers = 4;
@@ -84,8 +94,11 @@ export function validateQuestionnaireAnswers(answers: SeasonAnswers[] | undefine
 /**
  * Prepares the betting selections data for submission to the API.
  * 
- * @param selections The validated user selections.
- * @returns An array formatted for the /api/bets endpoint.
+ * Transforms the selections map (fixtureId: selection) into an array of objects
+ * suitable for the `/api/bets` endpoint body, parsing fixture IDs to numbers.
+ * 
+ * @param {Selections} selections - The validated user selections object.
+ * @returns {Array<{ fixture_id: number; prediction: SelectionType }>} An array formatted for the `/api/bets` endpoint.
  */
 export function prepareBetSubmissionData(selections: Selections): { fixture_id: number; prediction: SelectionType }[] {
   return Object.entries(selections).map(([fixtureId, prediction]) => ({
@@ -96,10 +109,13 @@ export function prepareBetSubmissionData(selections: Selections): { fixture_id: 
 
 /**
  * Prepares the questionnaire answers data for submission.
- * Currently just returns the validated answers as they are assumed to be in the correct format.
  * 
- * @param answers The validated questionnaire answers.
- * @returns The answers array ready for submission.
+ * Currently, this function acts as a pass-through, assuming the input `answers` array 
+ * (validated by `validateQuestionnaireAnswers`) is already in the correct format 
+ * required by the `/api/season-answers` endpoint.
+ * 
+ * @param {SeasonAnswers[]} answers - The validated questionnaire answers array.
+ * @returns {SeasonAnswers[]} The answers array, ready for submission.
  */
 export function prepareAnswersSubmissionData(answers: SeasonAnswers[]): SeasonAnswers[] {
   // Assuming the answers array is already in the correct format for the API

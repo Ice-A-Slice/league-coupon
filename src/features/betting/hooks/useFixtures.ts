@@ -7,6 +7,9 @@ interface UseFixturesProps {
   round: string;
 }
 
+/**
+ * Defines the structure of the data returned by the useFixtures hook.
+ */
 interface UseFixturesReturn {
   matches: Match[];
   isLoading: boolean;

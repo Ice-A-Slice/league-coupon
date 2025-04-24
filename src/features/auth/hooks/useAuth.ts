@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import type { User, AuthChangeEvent, Session } from "@supabase/supabase-js";
 
+/**
+ * Defines the return shape of the useAuth hook.
+ */
 interface UseAuthReturn {
   user: User | null;
   isLoading: boolean;
@@ -9,9 +12,14 @@ interface UseAuthReturn {
 
 /**
  * Custom hook to manage Supabase user authentication state.
+ * 
+ * It initializes the user state by checking the current session on mount 
+ * and listens for real-time authentication changes (sign-in, sign-out).
  * Fetches the initial user and listens for authentication changes.
  *
  * @returns An object containing the current user and loading state.
+ * @property {User | null} user - The current authenticated Supabase user object, or null if not logged in.
+ * @property {boolean} isLoading - True while fetching the initial user state, false otherwise.
  */
 export function useAuth(): UseAuthReturn {
   const [user, setUser] = useState<User | null>(null);

@@ -2,15 +2,38 @@ import { NextResponse } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
-// Define the expected structure for a single bet submission
+/**
+ * Represents the structure of a single bet submission within the request payload.
+ */
 interface BetSubmission {
+  /** The unique identifier for the fixture (match) the bet is placed on. */
   fixture_id: number;
+  /** The predicted outcome ('1' for home win, 'X' for draw, '2' for away win). */
   prediction: '1' | 'X' | '2'; // Use literal types matching the ENUM
 }
 
-// Define the expected request body structure
+/**
+ * Represents the expected structure of the request body for the POST /api/bets endpoint.
+ * It should be an array of `BetSubmission` objects.
+ */
 type BetSubmissionPayload = BetSubmission[];
 
+/**
+ * Handles POST requests to /api/bets for submitting user bets for a specific round.
+ * 
+ * This handler performs the following steps:
+ * 1. **Authentication:** Verifies the user is logged in using Supabase auth.
+ * 2. **Request Parsing:** Parses the JSON request body, expecting an array of `BetSubmission` objects.
+ * 3. **Locking Check:** Determines the round based on the first fixture ID and checks if the 
+ *    earliest kickoff time for that round has passed. If it has, the submission is rejected (403).
+ * 4. **Data Preparation:** Formats the received submissions into the structure required for the `user_bets` table upsert.
+ * 5. **Database Upsert:** Upserts the bets into the `user_bets` table using Supabase, 
+ *    handling conflicts based on `user_id` and `fixture_id`.
+ * 6. **Response:** Returns a success message (200) or an appropriate error response (400, 401, 403, 404, 500).
+ *
+ * @param {Request} request - The incoming Next.js request object.
+ * @returns {Promise<NextResponse>} A promise that resolves to a Next.js response object.
+ */
 export async function POST(request: Request) {
   // await needed to resolve type inference issue for cookieStore during build
   const cookieStore = await cookies();
