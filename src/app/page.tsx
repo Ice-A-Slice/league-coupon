@@ -33,6 +33,9 @@ import { toast } from "sonner"
 // Import Supabase client creator
 import { createClient } from '@/utils/supabase/client';
 
+// Import the new Spinner component
+import { Spinner } from "@/components/ui/spinner"; 
+
 // Use a non-mock initial state for selections
 const initialSampleSelections: Selections = {};
 // Define initial predictions directly
@@ -336,8 +339,16 @@ export default function Page() {
   const isTestEnvironment = process.env.NODE_ENV === 'test';
 
   // --- Render Logic --- 
-  // Use fixtureLoading from useFixtures hook
-  if ((authLoading || fixtureLoading || questionnaireDataLoading) && !isTestEnvironment) return <p>Laddar...</p>;
+
+  // Display a centered spinner while essential data is loading
+  if ((authLoading || fixtureLoading || questionnaireDataLoading) && !isTestEnvironment) {
+    return (
+      <div className="flex flex-1 justify-center items-center min-h-screen">
+        <Spinner size={32} className="mr-2" />
+        <p className="text-lg">Laddar...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 w-full flex flex-col gap-10 items-center px-4 py-8">
