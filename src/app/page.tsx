@@ -16,6 +16,9 @@ import { useFixtures } from '@/features/betting/hooks/useFixtures'; // Import us
 // Import useQuestionnaireData
 import { useQuestionnaireData } from '@/features/questionnaire/hooks/useQuestionnaireData';
 
+// Import Supabase client creator
+import { createClient } from '@/utils/supabase/client';
+
 // Use a non-mock initial state for selections
 const initialSampleSelections: Selections = {};
 // Define initial predictions directly
@@ -57,6 +60,7 @@ export default function Page() {
     matches: matchesForCoupon, // Rename to match existing usage 
     isLoading: fixtureLoading, // Rename to match existing usage
     error: fixtureError,       // Rename to match existing usage
+    refetch: refetchFixtures  // Add refetch back for listener
   } = useFixtures({ leagueId, season: seasonYear, round: roundName });
 
   // Call useQuestionnaireData hook
@@ -83,10 +87,52 @@ export default function Page() {
 
   // --- Effects --- 
 
-  // Realtime listener useEffect - (Will be updated in Task 6)
+  // Realtime listener for bets changes
   useEffect(() => {
-    // ... existing realtime logic ...
-  }, []); 
+    // Only run if the user is logged in and refetch function is available
+    if (!user?.id || !refetchFixtures) return;
+
+    console.log('Setting up realtime listener for user:', user.id);
+    const supabase = createClient();
+
+    const channel = supabase
+      .channel(`bets_changes_for_${user.id}`)
+      .on(
+        'postgres_changes',
+        { 
+          event: '*' as const, // Listen to INSERT, UPDATE, DELETE
+          schema: 'public', 
+          table: 'bets', 
+          filter: `user_id=eq.${user.id}` // Filter for the current user
+        },
+        (payload) => {
+          console.log('Realtime bet change received!', payload);
+          // Instead of directly manipulating state, call the refetch function from the hook.
+          // This assumes the /api/fixtures endpoint might reflect user's bets or
+          // that refetching fixtures is the desired action per Task 6 description.
+          refetchFixtures(); 
+        }
+      )
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Successfully subscribed to bets changes for user:', user.id);
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.error('Realtime subscription error:', status, err);
+          // Optional: Add error handling, e.g., notify user, retry subscription
+        }
+      });
+
+    // Cleanup function to remove the channel subscription when the component unmounts
+    // or when user.id or refetchFixtures changes.
+    return () => {
+      if (channel) {
+        console.log('Removing realtime listener for user:', user.id);
+        supabase.removeChannel(channel).catch(error => {
+          console.error('Error removing Supabase channel:', error);
+        });
+      }
+    };
+  }, [user?.id, refetchFixtures]); // Depend on user ID and the refetch function itself
 
   // Combined handler for submitting Coupon and Questionnaire (Will be updated later)
   const handleCombinedSubmit = async () => {

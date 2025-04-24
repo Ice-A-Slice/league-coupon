@@ -43,6 +43,20 @@ jest.mock('@/utils/supabase/client', () => {
       signInWithOAuth: jest.fn().mockResolvedValue({ error: null }),
       signOut: jest.fn().mockResolvedValue({ error: null }),
     },
+    // Add mock for realtime channel
+    channel: jest.fn(() => ({
+      on: jest.fn(() => mockSupabaseClient.channel()), // Return channel for chaining .on().subscribe()
+      subscribe: jest.fn((callback) => {
+        // Optionally simulate successful subscription for logging/debugging
+        if (callback) callback('SUBSCRIBED', null);
+        // Return a mock subscription object
+        return {
+          unsubscribe: jest.fn(),
+        };
+      }),
+    })),
+    // Function to remove channels (needed for cleanup)
+    removeChannel: jest.fn().mockResolvedValue('ok'), // Mock removeChannel
     // Add mock implementations for other Supabase methods if needed by tests
     from: jest.fn(() => mockSupabaseClient), // Return mock client for chaining
     select: jest.fn(() => mockSupabaseClient),
