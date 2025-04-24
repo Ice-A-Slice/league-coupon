@@ -335,4 +335,40 @@ describe('Page Component', () => {
 
   // TODO: Add tests for loading/error states from hooks
 
+  it('should display fixture error when useFixtures hook returns an error', async () => {
+    // Arrange: Mock useFixtures to return an error
+    (jest.requireMock('@/features/betting/hooks/useFixtures') as {
+      useFixtures: jest.Mock;
+    }).useFixtures.mockReturnValue({
+      matches: [],
+      isLoading: false,
+      error: 'Network Error fetching fixtures',
+      refetch: jest.fn(),
+    });
+
+    render(<Page />);
+
+    // Assert: Check that the specific fixture error message is displayed
+    const errorMessage = await screen.findByText(/Fixtures Error: Network Error fetching fixtures/i);
+    expect(errorMessage).toBeInTheDocument();
+  });
+
+  it('should display questionnaire data error when useQuestionnaireData hook returns an error', async () => {
+    // Arrange: Mock useQuestionnaireData to return an error
+    (jest.requireMock('@/features/questionnaire/hooks/useQuestionnaireData') as {
+      useQuestionnaireData: jest.Mock;
+    }).useQuestionnaireData.mockReturnValue({
+      teams: [],
+      players: [],
+      isLoading: false,
+      error: 'Database Error fetching questions',
+    });
+
+    render(<Page />);
+
+    // Assert: Check that the specific questionnaire data error message is displayed
+    const errorMessage = await screen.findByText(/Questionnaire Data Error: Database Error fetching questions/i);
+    expect(errorMessage).toBeInTheDocument();
+  });
+
 }); 

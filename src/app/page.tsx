@@ -356,19 +356,28 @@ export default function Page() {
       <div className="w-full max-w-4xl flex flex-col gap-8">
         <h1 className="text-3xl font-bold text-center">League Coupon</h1>
 
-        {/* Use questionnaireDataError from useQuestionnaireData hook */}
-        {questionnaireDataError && (
-          <div className="p-4 rounded-md bg-red-100 text-red-700 mt-4">
-            Error loading questionnaire data: {questionnaireDataError}
-          </div>
-        )}
         {/* --- MOVED: Generic Validation Summary --- */}
         {validationErrors.summary && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm w-full" role="alert">
             {validationErrors.summary}
           </div>
         )}
-        {/* --- END MOVED SECTION --- */}
+        {/* --- Consolidated Hook Error Display --- */}
+        {(fixtureError || questionnaireDataError) && (
+          <div className="mb-4 space-y-2"> {/* Container for multiple hook errors */}
+            {fixtureError && (
+               <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm w-full" role="alert">
+                 Fixtures Error: {fixtureError}
+               </div>
+            )}
+             {questionnaireDataError && (
+               <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm w-full" role="alert">
+                 Questionnaire Data Error: {questionnaireDataError}
+               </div>
+            )}
+          </div>
+        )}
+        {/* --- END Consolidated Errors --- */}
         {/* Questionnaire Section (uses data from useQuestionnaireData hook) */}
         <Suspense fallback={<div>Loading Questionnaire...</div>}>
           <Questionnaire
@@ -382,12 +391,6 @@ export default function Page() {
           />
         </Suspense>
 
-        {/* Use fixtureError from useFixtures hook */}
-        {fixtureError && (
-          <div className="p-4 rounded-md bg-red-100 text-red-700 mt-4">
-            Error loading fixtures: {fixtureError}
-          </div>
-        )}
         {/* Betting Coupon Section */}
         <Suspense fallback={<div>Loading Betting Coupon...</div>}>
           <BettingCoupon
