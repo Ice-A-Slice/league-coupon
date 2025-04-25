@@ -136,7 +136,7 @@ export async function POST(request: Request) {
         // Assign roundId based on the earliest fixture found, assuming all submitted fixtures belong to the same logical betting round presented to the user
         roundId = earliestKickoffData.round_id; 
         if (!roundId) {
-             console.error(`Locking Check Error: Earliest submitted fixture ${earliestKickoffData.id ?? 'N/A'} missing round_id.`);
+             console.error(`Locking Check Error: Earliest submitted fixture missing round_id.`);
              return NextResponse.json({ error: 'Internal server error: Fixture data incomplete.' }, { status: 500 });
         }
 

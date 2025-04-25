@@ -67,9 +67,13 @@ describe('Supabase Queries', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // Explicitly reset the mock implementation for chained methods if needed
+    // @ts-expect-error // Type mismatch due to simplified mock
     (supabaseServerClient.from as jest.Mock).mockClear().mockReturnThis();
+    // @ts-expect-error // Type mismatch due to simplified mock
     (supabaseServerClient.select as jest.Mock).mockClear().mockReturnThis();
+    // @ts-expect-error // Type mismatch due to simplified mock
     (supabaseServerClient.eq as jest.Mock).mockClear().mockReturnThis();
+    // @ts-expect-error // Type mismatch due to simplified mock
     (supabaseServerClient.order as jest.Mock).mockClear();
   });
 
@@ -80,7 +84,8 @@ describe('Supabase Queries', () => {
 
     it('should return formatted matches when query is successful', async () => {
       // Arrange: Mock the final .order() call to return successful data
-      (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({ 
+      // @ts-expect-error // Type mismatch due to simplified mock
+      (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({
          data: mockDbFixturesForGetRound, // Use specific mock data
          error: null,
       });
@@ -93,38 +98,50 @@ describe('Supabase Queries', () => {
       expect(supabaseServerClient.from).toHaveBeenCalledWith('fixtures');
       
       // Use stringContaining for less brittle assertion on the select string
+      // @ts-expect-error // Type mismatch due to simplified mock
       expect(supabaseServerClient.select).toHaveBeenCalledWith(
         expect.stringContaining('id,')
       );
+      // @ts-expect-error // Type mismatch due to simplified mock
       expect(supabaseServerClient.select).toHaveBeenCalledWith(
         expect.stringContaining('kickoff,')
       );
+       // @ts-expect-error // Type mismatch due to simplified mock
        expect(supabaseServerClient.select).toHaveBeenCalledWith(
         expect.stringContaining('home_team:teams!fixtures_home_team_id_fkey(id, name)')
       );
+       // @ts-expect-error // Type mismatch due to simplified mock
        expect(supabaseServerClient.select).toHaveBeenCalledWith(
         expect.stringContaining('away_team:teams!fixtures_away_team_id_fkey(id, name)')
       );
+      // @ts-expect-error // Type mismatch due to simplified mock
       expect(supabaseServerClient.select).toHaveBeenCalledWith(
         expect.stringContaining('round:rounds!inner(')
       );
+      // @ts-expect-error // Type mismatch due to simplified mock
       expect(supabaseServerClient.select).toHaveBeenCalledWith(
         expect.stringContaining('season:seasons!inner(')
       );
+       // @ts-expect-error // Type mismatch due to simplified mock
        expect(supabaseServerClient.select).toHaveBeenCalledWith(
         expect.stringContaining('competition:competitions!inner(')
       );
 
+      // @ts-expect-error // Type mismatch due to simplified mock
       expect(supabaseServerClient.eq).toHaveBeenCalledWith('round.name', testRound);
+      // @ts-expect-error // Type mismatch due to simplified mock
       expect(supabaseServerClient.eq).toHaveBeenCalledWith('round.season.api_season_year', testSeasonYear);
+      // @ts-expect-error // Type mismatch due to simplified mock
       expect(supabaseServerClient.eq).toHaveBeenCalledWith('round.season.competition.api_league_id', testLeagueId);
+      // @ts-expect-error // Type mismatch due to simplified mock
       expect(supabaseServerClient.order).toHaveBeenCalledWith('kickoff', { ascending: true });
     });
 
     it('should return null and log error when query fails', async () => {
       // Arrange: Mock the final .order() call to return an error
       const mockError = new Error('Supabase query failed');
-      (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({ 
+      // @ts-expect-error // Type mismatch due to simplified mock
+      (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({
          data: null,
          error: mockError,
       });
@@ -137,12 +154,12 @@ describe('Supabase Queries', () => {
       expect(result).toBeNull();
       // Update assertion to match actual log message
       expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Error fetching fixtures from Supabase:', 
+        'Error fetching fixtures from Supabase:',
         mockError // Check that the specific error object was logged
       );
       // We can also check for the second log message if needed
       expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'An error occurred in getFixturesForRound:', 
+        'An error occurred in getFixturesForRound:',
         mockError
       );
       
@@ -151,7 +168,8 @@ describe('Supabase Queries', () => {
 
     it('should return an empty array when no fixtures are found', async () => {
         // Arrange: Mock the final .order() call to return empty data
-        (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({ 
+        // @ts-expect-error // Type mismatch due to simplified mock
+        (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({
             data: [], // Empty array
             error: null,
         });
@@ -163,6 +181,7 @@ describe('Supabase Queries', () => {
         expect(result).toEqual([]);
         // Optionally add checks that the query was still made
         expect(supabaseServerClient.from).toHaveBeenCalledWith('fixtures');
+        // @ts-expect-error // Type mismatch due to simplified mock
         expect(supabaseServerClient.order).toHaveBeenCalledTimes(1);
     });
   });
@@ -172,7 +191,8 @@ describe('Supabase Queries', () => {
 
     it('should return null if no NS fixtures are found', async () => {
       // Arrange: Mock DB to return empty array
-      (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({ 
+      // @ts-expect-error // Type mismatch due to simplified mock
+      (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({
          data: [],
          error: null,
       });
@@ -183,14 +203,17 @@ describe('Supabase Queries', () => {
       // Assert
       expect(result).toBeNull();
       expect(supabaseServerClient.from).toHaveBeenCalledWith('fixtures');
+      // @ts-expect-error // Type mismatch due to simplified mock
       expect(supabaseServerClient.eq).toHaveBeenCalledWith('status_short', 'NS');
+      // @ts-expect-error // Type mismatch due to simplified mock
       expect(supabaseServerClient.order).toHaveBeenCalledWith('kickoff', { ascending: true });
     });
 
     it('should return a single fixture if only one NS fixture exists', async () => {
       // Arrange: Mock DB to return one fixture
       const mockFixture = createMockFixture(201, '2024-09-01T12:00:00Z', 50, 'Regular Season - 5');
-      (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({ 
+      // @ts-expect-error // Type mismatch due to simplified mock
+      (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({
          data: [mockFixture],
          error: null,
       });
@@ -205,7 +228,9 @@ describe('Supabase Queries', () => {
       expect(result?.roundId).toBe(50);
       expect(result?.roundName).toBe('Round 5'); // Check custom name extraction
       expect(supabaseServerClient.from).toHaveBeenCalledWith('fixtures');
+      // @ts-expect-error // Type mismatch due to simplified mock
       expect(supabaseServerClient.eq).toHaveBeenCalledWith('status_short', 'NS');
+      // @ts-expect-error // Type mismatch due to simplified mock
       expect(supabaseServerClient.order).toHaveBeenCalledWith('kickoff', { ascending: true });
     });
 
@@ -214,7 +239,8 @@ describe('Supabase Queries', () => {
       const fixture1 = createMockFixture(301, '2024-09-05T12:00:00Z', 60, 'Regular Season - 6');
       const fixture2 = createMockFixture(302, '2024-09-07T12:00:00Z', 60, 'Regular Season - 6'); // 48h gap
       const fixture3 = createMockFixture(303, '2024-09-09T12:00:00Z', 60, 'Regular Season - 6'); // 48h gap
-      (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({ 
+      // @ts-expect-error // Type mismatch due to simplified mock
+      (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({
          data: [fixture1, fixture2, fixture3],
          error: null,
       });
@@ -235,7 +261,8 @@ describe('Supabase Queries', () => {
       const fixture1 = createMockFixture(401, '2024-09-10T12:00:00Z', 70, 'Regular Season - 7');
       const fixture2 = createMockFixture(402, '2024-09-12T12:00:00Z', 70, 'Regular Season - 7'); // 48h gap
       const fixture3 = createMockFixture(403, '2024-09-15T20:00:00Z', 70, 'Regular Season - 7'); // 80h gap
-       (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({ 
+      // @ts-expect-error // Type mismatch due to simplified mock
+       (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({
          data: [fixture1, fixture2, fixture3],
          error: null,
       });
@@ -255,7 +282,8 @@ describe('Supabase Queries', () => {
        // Arrange: Gap of 71 hours (just under 72h)
       const fixture1 = createMockFixture(501, '2024-09-20T12:00:00Z', 80, 'Regular Season - 8');
       const fixture2 = createMockFixture(502, '2024-09-23T11:00:00Z', 80, 'Regular Season - 8'); // 71h gap
-       (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({ 
+      // @ts-expect-error // Type mismatch due to simplified mock
+       (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({
          data: [fixture1, fixture2],
          error: null,
       });
@@ -279,7 +307,8 @@ describe('Supabase Queries', () => {
       const fixture4 = createMockFixture(604, '2024-10-05T12:00:00Z', 100, 'Regular Season - 10'); // 48h gap
       // Fixture 5 has a large gap, should not be included
       const fixture5 = createMockFixture(605, '2024-10-10T12:00:00Z', 110, 'Regular Season - 11'); // 120h gap
-      (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({ 
+      // @ts-expect-error // Type mismatch due to simplified mock
+      (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({
          data: [fixture1, fixture2, fixture3, fixture4, fixture5],
          error: null,
       });
@@ -299,10 +328,11 @@ describe('Supabase Queries', () => {
       // Arrange
       const fixture1 = createMockFixture(701, '2024-11-01T12:00:00Z', 120, 'Regular Season - 12');
       // Fixture 2 is missing kickoff
-      const fixture2 = { ...createMockFixture(702, '', 120, 'Regular Season - 12'), kickoff: null }; 
+      const fixture2 = { ...createMockFixture(702, '', 120, 'Regular Season - 12'), kickoff: null };
       const fixture3 = createMockFixture(703, '2024-11-02T12:00:00Z', 120, 'Regular Season - 12'); // Small gap from fixture1
-      const fixture4 = createMockFixture(704, '2024-11-05T12:00:00Z', 120, 'Regular Season - 12'); // Large gap from fixture3 
-      (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({ 
+      const fixture4 = createMockFixture(704, '2024-11-05T12:00:00Z', 120, 'Regular Season - 12'); // Large gap from fixture3
+      // @ts-expect-error // Type mismatch due to simplified mock
+      (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({
          data: [fixture1, fixture2, fixture3, fixture4],
          error: null,
       });
@@ -322,8 +352,9 @@ describe('Supabase Queries', () => {
 
     it('should use fallback round name if number extraction fails', async () => {
       // Arrange
-      const fixture1 = createMockFixture(801, '2024-12-01T12:00:00Z', 130, 'Round without number'); 
-      (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({ 
+      const fixture1 = createMockFixture(801, '2024-12-01T12:00:00Z', 130, 'Round without number');
+      // @ts-expect-error // Type mismatch due to simplified mock
+      (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({
          data: [fixture1],
          error: null,
       });

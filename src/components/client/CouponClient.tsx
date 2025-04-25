@@ -11,7 +11,7 @@ import type { Prediction, PredictionKeys } from "@/components/Questionnaire/type
 import { toast } from "sonner"
 
 // Import types/functions needed from server-side fetch (passed as props)
-import type { Match } from '@/components/BettingCoupon/types'; // Match type is needed
+// import type { Match } from '@/components/BettingCoupon/types'; // Removed unused import
 import type { CurrentRoundFixturesResult } from '@/lib/supabase/queries'; // Type for the prop
 
 // Client-side specific imports
@@ -20,8 +20,8 @@ import { useQuestionnaireData } from '@/features/questionnaire/hooks/useQuestion
 import {
   validateCouponSelections,
   validateQuestionnaireAnswers,
-  prepareBetSubmissionData,
-  prepareAnswersSubmissionData
+  // prepareBetSubmissionData, // Removed unused import
+  // prepareAnswersSubmissionData // Removed unused import
 } from '@/features/betting/utils/submissionHelpers';
 import { submitPredictions } from '@/services/submissionService'; 
 
