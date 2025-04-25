@@ -27,6 +27,8 @@ export type Selections = {
  * Defines the properties accepted by the BettingCoupon component.
  */
 export interface BettingCouponProps {
+  /** The title to display for the betting coupon section. */
+  title?: string; // Add optional title prop
   /** An array of matches to display in the coupon. */
   matches: Match[];
   /** Optional initial selections to pre-populate the coupon. */
