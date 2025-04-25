@@ -1,0 +1,43 @@
+    # PRD: League Coupon MVP - Dynamic Rounds, Scoring & Standings
+
+    **1. Goal:**
+
+    *   Evolve the League Coupon application from a static, single-round proof of concept to a dynamic system capable of handling multiple rounds throughout a season, calculating user points based on predictions, and displaying basic user standings.
+
+    **2. Core Features (MVP Scope):**
+
+    *   **Dynamic Round Identification:**
+        *   The system must automatically identify the next round available for betting ("Current Betting Round").
+        *   Identification Logic: Find the earliest fixture chronologically (`kickoff` time) in the database for the active season (`league_id=39`, `season=2024`) with status 'NS' (Not Started). The `round_id` associated with this fixture defines the Current Betting Round.
+    *   **Fixture Presentation:**
+        *   Display all fixtures belonging to the identified Current Betting Round (sharing the same `round_id`) that have a status of 'NS'.
+    *   **Betting Deadline:**
+        *   The betting form for the Current Betting Round must lock automatically.
+        *   Deadline Logic: The deadline is the exact `kickoff` time of the *earliest* starting fixture within the group of fixtures presented for the Current Betting Round.
+    *   **Background Data Synchronization:**
+        *   Implement a background process (e.g., scheduled function/cron job) to periodically fetch fixture updates (kickoff times, statuses, results) from the API-Football API for the entire active season.
+        *   This process must update the corresponding records in the `fixtures` database table.
+    *   **Scoring Logic:**
+        *   Implement logic to calculate points awarded for user bets (`user_bets` table).
+        *   Scoring Trigger: Scoring for a specific `round_id` will *only* occur when *all* fixtures associated with that `round_id` in the database have a finished status ('FT', 'AET', 'PEN').
+        *   Points Calculation: (Define basic points system - e.g., 3 points for correct 1X2 result, 0 otherwise). Store calculated points in `user_bets.points_awarded`.
+        *   Mark scored rounds (e.g., add/update a `scored_at` timestamp field on the `rounds` table).
+    *   **Standings Page:**
+        *   Create a new route and page at `/standings`.
+        *   Display a simple ranked list of users based on their total accumulated points (`SUM(points_awarded)` from `user_bets` grouped by `user_id`).
+
+    **3. Constraints & Accepted Trade-offs (MVP):**
+
+    *   **Round Presentation Order:** Due to potential API rescheduling, the round presented for betting might not follow strict chronological order (e.g., Round 29 might appear before Round 25 if a game is rescheduled early). This is accepted for the MVP.
+    *   **Scoring Delay:** Points for *all* games within an API-defined round will only be calculated and reflected in standings *after* the very last game of that round group is officially finished according to the API status. This delay is accepted for the MVP.
+    *   **Basic Scoring:** The initial scoring logic will be simple (e.g., correct 1X2). Complex bonus points or variations are out of scope.
+    *   **Simple Standings:** The standings page will show a basic rank, user identifier, and total points. Tie-breaking logic, detailed stats, etc., are out of scope.
+
+    **4. Out of Scope (MVP):**
+
+    *   Complex round ordering heuristics to "fix" the presentation order.
+    *   Fixture-by-fixture scoring or provisional points display.
+    *   Handling season-long bets (top scorer, champion) scoring (assume this happens only at season end, separately).
+    *   Advanced user profiles or detailed betting history views.
+    *   UI/UX polish beyond basic functionality.
+    *   Major refactoring unless strictly necessary to implement core features.
