@@ -15,18 +15,19 @@ jest.mock('next/headers', () => ({
   cookies: jest.fn(() => mockCookieStore), // Return our mock store
 }));
 
-// Mock @supabase/ssr
+// Mock @supabase/ssr - REFINE MOCKS for clarity
 const mockSupabaseGetUser = jest.fn();
-const mockSupabaseSelect = jest.fn();
-const mockSupabaseOrder = jest.fn();
-const mockSupabaseLimit = jest.fn();
-const mockSupabaseMaybeSingle = jest.fn();
-const mockSupabaseSingle = jest.fn(); // Needed for fixture round_id lookup
 const mockSupabaseUpsert = jest.fn();
-const mockFrom = jest.fn(() => ({
-  select: mockSupabaseSelect,
-  upsert: mockSupabaseUpsert,
-}));
+
+// Consolidate chaining mocks for fixture lookups
+const mockMaybeSingle = jest.fn(); 
+const mockLimit = jest.fn(() => ({ maybeSingle: mockMaybeSingle }));
+const mockOrder = jest.fn(() => ({ limit: mockLimit }));
+const mockIn = jest.fn(() => ({ order: mockOrder })); 
+const mockSelect = jest.fn(() => ({ in: mockIn }));
+
+const mockFrom = jest.fn(); // Keep the main mockFrom
+
 const mockAuth = {
   getUser: mockSupabaseGetUser,
 };
@@ -60,17 +61,30 @@ describe('POST /api/bets', () => {
     mockCookieStore.set.mockClear();
     mockCookieStore.delete.mockClear();
     mockSupabaseGetUser.mockClear();
-    mockSupabaseSelect.mockClear();
-    mockSupabaseOrder.mockClear();
-    mockSupabaseLimit.mockClear();
-    mockSupabaseMaybeSingle.mockClear();
-    mockSupabaseSingle.mockClear();
     mockSupabaseUpsert.mockClear();
+    // Reset refined chaining mocks
+    mockSelect.mockClear();
+    mockIn.mockClear();
+    mockOrder.mockClear();
+    mockLimit.mockClear();
+    mockMaybeSingle.mockClear();
     mockFrom.mockClear();
     mockNextResponseJson.mockClear();
     (cookies as jest.Mock).mockClear();
     (createServerClient as jest.Mock).mockClear();
     (NextResponse.json as jest.Mock).mockClear();
+
+    // Default mock implementation for .from()
+    mockFrom.mockImplementation((tableName) => {
+      if (tableName === 'fixtures') {
+        // Return the start of the refined chain for fixtures
+        return { select: mockSelect }; 
+      } else if (tableName === 'user_bets') {
+        return { upsert: mockSupabaseUpsert };
+      }
+      // Default fallback if needed
+      return { select: jest.fn(() => ({ in: jest.fn(() => ({ order: jest.fn(() => ({ limit: jest.fn(() => ({ maybeSingle: jest.fn() })) })) })) })), upsert: jest.fn() };
+    });
   });
 
   // Test case 1: Successful submission
@@ -84,65 +98,39 @@ describe('POST /api/bets', () => {
       { fixture_id: mockFixtureId1, prediction: '1' },
       { fixture_id: mockFixtureId2, prediction: 'X' },
     ];
+    const submittedFixtureIds = [mockFixtureId1, mockFixtureId2];
     const request = new Request('http://localhost/api/bets', {
       method: 'POST',
       body: JSON.stringify(requestBody),
       headers: { 'Content-Type': 'application/json' },
     });
+    const futureKickoff = new Date();
+    futureKickoff.setDate(futureKickoff.getDate() + 1); 
 
-    // Mock Supabase calls
     mockSupabaseGetUser.mockResolvedValue({ data: { user: { id: mockUserId } }, error: null });
-    // Mock fixture lookup for locking check (needs .single() for the first fixture)
-    mockFrom.mockImplementation((tableName) => {
-        if (tableName === 'fixtures') {
-            // Need to chain mocks correctly
-            const selectMock = jest.fn().mockReturnThis(); // Return `this` for chaining
-            const eqMock = jest.fn().mockReturnThis();
-            const orderMock = jest.fn().mockReturnThis();
-            const limitMock = jest.fn().mockReturnThis();
-            const singleMock = jest.fn();
-            const maybeSingleMock = jest.fn();
-            
-            selectMock.mockImplementation((columns) => {
-                 if (columns === 'round_id') {
-                      eqMock.mockReturnValue({ single: singleMock });
-                      singleMock.mockResolvedValue({ data: { round_id: mockRoundId }, error: null });
-                 } else if (columns === 'kickoff') {
-                     // Simulate round is open (kickoff in the future)
-                     const futureKickoff = new Date();
-                     futureKickoff.setDate(futureKickoff.getDate() + 1); 
-                     eqMock.mockReturnValue({ 
-                        order: orderMock.mockReturnValue({ 
-                            limit: limitMock.mockReturnValue({ 
-                                maybeSingle: maybeSingleMock.mockResolvedValue({ data: { kickoff: futureKickoff.toISOString() }, error: null }) 
-                            })
-                        })
-                     });
-                 }
-                 return { eq: eqMock }; // Return the next chainable mock
-            });
-
-            return { select: selectMock }; // Initial return for .from('fixtures')
-        } else if (tableName === 'user_bets') {
-            mockSupabaseUpsert.mockResolvedValue({ error: null }); // Simulate successful upsert
-            return { upsert: mockSupabaseUpsert };
-        }
-        return { select: jest.fn(), upsert: jest.fn() }; // Default fallback
-    });
+    // Mock the single fixture lookup for locking check (now checks submitted IDs)
+    mockMaybeSingle.mockResolvedValue({ data: { kickoff: futureKickoff.toISOString(), round_id: mockRoundId }, error: null });
+    // Mock successful upsert
+    mockSupabaseUpsert.mockResolvedValue({ error: null });
 
     // Act
     await POST(request);
 
     // Assert
     expect(mockSupabaseGetUser).toHaveBeenCalledTimes(1);
-    // Check locking check calls (fixture lookup and kickoff check)
+    // Check locking check call
     expect(mockFrom).toHaveBeenCalledWith('fixtures');
+    expect(mockSelect).toHaveBeenCalledWith('kickoff, round_id');
+    expect(mockIn).toHaveBeenCalledWith('id', submittedFixtureIds);
+    expect(mockOrder).toHaveBeenCalledWith('kickoff', { ascending: true });
+    expect(mockLimit).toHaveBeenCalledWith(1);
+    expect(mockMaybeSingle).toHaveBeenCalledTimes(1);
     // Check TOTAL calls to mockFrom (fixtures + user_bets)
-    expect(mockFrom).toHaveBeenCalledTimes(3); // Expect 3 calls: round_id, kickoff, upsert
+    expect(mockFrom).toHaveBeenCalledTimes(2); // Updated: 1 for fixtures, 1 for user_bets
     // Check upsert call
     expect(mockFrom).toHaveBeenCalledWith('user_bets');
     expect(mockSupabaseUpsert).toHaveBeenCalledTimes(1);
-    const upsertArg = mockSupabaseUpsert.mock.calls[0][0]; // Get the first argument of the first call
+    const upsertArg = mockSupabaseUpsert.mock.calls[0][0];
     expect(upsertArg).toHaveLength(requestBody.length);
     expect(upsertArg[0]).toMatchObject({
         user_id: mockUserId,
@@ -156,8 +144,7 @@ describe('POST /api/bets', () => {
         prediction: 'X',
         round_id: mockRoundId,
     });
-    expect(mockSupabaseUpsert.mock.calls[0][1]).toEqual({ onConflict: 'user_id, fixture_id' }); // Check onConflict option
-
+    expect(mockSupabaseUpsert.mock.calls[0][1]).toEqual({ onConflict: 'user_id, fixture_id' });
     // Check final response
     expect(mockNextResponseJson).toHaveBeenCalledTimes(1);
     expect(mockNextResponseJson).toHaveBeenCalledWith({ message: 'Bets submitted successfully!' }, { status: 200 });
@@ -228,99 +215,56 @@ describe('POST /api/bets', () => {
   });
 
   // Test case 5: Round has already started (locked)
-  it('should return 403 Forbidden if the round has already started', async () => {
+  it('should return 403 Forbidden if the betting deadline has passed', async () => {
       // Arrange
       const mockUserId = 'test-user-403';
-      const mockRoundId = 70;
+      const mockRoundId = 70; // Still useful to have in mock data
       const mockFixtureId = 700;
       const requestBody = [{ fixture_id: mockFixtureId, prediction: '2' }];
+      const submittedFixtureIds = [mockFixtureId];
       const request = new Request('http://localhost/api/bets', {
         method: 'POST',
         body: JSON.stringify(requestBody),
         headers: { 'Content-Type': 'application/json' },
       });
+      const pastKickoff = new Date();
+      pastKickoff.setDate(pastKickoff.getDate() - 1); // Kickoff was yesterday
       
       mockSupabaseGetUser.mockResolvedValue({ data: { user: { id: mockUserId } }, error: null });
-      // Mock fixture lookup for locking check 
-      mockFrom.mockImplementation((tableName) => {
-          if (tableName === 'fixtures') {
-              const selectMock = jest.fn();
-              const eqMock = jest.fn();
-              const orderMock = jest.fn();
-              const limitMock = jest.fn();
-              const singleMock = jest.fn();
-              const maybeSingleMock = jest.fn();
-              
-              selectMock.mockImplementation((columns) => {
-                   if (columns === 'round_id') {
-                        eqMock.mockReturnValue({ single: singleMock });
-                        // Return the round ID for the first fixture lookup
-                        singleMock.mockResolvedValue({ data: { round_id: mockRoundId }, error: null });
-                   } else if (columns === 'kickoff') {
-                       // Simulate round is LOCKED (kickoff in the past)
-                       const pastKickoff = new Date();
-                       pastKickoff.setDate(pastKickoff.getDate() - 1); // Set kickoff to yesterday
-                       eqMock.mockReturnValue({ 
-                          order: orderMock.mockReturnValue({ 
-                              limit: limitMock.mockReturnValue({ 
-                                  // Return the past kickoff time
-                                  maybeSingle: maybeSingleMock.mockResolvedValue({ data: { kickoff: pastKickoff.toISOString() }, error: null })
-                              })
-                          })
-                       });
-                   }
-                   return { eq: eqMock };
-              });
-              return { select: selectMock };
-          } 
-          // We don't expect user_bets to be called in this case
-          return { select: jest.fn(), upsert: jest.fn() }; 
-      });
+      // Mock fixture lookup to return a past kickoff time
+      mockMaybeSingle.mockResolvedValue({ data: { kickoff: pastKickoff.toISOString(), round_id: mockRoundId }, error: null });
 
       // Act
       await POST(request);
 
       // Assert
       expect(mockSupabaseGetUser).toHaveBeenCalledTimes(1);
-      expect(mockFrom).toHaveBeenCalledWith('fixtures'); // Locking check called
-      expect(mockFrom).toHaveBeenCalledTimes(2); // Both round_id and kickoff lookup
+      expect(mockFrom).toHaveBeenCalledWith('fixtures'); 
+      expect(mockSelect).toHaveBeenCalledWith('kickoff, round_id');
+      expect(mockIn).toHaveBeenCalledWith('id', submittedFixtureIds);
+      expect(mockMaybeSingle).toHaveBeenCalledTimes(1); 
+      expect(mockFrom).toHaveBeenCalledTimes(1); // Updated: Only called for fixtures check
       expect(mockSupabaseUpsert).not.toHaveBeenCalled(); // Should not attempt upsert
       expect(mockNextResponseJson).toHaveBeenCalledTimes(1);
-      expect(mockNextResponseJson).toHaveBeenCalledWith({ error: 'Cannot submit bets, the round has already started.' }, { status: 403 });
+      // Updated error message based on new logic
+      expect(mockNextResponseJson).toHaveBeenCalledWith({ error: 'Cannot submit bets, the betting deadline has passed.' }, { status: 403 });
   });
 
-  // Test case 6: Fixture not found during locking check
-  it('should return 404 Not Found if a fixture ID is invalid during locking check', async () => {
+  // Test case 6: Invalid fixture ID during locking check
+  it('should return 500 Internal Server Error if kickoff cannot be determined for submitted fixtures', async () => {
       // Arrange
       const mockUserId = 'test-user-404';
       const invalidFixtureId = 9999;
       const requestBody = [{ fixture_id: invalidFixtureId, prediction: '1' }];
-      const request = new Request('http://localhost/api/bets', {
+      const submittedFixtureIds = [invalidFixtureId];
+       const request = new Request('http://localhost/api/bets', {
         method: 'POST',
         body: JSON.stringify(requestBody),
         headers: { 'Content-Type': 'application/json' },
       });
-
       mockSupabaseGetUser.mockResolvedValue({ data: { user: { id: mockUserId } }, error: null });
-      // Mock fixture lookup to return null data (not found)
-      mockFrom.mockImplementation((tableName) => {
-          if (tableName === 'fixtures') {
-              const selectMock = jest.fn();
-              const eqMock = jest.fn();
-              const singleMock = jest.fn();
-              
-              selectMock.mockImplementation((columns) => {
-                   if (columns === 'round_id') {
-                        eqMock.mockReturnValue({ single: singleMock });
-                        // Simulate fixture not found
-                        singleMock.mockResolvedValue({ data: null, error: null }); 
-                   } 
-                   return { eq: eqMock };
-              });
-              return { select: selectMock };
-          } 
-          return { select: jest.fn(), upsert: jest.fn() }; 
-      });
+      // Mock fixture lookup to return no data (simulating invalid ID)
+      mockMaybeSingle.mockResolvedValue({ data: null, error: null }); 
 
       // Act
       await POST(request);
@@ -328,108 +272,71 @@ describe('POST /api/bets', () => {
       // Assert
       expect(mockSupabaseGetUser).toHaveBeenCalledTimes(1);
       expect(mockFrom).toHaveBeenCalledWith('fixtures');
-      expect(mockFrom).toHaveBeenCalledTimes(1); // Only the round_id lookup should happen
+      expect(mockSelect).toHaveBeenCalledWith('kickoff, round_id');
+      expect(mockIn).toHaveBeenCalledWith('id', submittedFixtureIds);
+      expect(mockMaybeSingle).toHaveBeenCalledTimes(1);
       expect(mockSupabaseUpsert).not.toHaveBeenCalled(); 
       expect(mockNextResponseJson).toHaveBeenCalledTimes(1);
-      expect(mockNextResponseJson).toHaveBeenCalledWith({ error: `Fixture with ID ${invalidFixtureId} not found.` }, { status: 404 });
+      // Updated: The code now throws 500 if kickoff can't be determined
+      expect(mockNextResponseJson).toHaveBeenCalledWith({ error: 'Internal server error: Inconsistent fixture data.' }, { status: 500 });
   });
   
   // Test case 7: Database error during upsert
   it('should return 500 Internal Server Error if database upsert fails', async () => {
-      // Arrange - Similar setup to success case, but mock upsert failure
+      // Arrange
       const mockUserId = 'test-user-500-upsert';
       const mockRoundId = 71;
       const mockFixtureId = 710;
       const requestBody = [{ fixture_id: mockFixtureId, prediction: 'X' }];
+      const submittedFixtureIds = [mockFixtureId];
       const request = new Request('http://localhost/api/bets', {
         method: 'POST',
         body: JSON.stringify(requestBody),
         headers: { 'Content-Type': 'application/json' },
       });
-
+      const futureKickoff = new Date();
+      futureKickoff.setDate(futureKickoff.getDate() + 1); 
+      
       mockSupabaseGetUser.mockResolvedValue({ data: { user: { id: mockUserId } }, error: null });
-      // Mock locking check to succeed (return future kickoff)
-      mockFrom.mockImplementation((tableName) => {
-          if (tableName === 'fixtures') {
-              const selectMock = jest.fn();
-              const eqMock = jest.fn();
-              const orderMock = jest.fn();
-              const limitMock = jest.fn();
-              const singleMock = jest.fn();
-              const maybeSingleMock = jest.fn();
-              selectMock.mockImplementation((columns) => {
-                   if (columns === 'round_id') {
-                        eqMock.mockReturnValue({ single: singleMock });
-                        singleMock.mockResolvedValue({ data: { round_id: mockRoundId }, error: null });
-                   } else if (columns === 'kickoff') {
-                       const futureKickoff = new Date();
-                       futureKickoff.setDate(futureKickoff.getDate() + 1); 
-                       eqMock.mockReturnValue({ 
-                          order: orderMock.mockReturnValue({ limit: limitMock.mockReturnValue({ maybeSingle: maybeSingleMock.mockResolvedValue({ data: { kickoff: futureKickoff.toISOString() }, error: null }) }) })
-                       });
-                   }
-                   return { eq: eqMock };
-              });
-              return { select: selectMock };
-          } else if (tableName === 'user_bets') {
-              // Simulate upsert failure
-              mockSupabaseUpsert.mockResolvedValue({ error: new Error('Simulated DB error') }); 
-              return { upsert: mockSupabaseUpsert };
-          }
-          return { select: jest.fn(), upsert: jest.fn() }; 
-      });
+      // Mock fixture check to succeed
+      mockMaybeSingle.mockResolvedValue({ data: { kickoff: futureKickoff.toISOString(), round_id: mockRoundId }, error: null });
+      // Mock upsert to fail
+      const upsertDbError = { message: 'Database unavailable', code: '50000' };
+      mockSupabaseUpsert.mockResolvedValue({ error: upsertDbError });
 
       // Act
       await POST(request);
 
       // Assert
       expect(mockSupabaseGetUser).toHaveBeenCalledTimes(1);
+      // Check locking check calls were made
       expect(mockFrom).toHaveBeenCalledWith('fixtures');
+      expect(mockSelect).toHaveBeenCalledWith('kickoff, round_id');
+      expect(mockIn).toHaveBeenCalledWith('id', submittedFixtureIds);
+      // Check upsert call was made
       expect(mockFrom).toHaveBeenCalledWith('user_bets');
       expect(mockSupabaseUpsert).toHaveBeenCalledTimes(1); // Upsert was attempted
       expect(mockNextResponseJson).toHaveBeenCalledTimes(1);
       expect(mockNextResponseJson).toHaveBeenCalledWith({ error: 'Failed to save bets to database.' }, { status: 500 });
   });
-  
+
   // Test case 8: Database error during locking check (kickoff fetch)
   it('should return 500 Internal Server Error if fetching kickoff time fails', async () => {
       // Arrange
-      const mockUserId = 'test-user-500-kickoff';
-      const mockRoundId = 72;
+       const mockUserId = 'test-user-500-kickoff';
       const mockFixtureId = 720;
       const requestBody = [{ fixture_id: mockFixtureId, prediction: '1' }];
+      const submittedFixtureIds = [mockFixtureId];
       const request = new Request('http://localhost/api/bets', {
         method: 'POST',
         body: JSON.stringify(requestBody),
         headers: { 'Content-Type': 'application/json' },
       });
+      const kickoffDbError = { message: 'Connection error', code: '50001' };
 
       mockSupabaseGetUser.mockResolvedValue({ data: { user: { id: mockUserId } }, error: null });
-      // Mock locking check - round_id lookup succeeds, kickoff lookup fails
-      mockFrom.mockImplementation((tableName) => {
-          if (tableName === 'fixtures') {
-              const selectMock = jest.fn();
-              const eqMock = jest.fn();
-              const orderMock = jest.fn();
-              const limitMock = jest.fn();
-              const singleMock = jest.fn();
-              const maybeSingleMock = jest.fn();
-              selectMock.mockImplementation((columns) => {
-                   if (columns === 'round_id') {
-                        eqMock.mockReturnValue({ single: singleMock });
-                        singleMock.mockResolvedValue({ data: { round_id: mockRoundId }, error: null });
-                   } else if (columns === 'kickoff') {
-                       // Simulate kickoff fetch failure
-                       eqMock.mockReturnValue({ 
-                          order: orderMock.mockReturnValue({ limit: limitMock.mockReturnValue({ maybeSingle: maybeSingleMock.mockResolvedValue({ data: null, error: new Error('Kickoff DB error') }) }) })
-                       });
-                   }
-                   return { eq: eqMock };
-              });
-              return { select: selectMock };
-          }
-          return { select: jest.fn(), upsert: jest.fn() }; 
-      });
+      // Mock fixture kickoff lookup to throw an error
+      mockMaybeSingle.mockResolvedValue({ data: null, error: kickoffDbError });
 
       // Act
       await POST(request);
@@ -437,10 +344,13 @@ describe('POST /api/bets', () => {
       // Assert
       expect(mockSupabaseGetUser).toHaveBeenCalledTimes(1);
       expect(mockFrom).toHaveBeenCalledWith('fixtures');
-      expect(mockFrom).toHaveBeenCalledTimes(2); // Attempted both lookups
+      expect(mockSelect).toHaveBeenCalledWith('kickoff, round_id');
+      expect(mockIn).toHaveBeenCalledWith('id', submittedFixtureIds);
+      expect(mockMaybeSingle).toHaveBeenCalledTimes(1); // Updated: Only one kickoff check now
       expect(mockSupabaseUpsert).not.toHaveBeenCalled(); // Should fail before upsert
       expect(mockNextResponseJson).toHaveBeenCalledTimes(1);
-      expect(mockNextResponseJson).toHaveBeenCalledWith({ error: 'Internal server error: Could not verify round kickoff.' }, { status: 500 });
+      // Updated expected error message
+      expect(mockNextResponseJson).toHaveBeenCalledWith({ error: 'Internal server error: Could not verify betting deadline.' }, { status: 500 });
   });
 
 }); 

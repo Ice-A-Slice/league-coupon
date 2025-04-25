@@ -102,62 +102,57 @@ export async function POST(request: Request) {
 
   console.log(`Received ${submissions.length} bet submissions from user ${userId}.`);
 
-  // Declare roundId variable accessible to later scopes
+  // Declare roundId variable - we might still need it later for upsert, but not for the primary lock check
   let roundId: number | null = null;
+  let earliestSubmittedFixtureKickoff: Date | null = null; // Store the determined kickoff time
 
-  // 3. Locking Check
+  // 3. Locking Check (Refined Logic)
   try {
-    // Assume all submissions are for the same round, check the first fixture
-    const firstFixtureId = submissions[0].fixture_id;
-
-    // Get the round_id for the first fixture
-    const { data: fixtureData, error: fixtureError } = await supabase
-      .from('fixtures')
-      .select('round_id')
-      .eq('id', firstFixtureId)
-      .single();
-
-    if (fixtureError || !fixtureData) {
-      console.error(`Locking Check Error: Fixture ${firstFixtureId} not found or error fetching:`, fixtureError);
-      return NextResponse.json({ error: `Fixture with ID ${firstFixtureId} not found.` }, { status: 404 });
+    // Extract all unique fixture IDs from the submission payload
+    const submittedFixtureIds = [...new Set(submissions.map(sub => sub.fixture_id))];
+    if (submittedFixtureIds.length === 0) {
+        return NextResponse.json({ error: 'No fixture IDs found in submission.' }, { status: 400 });
     }
 
-    // Assign roundId here
-    roundId = fixtureData.round_id;
-    if (!roundId) {
-         console.error(`Locking Check Error: Fixture ${firstFixtureId} missing round_id.`);
-         return NextResponse.json({ error: 'Internal server error: Fixture data incomplete.' }, { status: 500 });
-    }
-
-    // Find the earliest kickoff time for this round
-    const { data: roundKickoffData, error: kickoffError } = await supabase
+    // Find the earliest kickoff time AMONG THE SUBMITTED FIXTURES
+    const { data: earliestKickoffData, error: kickoffError } = await supabase
       .from('fixtures')
-      .select('kickoff')
-      .eq('round_id', roundId)
+      .select('kickoff, round_id') // Select round_id as well if needed for upsert
+      .in('id', submittedFixtureIds)
       .order('kickoff', { ascending: true })
       .limit(1)
-      .maybeSingle();
+      .maybeSingle(); // Get the single row with the earliest kickoff
 
     if (kickoffError) {
-         console.error(`Locking Check Error: Could not fetch kickoff for round ${roundId}:`, kickoffError);
-         return NextResponse.json({ error: 'Internal server error: Could not verify round kickoff.' }, { status: 500 });
+         console.error(`Locking Check Error: Could not fetch earliest kickoff for submitted fixtures:`, kickoffError);
+         return NextResponse.json({ error: 'Internal server error: Could not verify betting deadline.' }, { status: 500 });
     }
 
-    if (!roundKickoffData?.kickoff) {
-        // This could happen if a round exists but has no fixtures yet
-        console.warn(`Locking Check: No kickoff time found for round ${roundId}. Allowing submission.`);
-        // Proceed without locking in this edge case, or decide on specific handling
+    if (!earliestKickoffData?.kickoff) {
+        // Should not happen if submissions are based on valid fixtures
+        console.error(`Locking Check Error: No kickoff time found for submitted fixtures: ${submittedFixtureIds.join(', ')}.`);
+        return NextResponse.json({ error: 'Internal server error: Inconsistent fixture data.' }, { status: 500 });
     } else {
-        const minKickoffTime = new Date(roundKickoffData.kickoff);
-        const now = new Date();
-
-        console.log(`Round ${roundId} kickoff: ${minKickoffTime.toISOString()}, Current time: ${now.toISOString()}`);
-
-        if (now >= minKickoffTime) {
-          console.log(`User ${userId} submission rejected: Round ${roundId} has already started.`);
-          return NextResponse.json({ error: 'Cannot submit bets, the round has already started.' }, { status: 403 });
+        // Assign roundId based on the earliest fixture found, assuming all submitted fixtures belong to the same logical betting round presented to the user
+        roundId = earliestKickoffData.round_id; 
+        if (!roundId) {
+             console.error(`Locking Check Error: Earliest submitted fixture missing round_id.`);
+             return NextResponse.json({ error: 'Internal server error: Fixture data incomplete.' }, { status: 500 });
         }
-        console.log(`Round ${roundId} is open for betting. Proceeding...`);
+
+        earliestSubmittedFixtureKickoff = new Date(earliestKickoffData.kickoff);
+        const nowUtcMillis = Date.now();
+        const kickoffUtcMillis = earliestSubmittedFixtureKickoff.getTime();
+
+        console.log(`Earliest submitted fixture kickoff UTC millis: ${kickoffUtcMillis} (${earliestSubmittedFixtureKickoff.toISOString()}), Current UTC millis: ${nowUtcMillis} (${new Date(nowUtcMillis).toISOString()})`);
+
+        // Compare UTC milliseconds
+        if (nowUtcMillis >= kickoffUtcMillis) {
+          console.log(`User ${userId} submission rejected: Deadline for submitted fixtures passed.`);
+          // Keep the user-facing error message potentially generic, or refine if needed
+          return NextResponse.json({ error: 'Cannot submit bets, the betting deadline has passed.' }, { status: 403 });
+        }
+        console.log(`Betting is open for submitted fixtures (Round ${roundId}). Proceeding...`);
     }
 
   } catch (e) {
@@ -165,7 +160,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Internal server error during submission validation.' }, { status: 500 });
   }
 
-  // Check if roundId was successfully assigned before proceeding
+  // Check if roundId was successfully assigned before proceeding to upsert
   if (roundId === null) {
      console.error('Critical Error: roundId is null after locking check. Aborting upsert.');
      return NextResponse.json({ error: 'Internal server error processing request.'}, { status: 500 });
@@ -176,7 +171,7 @@ export async function POST(request: Request) {
     user_id: userId,
     fixture_id: sub.fixture_id,
     prediction: sub.prediction, // Ensure this matches the ENUM ('1', 'X', '2')
-    round_id: roundId, // Use the determined roundId
+    round_id: roundId, // Use the determined roundId from the earliest submitted fixture
     submitted_at: new Date().toISOString(), // Explicitly set submission time for all upserted rows
   }));
 

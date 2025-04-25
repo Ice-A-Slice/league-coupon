@@ -60,4 +60,7 @@ node_modules/
 # OS specific
 # Task files
 tasks.json
-tasks/ 
+tasks/
+
+# Ignore MCP configuration with potentially sensitive keys
+.cursor/mcp.json 
