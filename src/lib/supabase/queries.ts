@@ -321,26 +321,44 @@ export async function getCurrentBettingRoundFixtures(): Promise<CurrentRoundFixt
         return null; // Should technically not happen if upcomingFixtures was not empty
     }
 
-    // 3. Determine representative round name and ID (using the first fixture in the group)
+    // Step 3 Refined: Determine representative round ID and generate custom round name
     const firstFixtureInGroup = currentBettingRoundGroup[0];
-    const representativeRoundId = firstFixtureInGroup.round_id;
-    
-    // Refined: Safely access nested round name and ensure it's a string
-    let representativeRoundName: string;
-    if (
-        firstFixtureInGroup.round && 
-        typeof firstFixtureInGroup.round === 'object' && 
-        'name' in firstFixtureInGroup.round &&
-        typeof firstFixtureInGroup.round.name === 'string' // Explicitly check if name is a string
-    ) {
-        representativeRoundName = firstFixtureInGroup.round.name;
-    } else {
-        representativeRoundName = `Round ID ${representativeRoundId ?? 'Unknown'}`; // Fallback name
-    }
+    const representativeRoundId = firstFixtureInGroup.round_id; // Keep ID from first fixture
 
     if (!representativeRoundId) {
         console.error("Critical error: First fixture in group is missing round_id", firstFixtureInGroup);
         return null;
+    }
+
+    // Extract unique round numbers from the entire group
+    const uniqueRoundNumbers = new Set<number>();
+    for (const fixture of currentBettingRoundGroup) {
+        if (
+            fixture.round && 
+            typeof fixture.round === 'object' && 
+            'name' in fixture.round &&
+            typeof fixture.round.name === 'string'
+        ) {
+            // Attempt to extract the number from the end of the round name string
+            const match = fixture.round.name.match(/\d+$/); // Matches one or more digits at the end
+            if (match) {
+                uniqueRoundNumbers.add(parseInt(match[0], 10));
+            }
+        } else {
+            // Log if a fixture in the group unexpectedly lacks a valid round name
+            console.warn(`Fixture ID ${fixture.id} in group lacks a standard round name.`);
+        }
+    }
+
+    // Format the custom round name
+    let customRoundName: string;
+    if (uniqueRoundNumbers.size > 0) {
+        const sortedRoundNumbers = Array.from(uniqueRoundNumbers).sort((a, b) => a - b);
+        customRoundName = `Round ${sortedRoundNumbers.join('/')}`;
+    } else {
+        // Fallback if no numbers could be extracted (should be rare)
+        customRoundName = `Round ID ${representativeRoundId}`;
+        console.warn("Could not extract numeric round numbers from the group. Using fallback name.");
     }
 
     // 4. Transform the grouped data to Match[] format for the UI
@@ -363,11 +381,11 @@ export async function getCurrentBettingRoundFixtures(): Promise<CurrentRoundFixt
       };
     }).filter((match): match is Match => match !== null);
 
-    console.log(`Identified current betting round (Rep. Round: ${representativeRoundName}, ID: ${representativeRoundId}) with ${matches.length} fixtures.`);
+    console.log(`Identified current betting round (${customRoundName}, Rep. ID: ${representativeRoundId}) with ${matches.length} fixtures.`);
 
     return {
-      roundId: representativeRoundId,
-      roundName: representativeRoundName,
+      roundId: representativeRoundId, // Still use the first fixture's ID internally
+      roundName: customRoundName, // Use the newly formatted name for display
       matches: matches,
     };
 
