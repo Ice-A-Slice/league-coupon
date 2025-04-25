@@ -220,4 +220,159 @@ export async function getPlayersForSeason(
     console.error(`Error in getPlayersForSeason(${seasonId}):`, error instanceof Error ? error.message : error);
     return null; // Indicate an error occurred
   }
+}
+
+/**
+ * Type definition for the return value of getCurrentBettingRoundFixtures.
+ */
+export type CurrentRoundFixturesResult = {
+  roundId: number; // Representative round ID (from the first fixture in the group)
+  roundName: string; // Representative round name (from the first fixture in the group)
+  matches: Match[]; // The grouped fixtures for the current betting round
+} | null;
+
+// Constants (consider moving to a config file)
+const ACTIVE_LEAGUE_API_ID = 39; // Premier League
+const ACTIVE_SEASON_YEAR = 2024;
+const MAX_TIME_GAP_HOURS = 72; // Max hours between fixtures to be included in the same betting round
+const MAX_TIME_GAP_MS = MAX_TIME_GAP_HOURS * 60 * 60 * 1000;
+
+/**
+ * Identifies the current betting round by grouping upcoming fixtures chronologically.
+ * Fetches 'NS' (Not Started) fixtures for the active league/season, orders them by kickoff,
+ * and groups them together as long as the time gap between consecutive fixtures
+ * is less than MAX_TIME_GAP_HOURS.
+ *
+ * @returns {Promise<CurrentRoundFixturesResult>} An object containing the representative round ID/Name 
+ *          and the list of matches for the current betting round, or null if no upcoming round is found.
+ */
+export async function getCurrentBettingRoundFixtures(): Promise<CurrentRoundFixturesResult> {
+  console.log(`Query: Identifying current betting round fixtures (League: ${ACTIVE_LEAGUE_API_ID}, Season: ${ACTIVE_SEASON_YEAR})`);
+
+  try {
+    // 1. Fetch all upcoming 'NS' fixtures for the active season, ordered by kickoff
+    const { data: upcomingFixtures, error: fetchError } = await supabaseServerClient
+      .from('fixtures')
+      .select(`
+        id,
+        kickoff,
+        status_short,
+        round_id, 
+        round:rounds!inner(
+          name,
+          season:seasons!inner(
+            api_season_year,
+            competition:competitions!inner(
+              api_league_id
+            )
+          )
+        ),
+        home_team:teams!fixtures_home_team_id_fkey(id, name),
+        away_team:teams!fixtures_away_team_id_fkey(id, name)
+      `)
+      .eq('status_short', 'NS')
+      .eq('round.season.competition.api_league_id', ACTIVE_LEAGUE_API_ID)
+      .eq('round.season.api_season_year', ACTIVE_SEASON_YEAR)
+      .order('kickoff', { ascending: true });
+
+    if (fetchError) {
+      console.error('Error fetching upcoming fixtures:', fetchError);
+      throw fetchError;
+    }
+
+    if (!upcomingFixtures || upcomingFixtures.length === 0) {
+      console.log('No upcoming fixtures found for the active season.');
+      return null; // No betting round available
+    }
+
+    // 2. Group fixtures chronologically
+    const currentBettingRoundGroup: typeof upcomingFixtures = [];
+    let lastKickoffTimeMs: number | null = null;
+
+    for (const fixture of upcomingFixtures) {
+      if (!fixture.kickoff) {
+          console.warn(`Fixture ID ${fixture.id} missing kickoff time. Skipping.`);
+          continue; // Skip fixtures without a kickoff time
+      }
+      const currentKickoffTime = new Date(fixture.kickoff);
+      const currentKickoffTimeMs = currentKickoffTime.getTime();
+
+      if (currentBettingRoundGroup.length === 0) {
+        // Always add the first fixture
+        currentBettingRoundGroup.push(fixture);
+        lastKickoffTimeMs = currentKickoffTimeMs;
+      } else {
+        // Check the time gap from the previous fixture in the group
+        const timeGapMs = currentKickoffTimeMs - (lastKickoffTimeMs as number); // Non-null assertion OK here
+
+        if (timeGapMs < MAX_TIME_GAP_MS) {
+          // Gap is small enough, add to the current group
+          currentBettingRoundGroup.push(fixture);
+          lastKickoffTimeMs = currentKickoffTimeMs;
+        } else {
+          // Gap is too large, this fixture belongs to the next round
+          break; // Stop grouping
+        }
+      }
+    }
+
+    if (currentBettingRoundGroup.length === 0) {
+        console.log('Logical error: No fixtures were added to the betting round group.');
+        return null; // Should technically not happen if upcomingFixtures was not empty
+    }
+
+    // 3. Determine representative round name and ID (using the first fixture in the group)
+    const firstFixtureInGroup = currentBettingRoundGroup[0];
+    const representativeRoundId = firstFixtureInGroup.round_id;
+    
+    // Refined: Safely access nested round name and ensure it's a string
+    let representativeRoundName: string;
+    if (
+        firstFixtureInGroup.round && 
+        typeof firstFixtureInGroup.round === 'object' && 
+        'name' in firstFixtureInGroup.round &&
+        typeof firstFixtureInGroup.round.name === 'string' // Explicitly check if name is a string
+    ) {
+        representativeRoundName = firstFixtureInGroup.round.name;
+    } else {
+        representativeRoundName = `Round ID ${representativeRoundId ?? 'Unknown'}`; // Fallback name
+    }
+
+    if (!representativeRoundId) {
+        console.error("Critical error: First fixture in group is missing round_id", firstFixtureInGroup);
+        return null;
+    }
+
+    // 4. Transform the grouped data to Match[] format for the UI
+    const matches: Match[] = currentBettingRoundGroup.map((fixture) => {
+      // Similar transformation logic as in getFixturesForRound
+      const homeTeamData = Array.isArray(fixture.home_team) ? fixture.home_team[0] : fixture.home_team;
+      const awayTeamData = Array.isArray(fixture.away_team) ? fixture.away_team[0] : fixture.away_team;
+
+      if (!homeTeamData || typeof homeTeamData !== 'object' || !homeTeamData.name || !awayTeamData || typeof awayTeamData !== 'object' || !awayTeamData.name) {
+        console.warn(`Fixture ID ${fixture.id} in betting round group missing resolved team data. Excluding.`);
+        return null;
+      }
+
+      return {
+        id: fixture.id,
+        homeTeam: homeTeamData.name,
+        awayTeam: awayTeamData.name,
+        // Add kickoff time if needed by the UI later
+        // kickoff: fixture.kickoff 
+      };
+    }).filter((match): match is Match => match !== null);
+
+    console.log(`Identified current betting round (Rep. Round: ${representativeRoundName}, ID: ${representativeRoundId}) with ${matches.length} fixtures.`);
+
+    return {
+      roundId: representativeRoundId,
+      roundName: representativeRoundName,
+      matches: matches,
+    };
+
+  } catch (error) {
+    console.error('An error occurred in getCurrentBettingRoundFixtures:', error);
+    return null;
+  }
 } 

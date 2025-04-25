@@ -16,6 +16,7 @@ export interface BettingCouponRef {
 // Define the component with props and ref
 const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({ 
   matches, 
+  title = 'Current Round',
   initialSelections = {}, 
   onSelectionChange = () => {}, // Add default empty function
   validationErrors
@@ -178,10 +179,10 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
 
   return (
     <SectionContainer
-      title="Round 1"
+      title={title}
       subtitle="Select match outcomes to fill your coupon"
       collapsible={false}
-      aria-label="Round 1 Betting Coupon"
+      aria-label={`${title} Betting Coupon`}
     >
       {couponContent}
     </SectionContainer>
