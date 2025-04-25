@@ -8,8 +8,18 @@ import type { Tables } from '@/types/supabase';
 // Define type for the data we need from the DB fixture record for comparison
 type DbFixtureComparable = Pick<
   Tables<'fixtures'>,
-  'id' | 'api_fixture_id' | 'kickoff' | 'status_short' | 'home_goals' | 'away_goals' | 'result' | 'home_goals_ht' | 'away_goals_ht' | 'referee' // Added missing fields
+  'id' | 'api_fixture_id' | 'kickoff' | 'status_short' | 'home_goals' | 'away_goals' | 'result' | 'home_goals_ht' | 'away_goals_ht' | 'referee' | 'round_id' |
+  'home_team_id' | 'away_team_id' // Added team IDs
 >;
+
+// Define a more specific type for the expected season details structure
+type SeasonDetailsResponse = {
+  api_season_year: number;
+  // Expect competitions to be an object, not an array, due to the .single() and FK relation
+  competitions: { 
+    api_league_id: number;
+  } | null; // Allow null if no competition relation exists
+} | null
 
 /**
  * Main function to trigger fixture synchronization for the currently active season.
@@ -24,6 +34,7 @@ export async function syncFixturesForActiveSeason(): Promise<{ success: boolean;
     }
 
     // Fetch the active season details to get API identifiers
+    // Use the specific type defined above
     const { data: seasonDetails, error: seasonError } = await supabaseServerClient
       .from('seasons')
       .select(`
@@ -31,18 +42,19 @@ export async function syncFixturesForActiveSeason(): Promise<{ success: boolean;
         competitions ( api_league_id )
       `)
       .eq('id', activeSeasonDbId)
-      .single();
+      .single<SeasonDetailsResponse>(); // Apply the specific type
 
-    // Access the first element of the competitions array
-    const competitionData = seasonDetails?.competitions?.[0];
+    // Access the nested competition data as an object
+    const competitionData = seasonDetails?.competitions;
+    const apiLeagueId = competitionData?.api_league_id;
+    const apiSeasonYear = seasonDetails?.api_season_year;
 
-    if (seasonError || !seasonDetails || !competitionData || !competitionData.api_league_id) {
+    // Check using the direct object access - should now satisfy TypeScript
+    if (seasonError || !seasonDetails || !competitionData || !apiLeagueId || !apiSeasonYear) {
       console.error('Error fetching active season API details:', seasonError);
+      console.log(`DEBUG Check: seasonError=${!!seasonError}, !seasonDetails=${!seasonDetails}, !competitionData=${!competitionData}, apiLeagueId=${apiLeagueId}, apiSeasonYear=${apiSeasonYear}`);
       return { success: false, message: 'Failed to retrieve API identifiers for the active season.', details: seasonError };
     }
-
-    const apiLeagueId = competitionData.api_league_id;
-    const apiSeasonYear = seasonDetails.api_season_year;
 
     console.log(`Found active season: DB ID=${activeSeasonDbId}, API League ID=${apiLeagueId}, API Season=${apiSeasonYear}`);
 
@@ -86,11 +98,12 @@ async function syncFixturesData(
 
     // 2. Fetch existing fixtures from DB for this season
     console.log(`Fetching existing fixtures from DB for season ID ${seasonDbId}...`);
-    // We need to join with rounds to filter by seasonDbId
+    // Select team IDs directly
     const { data: dbFixturesData, error: dbError } = await supabaseServerClient
         .from('fixtures')
         .select(`
-            id, api_fixture_id, kickoff, status_short, home_goals, away_goals, result, home_goals_ht, away_goals_ht, referee,
+            id, api_fixture_id, kickoff, status_short, home_goals, away_goals, result, home_goals_ht, away_goals_ht, referee, round_id, 
+            home_team_id, away_team_id, 
             rounds ( season_id )
         `)
         .eq('rounds.season_id', seasonDbId); // Filter by DB season ID
@@ -103,8 +116,8 @@ async function syncFixturesData(
     // Create a map for quick lookup by api_fixture_id
     const dbFixturesMap = new Map<number, DbFixtureComparable>();
     dbFixturesData?.forEach(f => {
-        if (f.api_fixture_id) { // Ensure api_fixture_id is not null
-             // Explicitly cast to DbFixtureComparable after checking required fields if needed
+        // Ensure required IDs and kickoff are not null before adding to map
+        if (f.api_fixture_id && f.round_id && f.home_team_id && f.away_team_id && f.kickoff) { 
             const comparableFixture: Partial<DbFixtureComparable> = {};
             comparableFixture.id = f.id;
             comparableFixture.api_fixture_id = f.api_fixture_id;
@@ -116,6 +129,9 @@ async function syncFixturesData(
             comparableFixture.home_goals_ht = f.home_goals_ht;
             comparableFixture.away_goals_ht = f.away_goals_ht;
             comparableFixture.referee = f.referee;
+            comparableFixture.round_id = f.round_id;
+            comparableFixture.home_team_id = f.home_team_id; // Add home_team_id
+            comparableFixture.away_team_id = f.away_team_id; // Add away_team_id
 
             dbFixturesMap.set(f.api_fixture_id, comparableFixture as DbFixtureComparable);
         }
@@ -139,26 +155,39 @@ async function syncFixturesData(
         const dbFixture = dbFixturesMap.get(apiFixture.id);
 
         if (!dbFixture) {
-            // This shouldn't happen if initial population was complete, but log it.
-            // For MVP, we won't insert missing fixtures here.
             console.warn(`API fixture ${apiFixture.id} not found in DB for season ${seasonDbId}. Skipping.`);
+            skippedCount++;
+            continue;
+        }
+        
+        // Ensure dbFixture (from map) has required fields
+        if (!dbFixture.round_id || !dbFixture.home_team_id || !dbFixture.away_team_id || !dbFixture.kickoff) {
+            console.error(`Critical Error: Fixture ID ${dbFixture.id} retrieved from map is missing required fields. Skipping update.`);
             skippedCount++;
             continue;
         }
 
         // Compare relevant fields
         let needsUpdate = false;
-        const updatePayload: Partial<Tables<'fixtures'>> & { id: number } = { id: dbFixture.id }; // Start with DB id
+        // Start with non-nullable fields required for update
+        const updatePayload: Partial<Tables<'fixtures'>> & { id: number; api_fixture_id: number; round_id: number; home_team_id: number; away_team_id: number; kickoff: string; } = {
+             id: dbFixture.id, 
+             api_fixture_id: dbFixture.api_fixture_id, 
+             round_id: dbFixture.round_id, 
+             home_team_id: dbFixture.home_team_id, 
+             away_team_id: dbFixture.away_team_id, 
+             kickoff: dbFixture.kickoff // Explicitly include kickoff
+        }; 
 
-        // Compare kickoff time (convert API string to match DB potentially, assuming DB is ISO string)
-        if (apiFixture.date && apiFixture.date !== dbFixture.kickoff) {
+        // Compare kickoff time - *Now we only ADD if it differs from the already included kickoff*
+        if (apiFixture.date && apiFixture.date !== updatePayload.kickoff) {
             updatePayload.kickoff = apiFixture.date;
             needsUpdate = true;
         }
         // Compare status
         if (apiFixture.status?.short && apiFixture.status.short !== dbFixture.status_short) {
             updatePayload.status_short = apiFixture.status.short;
-            updatePayload.status_long = apiFixture.status.long; // Update long status too
+            updatePayload.status_long = apiFixture.status.long; 
             needsUpdate = true;
         }
         // Compare goals
@@ -179,7 +208,7 @@ async function syncFixturesData(
              updatePayload.away_goals_ht = apiScore.halftime.away;
              needsUpdate = true;
          }
-         // Compare Referee (Optional, but might be useful)
+         // Compare Referee
          if (apiFixture.referee && apiFixture.referee !== dbFixture.referee) {
             updatePayload.referee = apiFixture.referee;
             needsUpdate = true;
@@ -187,35 +216,31 @@ async function syncFixturesData(
 
         // Recalculate result if goals changed
         const currentApiResult = calculateResult(apiGoals.home, apiGoals.away);
-        // Check if the result needs updating (either because goals changed OR the stored result was wrong)
         if ((needsUpdate && updatePayload.home_goals !== undefined) || (needsUpdate && updatePayload.away_goals !== undefined) || currentApiResult !== dbFixture.result) {
             if (currentApiResult !== dbFixture.result) {
                  updatePayload.result = currentApiResult;
-                 needsUpdate = true; // Ensure needsUpdate is true if only result changed
+                 needsUpdate = true;
             }
         }
 
         if (needsUpdate) {
-            updatePayload.last_api_update = new Date().toISOString(); // Mark when we updated it
+            updatePayload.last_api_update = new Date().toISOString(); 
             updates.push(updatePayload);
         } else {
-            skippedCount++; // Fixture is already up-to-date
+            skippedCount++;
         }
     }
 
     // 4. Execute DB Updates if any changes were found
     if (updates.length > 0) {
         console.log(`Found ${updates.length} fixtures needing updates. Applying...`);
-        // Using upsert with the primary key 'id' acts as an update here
-        // Consider batching for very large numbers of updates
         const { error: updateError } = await supabaseServerClient
             .from('fixtures')
-            .upsert(updates, { onConflict: 'id' }); // Update based on primary key 'id'
+            .upsert(updates, { onConflict: 'id' }); 
 
         if (updateError) {
             console.error('Error applying fixture updates to DB:', updateError);
-            // Depending on strategy, you might count these as errors or throw
-            errorCount = updates.length; // Count all as errors for simplicity
+            errorCount = updates.length; 
             return { success: false, message: `Failed to apply ${updates.length} fixture updates.`, details: updateError };
         }
         updatedCount = updates.length;
