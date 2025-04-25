@@ -9,6 +9,50 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      betting_rounds: {
+        Row: {
+          competition_id: number
+          created_at: string
+          earliest_fixture_kickoff: string | null
+          id: number
+          latest_fixture_kickoff: string | null
+          name: string
+          scored_at: string | null
+          status: Database["public"]["Enums"]["betting_round_status"]
+          updated_at: string
+        }
+        Insert: {
+          competition_id: number
+          created_at?: string
+          earliest_fixture_kickoff?: string | null
+          id?: number
+          latest_fixture_kickoff?: string | null
+          name: string
+          scored_at?: string | null
+          status?: Database["public"]["Enums"]["betting_round_status"]
+          updated_at?: string
+        }
+        Update: {
+          competition_id?: number
+          created_at?: string
+          earliest_fixture_kickoff?: string | null
+          id?: number
+          latest_fixture_kickoff?: string | null
+          name?: string
+          scored_at?: string | null
+          status?: Database["public"]["Enums"]["betting_round_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "betting_rounds_competition_id_fkey"
+            columns: ["competition_id"]
+            isOneToOne: false
+            referencedRelation: "competitions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       competitions: {
         Row: {
           api_league_id: number
@@ -335,48 +379,48 @@ export type Database = {
       }
       user_bets: {
         Row: {
+          betting_round_id: number | null
           created_at: string
           fixture_id: number
           id: string
           points_awarded: number | null
           prediction: Database["public"]["Enums"]["prediction_type"]
-          round_id: number | null
           submitted_at: string
           user_id: string
         }
         Insert: {
+          betting_round_id?: number | null
           created_at?: string
           fixture_id: number
           id?: string
           points_awarded?: number | null
           prediction: Database["public"]["Enums"]["prediction_type"]
-          round_id?: number | null
           submitted_at?: string
           user_id: string
         }
         Update: {
+          betting_round_id?: number | null
           created_at?: string
           fixture_id?: number
           id?: string
           points_awarded?: number | null
           prediction?: Database["public"]["Enums"]["prediction_type"]
-          round_id?: number | null
           submitted_at?: string
           user_id?: string
         }
         Relationships: [
           {
+            foreignKeyName: "user_bets_betting_round_id_fkey"
+            columns: ["betting_round_id"]
+            isOneToOne: false
+            referencedRelation: "betting_rounds"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "user_bets_fixture_id_fkey"
             columns: ["fixture_id"]
             isOneToOne: false
             referencedRelation: "fixtures"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "user_bets_round_id_fkey"
-            columns: ["round_id"]
-            isOneToOne: false
-            referencedRelation: "rounds"
             referencedColumns: ["id"]
           },
         ]
@@ -437,6 +481,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
+      betting_round_status: "open" | "closed" | "scoring" | "scored"
       prediction_type: "1" | "X" | "2"
     }
     CompositeTypes: {
@@ -553,6 +598,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      betting_round_status: ["open", "closed", "scoring", "scored"],
       prediction_type: ["1", "X", "2"],
     },
   },
