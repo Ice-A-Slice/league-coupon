@@ -1,6 +1,6 @@
 // src/lib/scoring.ts
 
-import { supabaseServerClient } from '@/lib/supabase/server';
+import { type SupabaseClient } from '@supabase/supabase-js'; // Import the type
 import type { Database } from '@/types/supabase';
 
 type BettingRoundId = number;
@@ -26,10 +26,12 @@ interface ScoreCalculationResult {
  * Handles idempotency by checking betting_round status and potentially points_awarded.
  *
  * @param bettingRoundId The ID of the betting_round to score.
+ * @param client A Supabase client instance (can be server or service role).
  * @returns Promise<ScoreCalculationResult> An object indicating success or failure.
  */
 export async function calculateAndStoreMatchPoints(
-  bettingRoundId: BettingRoundId
+  bettingRoundId: BettingRoundId,
+  client: SupabaseClient<Database> // Add client parameter
 ): Promise<ScoreCalculationResult> {
   console.log(`Starting score calculation for betting_round_id: ${bettingRoundId}`);
   
@@ -37,7 +39,7 @@ export async function calculateAndStoreMatchPoints(
   // TODO: Implement the actual logic
   try {
     // Step 1: Check idempotency & set status to 'scoring'
-    const { data: roundData, error: fetchError } = await supabaseServerClient
+    const { data: roundData, error: fetchError } = await client // Use passed-in client
       .from('betting_rounds')
       .select('status')
       .eq('id', bettingRoundId)
@@ -59,7 +61,7 @@ export async function calculateAndStoreMatchPoints(
     }
 
     // Attempt to set status to 'scoring'
-    const { error: updateStatusError } = await supabaseServerClient
+    const { error: updateStatusError } = await client // Use passed-in client
       .from('betting_rounds')
       .update({ status: 'scoring', updated_at: new Date().toISOString() }) // Also update updated_at
       .eq('id', bettingRoundId)
@@ -84,7 +86,7 @@ export async function calculateAndStoreMatchPoints(
     // --- Steps 2-8 will go here ---
     
     // 2. Fetch Fixture IDs associated with the betting round
-    const { data: fixtureLinks, error: linkError } = await supabaseServerClient
+    const { data: fixtureLinks, error: linkError } = await client // Use passed-in client
       .from('betting_round_fixtures')
       .select('fixture_id')
       .eq('betting_round_id', bettingRoundId);
@@ -98,7 +100,7 @@ export async function calculateAndStoreMatchPoints(
     if (!fixtureLinks || fixtureLinks.length === 0) {
       console.warn(`No fixtures found linked to betting round ${bettingRoundId}. Marking as scored.`);
       // If there are no fixtures, there's nothing to score. Mark as done.
-      const { error: updateStatusError } = await supabaseServerClient
+      const { error: updateStatusError } = await client // Use passed-in client
         .from('betting_rounds')
         .update({ status: 'scored', scored_at: new Date().toISOString(), updated_at: new Date().toISOString() })
         .eq('id', bettingRoundId);
@@ -117,7 +119,7 @@ export async function calculateAndStoreMatchPoints(
     // --- Steps 3-8 will follow ---
     
     // 3. Fetch final results for these fixtures
-    const { data: fixturesData, error: fixturesError } = await supabaseServerClient
+    const { data: fixturesData, error: fixturesError } = await client // Use passed-in client
       .from('fixtures')
       .select('id, home_goals, away_goals, status_short, result') // Select result too for direct comparison
       .in('id', fixtureIds); // Use the array of IDs from Step 2
@@ -169,7 +171,7 @@ export async function calculateAndStoreMatchPoints(
     // --- Steps 4-8 will follow ---
 
     // 4. Fetch all user bets for this betting round
-    const { data: userBets, error: betsError } = await supabaseServerClient
+    const { data: userBets, error: betsError } = await client // Use passed-in client
       .from('user_bets')
       .select('id, user_id, fixture_id, prediction, points_awarded')
       .eq('betting_round_id', bettingRoundId);
@@ -183,7 +185,7 @@ export async function calculateAndStoreMatchPoints(
     if (!userBets || userBets.length === 0) {
       console.log(`No user bets found for betting round ${bettingRoundId}. Marking as scored.`);
       // If there are no bets, we can mark the round as scored immediately.
-      const { error: updateStatusError } = await supabaseServerClient
+      const { error: updateStatusError } = await client // Use passed-in client
         .from('betting_rounds')
         .update({ status: 'scored', scored_at: new Date().toISOString(), updated_at: new Date().toISOString() })
         .eq('id', bettingRoundId);
@@ -237,7 +239,7 @@ export async function calculateAndStoreMatchPoints(
     // 7. Update user_bets table with calculated points
     if (betsToUpdate.length > 0) {
       console.log(`Updating points for ${betsToUpdate.length} bets...`);
-      const { error: updateBetsError } = await supabaseServerClient
+      const { error: updateBetsError } = await client // Use passed-in client
         .from('user_bets')
         .upsert(betsToUpdate, { onConflict: 'id' }); // Update based on the 'id' primary key
 
@@ -259,7 +261,7 @@ export async function calculateAndStoreMatchPoints(
 
     // 8. Update betting_round status to 'scored'
     const now = new Date().toISOString();
-    const { error: finalStatusError } = await supabaseServerClient
+    const { error: finalStatusError } = await client // Use passed-in client
       .from('betting_rounds')
       .update({ 
           status: 'scored', 

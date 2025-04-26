@@ -9,6 +9,39 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      betting_round_fixtures: {
+        Row: {
+          betting_round_id: number
+          created_at: string
+          fixture_id: number
+        }
+        Insert: {
+          betting_round_id: number
+          created_at?: string
+          fixture_id: number
+        }
+        Update: {
+          betting_round_id?: number
+          created_at?: string
+          fixture_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "betting_round_fixtures_betting_round_id_fkey"
+            columns: ["betting_round_id"]
+            isOneToOne: false
+            referencedRelation: "betting_rounds"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "betting_round_fixtures_fixture_id_fkey"
+            columns: ["fixture_id"]
+            isOneToOne: false
+            referencedRelation: "fixtures"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       betting_rounds: {
         Row: {
           competition_id: number
