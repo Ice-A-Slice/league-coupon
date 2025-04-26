@@ -102,7 +102,9 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
           } else if (tableName === 'user_bets') {
             return {
               select: betsFetchSelectMock,
-              upsert: betsUpsertMock
+              update: jest.fn().mockReturnValue({
+                eq: jest.fn().mockResolvedValue({ error: null })
+              })
             };
           }
           throw new Error(`Unexpected table name in mock: ${tableName}`);
@@ -122,7 +124,7 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
       expect(result.details?.betsUpdated).toBe(4); // Bet 5 was already scored
 
       // Verify the client was called
-      expect(mockClient.from).toHaveBeenCalledTimes(7); // Updated to match actual number of calls
+      expect(mockClient.from).toHaveBeenCalledTimes(10); // 1 initial fetch + 1 scoring update + 1 link fetch + 1 fixture fetch + 1 bets fetch + 4 bet updates + 1 final update = 10
       
       // We're not checking individual mock functions anymore since our implementation changed
       // Instead, we're focusing on the overall success of the operation
@@ -542,8 +544,9 @@ it('should handle errors during user_bets upsert', async () => {
     const mockBets: MockUserBet[] = [
         { id: 'bet1', user_id: 'user1', betting_round_id: bettingRoundId, fixture_id: 1004, prediction: 'X', points_awarded: null, created_at: new Date().toISOString(), submitted_at: new Date().toISOString() }
     ];
+    const betIdToFail = 'bet1'; // Specify which bet's update should fail
 
-    // Create a mock client that returns an error during upsert
+    // Create a mock client that returns an error during one of the updates
     const mockClient = {
         from: jest.fn().mockImplementation((tableName: string) => {
             if (tableName === 'betting_rounds') {
@@ -553,7 +556,7 @@ it('should handle errors during user_bets upsert', async () => {
                             single: jest.fn().mockResolvedValue({ data: mockRoundClosed, error: null })
                         })
                     }),
-                    update: jest.fn().mockReturnValue({
+                    update: jest.fn().mockReturnValue({ // Mock for initial 'scoring' update
                         eq: jest.fn().mockReturnValue({
                             select: jest.fn().mockReturnValue({
                                 single: jest.fn().mockResolvedValue({ data: { status: 'scoring' }, error: null })
@@ -578,7 +581,16 @@ it('should handle errors during user_bets upsert', async () => {
                     select: jest.fn().mockReturnValue({
                         eq: jest.fn().mockResolvedValue({ data: mockBets, error: null })
                     }),
-                    upsert: jest.fn().mockResolvedValue({ error: mockError }) // Upsert fails
+                    // Mock the update function to fail for a specific bet
+                    update: jest.fn().mockImplementation((updateData: { points_awarded: number }) => ({ // Return object with eq
+                        eq: jest.fn().mockImplementation((column: string, value: string) => { // eq takes column and value
+                            if (column === 'id' && value === betIdToFail) {
+                                return Promise.resolve({ error: mockError }); // Fail for the specific bet ID
+                            } else {
+                                return Promise.resolve({ error: null }); // Succeed for others
+                            }
+                        })
+                    }))
                 };
             }
             // Default mock for other tables
@@ -595,11 +607,14 @@ it('should handle errors during user_bets upsert', async () => {
 
     // Assert
     expect(result.success).toBe(false);
-    expect(result.message).toBe("Failed to store calculated points.");
+    // Update the expected error message
+    expect(result.message).toBe("Failed to store calculated points for one or more bets."); 
     expect(mockClient.from).toHaveBeenCalledWith('betting_rounds');
     expect(mockClient.from).toHaveBeenCalledWith('betting_round_fixtures');
     expect(mockClient.from).toHaveBeenCalledWith('fixtures');
     expect(mockClient.from).toHaveBeenCalledWith('user_bets');
+    // Optionally, assert that the specific error is included in details
+    expect(result.details?.error).toEqual(mockError);
 });
 
 it('should handle errors during the final status update to scored', async () => {
@@ -641,8 +656,10 @@ it('should handle errors during the final status update to scored', async () => 
      const betsFetchEqMock = jest.fn().mockResolvedValueOnce({ data: mockBets, error: null });
      const betsFetchSelectMock = jest.fn().mockReturnValueOnce({ eq: betsFetchEqMock });
 
-     // 6. Upsert user bets -> OK
-     const betsUpsertMock = jest.fn().mockResolvedValueOnce({ error: null });
+     // 6. Upsert user bets -> OK (Changed to simulate successful update loop)
+     const successfulBetUpdateEqMock = jest.fn().mockResolvedValue({ error: null });
+     const successfulBetUpdateMock = jest.fn().mockReturnValue({ eq: successfulBetUpdateEqMock });
+     // const betsUpsertMock = jest.fn().mockResolvedValueOnce({ error: null }); // No longer used
 
      // 7. Final round update -> FAILS
      const finalUpdateEqMock = jest.fn().mockResolvedValueOnce({ error: mockFinalUpdateError }); // <<< ERROR HERE
@@ -671,9 +688,9 @@ it('should handle errors during the final status update to scored', async () => 
            if (tableName !== 'user_bets') throw new Error('Expected user_bets');
            return { select: betsFetchSelectMock };
          })
-         .mockImplementationOnce((tableName: string) => { // 6. Upsert bets
+         .mockImplementationOnce((tableName: string) => { // 6. Simulate SUCCESSFUL bet updates
            if (tableName !== 'user_bets') throw new Error('Expected user_bets');
-           return { upsert: betsUpsertMock };
+           return { update: successfulBetUpdateMock }; // Use the named mock
          })
          .mockImplementationOnce((tableName: string) => { // 7. Final update (fails)
            if (tableName !== 'betting_rounds') throw new Error('Expected betting_rounds');
@@ -686,9 +703,10 @@ it('should handle errors during the final status update to scored', async () => 
 
      // --- Assert --- 
      expect(result.success).toBe(false);
+     // Ensure this assertion expects the correct message for this failure scenario
      expect(result.message).toBe("Points stored, but failed to mark round as fully scored."); 
      expect(result.details?.betsProcessed).toBe(1);
-     expect(result.details?.betsUpdated).toBe(1); // The upsert succeeded
+     expect(result.details?.betsUpdated).toBe(1); // The upsert succeeded (now means the loop tried to update 1)
      expect(result.details?.error).toEqual(mockFinalUpdateError);
 
      // Verify calls - Check specific mock functions were called
@@ -698,7 +716,7 @@ it('should handle errors during the final status update to scored', async () => 
      expect(linksFetchSelectMock).toHaveBeenCalledTimes(1);
      expect(fixturesFetchSelectMock).toHaveBeenCalledTimes(1);
      expect(betsFetchSelectMock).toHaveBeenCalledTimes(1);
-     expect(betsUpsertMock).toHaveBeenCalledTimes(1);
+     expect(successfulBetUpdateEqMock).toHaveBeenCalledTimes(1); // Add check for the successful update mock
      expect(finalUpdateMock).toHaveBeenCalledTimes(1);
      expect(finalUpdateEqMock).toHaveBeenCalledTimes(1); // Ensure the failing step's specific mock was hit
      
