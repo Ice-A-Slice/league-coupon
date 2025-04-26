@@ -52,10 +52,11 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
       const initialFetchEqMock = jest.fn().mockReturnValueOnce({ single: initialFetchSingleMock });
       const initialFetchSelectMock = jest.fn().mockReturnValueOnce({ eq: initialFetchEqMock });
 
-      // 2. Update round to 'scoring': from('betting_rounds').update(...).eq('id', bettingRoundId).select().single()
+      // 2. Update round to 'scoring': ...
       const scoringUpdateSingleMock = jest.fn().mockResolvedValueOnce({ data: { status: 'scoring' }, error: null });
       const scoringUpdateSelectMock = jest.fn().mockReturnValueOnce({ single: scoringUpdateSingleMock });
       const scoringUpdateEqMock = jest.fn().mockReturnValueOnce({ select: scoringUpdateSelectMock });
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const scoringUpdateMock = jest.fn().mockReturnValueOnce({ eq: scoringUpdateEqMock });
 
       // 3. Fetch fixture links: from('betting_round_fixtures').select('fixture_id').eq('betting_round_id', bettingRoundId)
@@ -71,10 +72,12 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
       const betsFetchSelectMock = jest.fn().mockReturnValueOnce({ eq: betsFetchEqMock });
 
       // 6. Upsert user bets: from('user_bets').upsert(betsToUpdate)
-      const betsUpsertMock = jest.fn().mockResolvedValueOnce({ error: null });
+      // Removed unused betsUpsertMock
+      // const betsUpsertMock = jest.fn().mockResolvedValueOnce({ error: null });
 
-      // 7. Final round update: from('betting_rounds').update(...).eq('id', bettingRoundId)
+      // 7. Final round update: ...
       const finalUpdateEqMock = jest.fn().mockResolvedValueOnce({ data: { status: 'scored' }, error: null });
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const finalUpdateMock = jest.fn().mockReturnValueOnce({ eq: finalUpdateEqMock });
 
       // Create a more flexible mock client object
@@ -582,7 +585,7 @@ it('should handle errors during user_bets upsert', async () => {
                         eq: jest.fn().mockResolvedValue({ data: mockBets, error: null })
                     }),
                     // Mock the update function to fail for a specific bet
-                    update: jest.fn().mockImplementation((updateData: { points_awarded: number }) => ({ // Return object with eq
+                    update: jest.fn().mockImplementation((_updateData: { points_awarded: number }) => ({ // Return object with eq
                         eq: jest.fn().mockImplementation((column: string, value: string) => { // eq takes column and value
                             if (column === 'id' && value === betIdToFail) {
                                 return Promise.resolve({ error: mockError }); // Fail for the specific bet ID
@@ -629,7 +632,6 @@ it('should handle errors during the final status update to scored', async () => 
      const mockBets: MockUserBet[] = [
          { id: 'bet2', user_id: 'user2', betting_round_id: bettingRoundId, fixture_id: 1005, prediction: '1', points_awarded: null, created_at: new Date().toISOString(), submitted_at: new Date().toISOString() },
      ];
-     const expectedUpsertPayload = [{ id: 'bet2', points_awarded: 0 }]; // This bet gets 0 points (X != 1)
 
      // --- Mock Client Setup (mimics the successful path until the last step) --- 
       
