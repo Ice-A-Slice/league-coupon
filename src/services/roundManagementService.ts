@@ -30,6 +30,38 @@ class RoundManagementError extends Error {
  */
 export const roundManagementService = {
   /**
+   * PRIVATE HELPER: Checks if a betting round with status 'open' already exists.
+   * @returns {Promise<boolean>} True if an open round exists, false otherwise.
+   * @throws {RoundManagementError} If the database query fails.
+   */
+  async _checkForExistingOpenRound(): Promise<boolean> {
+    log('Checking for existing open betting rounds...');
+    const supabase = createClient();
+    try {
+      const { error, count } = await supabase
+        .from('betting_rounds')
+        .select('id', { count: 'exact', head: true }) // Efficiently check existence
+        .eq('status', 'open');
+
+      if (error) {
+        // Log the error object itself or specific properties
+        console.error('[RoundManagementService Error] Database error checking for open rounds:', error);
+        throw new RoundManagementError('Failed to query for existing open rounds.');
+      }
+
+      const exists = (count ?? 0) > 0;
+      log(`Open round exists: ${exists}`);
+      return exists;
+
+    } catch (err) {
+      // Catch potential errors from the helper itself or re-throw db errors
+      if (err instanceof RoundManagementError) throw err;
+      error('Unexpected error in _checkForExistingOpenRound:', err);
+      throw new RoundManagementError('Unexpected error checking for open rounds.');
+    }
+  },
+
+  /**
    * Orchestrates the entire process of:
    * 1. Checking for existing open rounds.
    * 2. Identifying candidate fixtures for the next betting round.
@@ -43,23 +75,33 @@ export const roundManagementService = {
   async defineAndOpenNextBettingRound(): Promise<void> {
     log('Attempting to define and open the next betting round...');
     try {
-      // 1. Check if an open round already exists (Task 4)
-      log('Checking for existing open rounds...');
-      // TODO: Implement check for existing open round
+      // --- 1. Check if an open round already exists (Task 4) ---
+      const openRoundExists = await this._checkForExistingOpenRound();
+      if (openRoundExists) {
+        log('Process stopped: An open betting round already exists.');
+        return; // Exit early
+      }
+      // --- End Check --- 
 
-      // 2. Identify candidate fixtures (Task 2)
+      // --- 2. Identify candidate fixtures (Task 2) ---
       log('Identifying candidate fixtures...');
-      // TODO: Implement candidate fixture identification
+      const candidateFixtures = await this.identifyCandidateFixtures();
+      // --- End Identification ---
 
-      // 3. Group fixtures into a logical round (Task 3)
+      // --- 3. Group fixtures into a logical round (Task 3) ---
       log('Grouping fixtures...');
-      // TODO: Implement fixture grouping logic
+      const groupedFixtures = await this.groupFixturesForRound(candidateFixtures);
+      if (!groupedFixtures) {
+        log('Process stopped: Could not form a valid group of fixtures for the round.');
+        return; // Exit if no valid group found
+      }
+      // --- End Grouping ---
 
-      // 4. If a valid group exists, create the betting round (Task 5)
+      // --- 4. If a valid group exists, create the betting round (Task 5) ---
       log('Creating betting round...');
-      // TODO: Implement betting round creation
+      // TODO: Implement betting round creation using groupedFixtures
 
-      // 5. Populate the betting_round_fixtures table (Task 6)
+      // --- 5. Populate the betting_round_fixtures table (Task 6) ---
       log('Populating round fixtures...');
       // TODO: Implement betting round fixture population
 
