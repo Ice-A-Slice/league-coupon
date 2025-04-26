@@ -1,5 +1,5 @@
 import { createClient } from '@/utils/supabase/client'; // Corrected path
-import type { Database, Tables, TablesInsert, TablesUpdate } from '@/types/supabase';
+import type { Database, Tables, TablesInsert, TablesUpdate, Enums } from '@/types/supabase';
 
 // --- Utilities ---
 
@@ -72,6 +72,83 @@ export const roundManagementService = {
       }
     }
   },
+
+  /**
+   * Queries the database to find fixtures suitable for the next betting round.
+   * Candidates are typically fixtures with status 'NS' (Not Started),
+   * scheduled within a specific future time window (e.g., 72-96 hours),
+   * and not already associated with an existing betting round.
+   *
+   * @returns {Promise<Fixture[]>} A promise that resolves with an array of candidate fixtures.
+   * @throws {RoundManagementError} If the database query fails.
+   */
+  async identifyCandidateFixtures(): Promise<Fixture[]> {
+    log('Identifying candidate fixtures...');
+    const supabase = createClient(); // Get Supabase client instance
+
+    try {
+      // --- Calculate Time Window (72-96 hours from now) ---
+      const now = new Date();
+      const windowStart = new Date(now.getTime() + 72 * 60 * 60 * 1000);
+      const windowEnd = new Date(now.getTime() + 96 * 60 * 60 * 1000);
+
+      const windowStartISO = windowStart.toISOString();
+      const windowEndISO = windowEnd.toISOString();
+
+      log(`Calculated fixture window: ${windowStartISO} to ${windowEndISO}`);
+      // --- End Time Window Calculation ---
+
+      // --- Fetch Fixtures Already In Rounds ---
+      const { data: existingRoundFixtures, error: existingFixturesError } = await supabase
+        .from('betting_round_fixtures')
+        .select('fixture_id');
+
+      if (existingFixturesError) {
+        error('Error fetching existing round fixtures:', existingFixturesError);
+        throw new RoundManagementError('Failed to query existing round fixtures.');
+      }
+
+      const existingFixtureIds = existingRoundFixtures?.map(f => f.fixture_id) || [];
+      log(`Found ${existingFixtureIds.length} fixtures already assigned to rounds.`);
+      // --- End Fetch Existing Fixtures ---
+
+      // --- Query Candidate Fixtures ---
+      // Status = 'NS', Kickoff within window, Not already in a round
+      const { data: candidateFixturesData, error: queryError } = await supabase
+        .from('fixtures')
+        .select('*')
+        .eq('status_short', 'NS')
+        .gte('kickoff', windowStartISO)
+        .lte('kickoff', windowEndISO)
+        .not('id', 'in', `(${existingFixtureIds.join(',')})`); // Filter out existing IDs
+
+      if (queryError) {
+        error('Error querying candidate fixtures:', queryError);
+        throw new RoundManagementError('Database query for candidate fixtures failed.');
+      }
+      // --- End Query Candidate Fixtures ---
+
+      // --- Sort Candidates by Kickoff Time ---
+      const sortedCandidates = (candidateFixturesData || []).sort((a, b) => {
+        // Convert kickoff strings to Date objects for reliable comparison
+        const dateA = new Date(a.kickoff);
+        const dateB = new Date(b.kickoff);
+        return dateA.getTime() - dateB.getTime(); // Ascending order
+      });
+      log(`Sorted ${sortedCandidates.length} candidate fixtures by kickoff time.`);
+      // --- End Sorting ---
+
+      const candidateFixtures: Fixture[] = sortedCandidates; // Use sorted data
+      log(`Found ${candidateFixtures.length} candidate fixtures.`);
+      return candidateFixtures;
+
+    } catch (err) {
+      error('Error identifying candidate fixtures:', err);
+      // Handle potential database errors, etc.
+      throw new RoundManagementError('Failed to query candidate fixtures.');
+    }
+  },
+
   // Other service methods might go here
 };
 
@@ -84,4 +161,8 @@ type BettingRoundInsert = TablesInsert<'betting_rounds'>;
 /** Represents the shape of data needed to update a row in public.betting_rounds. */
 type BettingRoundUpdate = TablesUpdate<'betting_rounds'>;
 /** Represents the possible statuses for a betting round from the enum. */
-type BettingRoundStatus = Database['public']['Enums']['betting_round_status']; 
+type BettingRoundStatus = Database['public']['Enums']['betting_round_status'];
+
+/** Represents a row in the public.fixtures table. */
+type Fixture = Tables<'fixtures'>;
+ 
