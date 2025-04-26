@@ -238,19 +238,39 @@ export async function calculateAndStoreMatchPoints(
     // 7. Update user_bets table with calculated points
     if (betsToUpdate.length > 0) {
       console.log(`Updating points for ${betsToUpdate.length} bets...`);
-      const { error: updateBetsError } = await client // Use passed-in client
-        .from('user_bets')
-        .upsert(betsToUpdate, { onConflict: 'id' }); // Update based on the 'id' primary key
+      
+      let updateErrorOccurred = false;
+      let firstUpdateError: unknown = null;
 
-      if (updateBetsError) {
-        console.error(`Error updating user_bets points for round ${bettingRoundId}:`, updateBetsError);
-        // TODO: Consider resetting status from 'scoring'
+      // Iterate and update each bet individually
+      for (const betUpdate of betsToUpdate) {
+        const { error: individualUpdateError } = await client
+          .from('user_bets')
+          .update({ points_awarded: betUpdate.points_awarded })
+          .eq('id', betUpdate.id);
+          
+        if (individualUpdateError) {
+            console.error(`Error updating points for bet ID ${betUpdate.id}:`, individualUpdateError);
+            updateErrorOccurred = true;
+            if (!firstUpdateError) {
+                firstUpdateError = individualUpdateError; // Store the first error encountered
+            }
+            // Decide if we should continue trying other updates or break
+            // For now, let's continue to try and update as many as possible
+        }
+      }
+
+      // Check if any error occurred during the loop
+      if (updateErrorOccurred) {
+        // TODO: Consider resetting status from 'scoring' more robustly
         return { 
           success: false, 
-          message: "Failed to store calculated points.", 
-          details: { betsProcessed: betsProcessed, betsUpdated: 0, error: updateBetsError } 
+          message: "Failed to store calculated points for one or more bets.", 
+          // Include the first error encountered for debugging purposes
+          details: { betsProcessed: betsProcessed, betsUpdated: betsToUpdate.length - 1, error: firstUpdateError } 
         };
       }
+      
       console.log(`Successfully updated points for ${betsToUpdate.length} bets.`);
     } else {
         console.log(`No bets required point updates for round ${bettingRoundId}.`);
