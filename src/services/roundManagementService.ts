@@ -62,6 +62,85 @@ export const roundManagementService = {
   },
 
   /**
+   * PRIVATE HELPER: Extracts necessary metadata for creating a new betting round
+   * from a group of fixtures.
+   * Calculates earliest/latest kickoffs, determines competition ID, and generates a simple round name.
+   *
+   * @param groupedFixtures - An array of Fixture objects for the round, pre-sorted by kickoff.
+   * @returns {Promise<{name: string; competitionId: number; earliestKickoff: string; latestKickoff: string}>} Metadata object.
+   * @throws {RoundManagementError} If fixtures are empty, competition ID cannot be determined, or DB errors occur.
+   */
+  async _extractBettingRoundMetadata(groupedFixtures: Fixture[]): Promise<{
+    name: string;
+    competitionId: number;
+    earliestKickoff: string;
+    latestKickoff: string;
+  }> {
+    if (!groupedFixtures || groupedFixtures.length === 0) {
+      throw new RoundManagementError('Cannot extract metadata from empty fixture group.');
+    }
+
+    log('Extracting metadata for betting round creation...');
+    const supabase = createClient();
+
+    try {
+      // 1. Earliest/Latest Kickoff (Task 5.4)
+      // Fixtures are pre-sorted, so first and last elements give the times
+      const earliestKickoff = groupedFixtures[0].kickoff;
+      const latestKickoff = groupedFixtures[groupedFixtures.length - 1].kickoff;
+      log(`Extracted Kickoffs: Earliest=${earliestKickoff}, Latest=${latestKickoff}`);
+
+      // 2. Round IDs & Competition ID (Tasks 5.2 & 5.5)
+      const uniqueRoundIds = [...new Set(groupedFixtures.map(f => f.round_id))];
+      if (uniqueRoundIds.length === 0) {
+          throw new RoundManagementError('Cannot determine round ID from fixtures.');
+      }
+      const representativeRoundId = uniqueRoundIds[0]; // Use the first round ID found
+      log(`Representative Round ID: ${representativeRoundId}`);
+
+      // Query Rounds table for season_id
+      const { data: roundData, error: roundError } = await supabase
+        .from('rounds')
+        .select('season_id')
+        .eq('id', representativeRoundId)
+        .single();
+
+      if (roundError || !roundData) {
+        error('Error fetching round data:', roundError);
+        throw new RoundManagementError(`Failed to fetch season ID for round ${representativeRoundId}.`);
+      }
+      const seasonId = roundData.season_id;
+      log(`Determined Season ID: ${seasonId}`);
+
+      // Query Seasons table for competition_id
+      const { data: seasonData, error: seasonError } = await supabase
+        .from('seasons')
+        .select('competition_id')
+        .eq('id', seasonId)
+        .single();
+
+      if (seasonError || !seasonData) {
+        error('Error fetching season data:', seasonError);
+        throw new RoundManagementError(`Failed to fetch competition ID for season ${seasonId}.`);
+      }
+      const competitionId = seasonData.competition_id;
+      log(`Determined Competition ID: ${competitionId}`);
+
+      // 3. Round Naming (Task 5.3 - Simplified MVP)
+      const minRoundId = Math.min(...uniqueRoundIds); // Find the minimum round ID numerically
+      const name = `Round ${minRoundId}`; // Simple MVP name format
+      log(`Generated Round Name: ${name}`);
+
+      return { name, competitionId, earliestKickoff, latestKickoff };
+
+    } catch (err) {
+        error('Error extracting betting round metadata:', err);
+        if (err instanceof RoundManagementError) throw err;
+        throw new RoundManagementError('Unexpected error extracting metadata for round creation.');
+    }
+  },
+
+  /**
    * Orchestrates the entire process of:
    * 1. Checking for existing open rounds.
    * 2. Identifying candidate fixtures for the next betting round.
@@ -97,13 +176,17 @@ export const roundManagementService = {
       }
       // --- End Grouping ---
 
-      // --- 4. If a valid group exists, create the betting round (Task 5) ---
+      // --- 4. Extract Metadata & Create Betting Round (Task 5) ---
+      const metadata = await this._extractBettingRoundMetadata(groupedFixtures);
+      log(`Extracted metadata: Name=${metadata.name}, CompID=${metadata.competitionId}, Start=${metadata.earliestKickoff}, End=${metadata.latestKickoff}`);
+      
       log('Creating betting round...');
-      // TODO: Implement betting round creation using groupedFixtures
+      // TODO: Implement betting round creation using metadata (Subtask 5.6)
+      // const newBettingRoundId = await this._createBettingRoundRecord(metadata);
 
       // --- 5. Populate the betting_round_fixtures table (Task 6) ---
       log('Populating round fixtures...');
-      // TODO: Implement betting round fixture population
+      // TODO: Implement betting round fixture population using groupedFixtures and newBettingRoundId
 
       log('Successfully defined and opened the next betting round.');
 
