@@ -218,7 +218,6 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
   });
 
   // ... Keep other it.todo placeholders ...
-  it.todo('should return an error if the betting round is not found');
   // ... etc
 });
 
@@ -653,7 +652,6 @@ it('should handle errors during the final status update to scored', async () => 
      const mockClient = {
        from: jest.fn()
          .mockImplementationOnce((tableName: string) => { // 1. Initial fetch
-           // @ts-expect-error - We know 'mock' exists on Jest mocks, TS struggles here
            if (tableName !== 'betting_rounds') throw new Error('Expected betting_rounds');
            return { select: initialFetchSelectMock };
          })
