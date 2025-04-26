@@ -3,6 +3,7 @@
 import { supabaseServerClient } from '@/lib/supabase/server'; // Use server client for potential background jobs
 import { getCurrentSeasonId } from '@/lib/seasons';
 import { fetchFixtures } from '@/services/football-api/client';
+import { roundManagementService } from '@/services/roundManagementService'; // Import the service
 import type { Tables } from '@/types/supabase';
 
 // Define type for the data we need from the DB fixture record for comparison
@@ -85,6 +86,7 @@ async function syncFixturesData(
   let updatedCount = 0;
   let skippedCount = 0; // Count fixtures already up-to-date
   let errorCount = 0;
+  let roundCreationStatus: { success: boolean; message: string } | undefined;
 
   try {
     // 1. Fetch latest fixture data from API
@@ -249,10 +251,32 @@ async function syncFixturesData(
         console.log('No fixture updates required.');
     }
 
+    // --- 5. Attempt to Create Next Betting Round (Task 8.3 & 8.4) ---
+    console.log(`Fixture sync complete for season ${seasonDbId}. Attempting to trigger round creation...`);
+    // Call the round management service to try and create the next round.
+    // This is wrapped in a try/catch within the service method itself,
+    // so errors here won't stop the sync process completion.
+    roundCreationStatus = await roundManagementService._tryCreateNextBettingRound();
+    
+    // Log the specific outcome for clarity
+    if (roundCreationStatus.success) {
+      console.log(`Automated round creation check for season ${seasonDbId} completed. Status: ${roundCreationStatus.message}`);
+    } else {
+      console.warn(`Automated round creation check for season ${seasonDbId} failed. Status: ${roundCreationStatus.message}`);
+    }
+    // --- End Round Creation Attempt ---
+
+    const finalMessage = `Fixture sync completed for season ${seasonDbId}. Fetched: ${apiFixtures.length}, Updated: ${updatedCount}, Skipped/No Change: ${skippedCount}, Errors: ${errorCount}. Round Creation Status: ${roundCreationStatus?.message || 'Not attempted / Error before attempt'}`;
     return {
-        success: true,
-        message: `Fixture sync completed. Fetched: ${apiFixtures.length}, Updated: ${updatedCount}, Skipped/No Change: ${skippedCount}, Errors: ${errorCount}`,
-        details: { fetched: apiFixtures.length, updated: updatedCount, skipped: skippedCount, errors: errorCount }
+        success: true, // Sync itself succeeded up to this point
+        message: finalMessage,
+        details: { 
+            fetched: apiFixtures.length, 
+            updated: updatedCount, 
+            skipped: skippedCount, 
+            errors: errorCount,
+            roundCreation: roundCreationStatus // Include round creation status
+        }
     };
 
   } catch (error) {
