@@ -4,7 +4,6 @@ import { type SupabaseClient } from '@supabase/supabase-js'; // Import the type
 import type { Database } from '@/types/supabase';
 
 type BettingRoundId = number;
-type UserId = string;
 type FixtureId = number;
 type Prediction = Database['public']['Enums']['prediction_type']; // '1' | 'X' | '2'
 type Result = Prediction | null; // Fixtures might not have a result yet, or goals could be null
