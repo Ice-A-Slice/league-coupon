@@ -191,6 +191,64 @@ export const roundManagementService = {
   },
 
   /**
+   * PRIVATE HELPER: Populates the betting_round_fixtures link table.
+   *
+   * @param bettingRoundId - The ID of the parent betting round.
+   * @param fixturesToLink - An array of Fixture objects to link to the round.
+   * @returns {Promise<void>}
+   * @throws {RoundManagementError} If input is invalid or database insertion fails.
+   */
+  async _populateBettingRoundFixtures(bettingRoundId: number, fixturesToLink: Fixture[]): Promise<void> {
+    log(`Populating fixtures for betting round ID: ${bettingRoundId}`);
+
+    // --- 1. Input Validation (Subtask 6.2) ---
+    if (!bettingRoundId || bettingRoundId <= 0) {
+      throw new RoundManagementError('Invalid bettingRoundId provided for populating fixtures.');
+    }
+    if (!fixturesToLink || fixturesToLink.length === 0) {
+      log('No fixtures provided to link, skipping population.');
+      // Consider if this should be an error or just a silent skip.
+      // Skipping for now, as an empty round might be technically valid, though unusual.
+      return;
+    }
+    log(`Attempting to link ${fixturesToLink.length} fixtures.`);
+    // --- End Validation ---
+
+    const supabase = createClient();
+
+    try {
+      // --- 1. Map fixtures to insertion objects (Subtask 6.3a) ---
+      const recordsToInsert = fixturesToLink.map(fixture => ({
+        betting_round_id: bettingRoundId,
+        fixture_id: fixture.id // Assuming Fixture type has `id` which is the PK
+        // created_at should be handled by DB default
+      }));
+      log(`Prepared ${recordsToInsert.length} records for betting_round_fixtures insertion.`);
+      // --- End Mapping ---
+
+      // --- 2. Perform batch insert (Subtask 6.3b & 6.4) ---
+      const { error: insertError } = await supabase
+        .from('betting_round_fixtures')
+        .insert(recordsToInsert);
+
+      if (insertError) {
+        // Log the specific error from the insert operation
+        console.error('[RoundManagementService Error] Error inserting into betting_round_fixtures:', insertError);
+        throw new RoundManagementError('Database insertion into betting_round_fixtures failed.');
+      }
+      // --- End Insert ---
+
+      log(`Successfully populated fixtures for round ${bettingRoundId}.`);
+
+    } catch (err) {
+      error('Error populating betting round fixtures:', err);
+      // Handle potential DB errors
+      if (err instanceof RoundManagementError) throw err; 
+      throw new RoundManagementError('Unexpected error populating betting round fixtures.');
+    }
+  },
+
+  /**
    * Orchestrates the entire process of:
    * 1. Checking for existing open rounds.
    * 2. Identifying candidate fixtures for the next betting round.
@@ -238,6 +296,7 @@ export const roundManagementService = {
       // --- 5. Populate the betting_round_fixtures table (Task 6) ---
       log('Populating round fixtures...');
       // TODO: Implement betting round fixture population using groupedFixtures and newBettingRoundId
+      await this._populateBettingRoundFixtures(newBettingRoundId, groupedFixtures);
 
       log('Successfully defined and opened the next betting round.');
 
