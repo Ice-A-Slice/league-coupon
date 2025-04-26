@@ -392,8 +392,6 @@ export const roundManagementService = {
         .from('fixtures')
         .select('*')
         .eq('status_short', 'NS')
-        .gte('kickoff', windowStartISO)
-        .lte('kickoff', windowEndISO)
         .not('id', 'in', `(${existingFixtureIds.join(',')})`); // Filter out existing IDs
 
       if (queryError) {
