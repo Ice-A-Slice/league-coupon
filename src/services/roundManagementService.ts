@@ -249,6 +249,35 @@ export const roundManagementService = {
   },
 
   /**
+   * PRIVATE HELPER: Attempts to create the next betting round, catching and logging errors.
+   * This is designed to be called from automated processes (like fixture sync)
+   * where round creation failure should not halt the main process.
+   *
+   * @returns {Promise<{ success: boolean; message: string; roundId?: number }>} Status object.
+   */
+  async _tryCreateNextBettingRound(): Promise<{ success: boolean; message: string; roundId?: number }> {
+    log('Attempting automated round creation trigger...');
+    try {
+      // Note: defineAndOpenNextBettingRound now returns the new ID or void
+      // We might need to adjust defineAndOpenNextBettingRound to return the ID upon success
+      // For now, let's assume it might return void and we don't capture the ID here.
+      // TODO: Refactor defineAndOpenNextBettingRound to return new ID if needed here.
+      await this.defineAndOpenNextBettingRound(); 
+      
+      // If defineAndOpenNextBettingRound completes without throwing, assume success
+      // but acknowledge we don't have the ID back here easily without refactoring.
+      const successMessage = 'Automated round creation attempt finished. Check logs for details (may have stopped if open round exists or no fixtures found).';
+      log(successMessage);
+      return { success: true, message: successMessage }; // Consider returning true even if it stopped early due to existing open round etc.
+
+    } catch (err) {
+      const errorMessage = 'Automated round creation attempt failed.';
+      error(errorMessage, err); // Log the actual error
+      return { success: false, message: `${errorMessage} Error: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  },
+
+  /**
    * Orchestrates the entire process of:
    * 1. Checking for existing open rounds.
    * 2. Identifying candidate fixtures for the next betting round.
@@ -257,10 +286,11 @@ export const roundManagementService = {
    * 5. Populating the link table between the round and its fixtures.
    * 
    * @throws {RoundManagementError} If any step in the process fails, including validation errors or database issues.
-   * @returns {Promise<void>} A promise that resolves when the process completes successfully.
+   * @returns {Promise<number | void>} A promise that resolves to the ID of the newly created betting round, or void if no round was created.
    */
-  async defineAndOpenNextBettingRound(): Promise<void> {
+  async defineAndOpenNextBettingRound(): Promise<number | void> {
     log('Attempting to define and open the next betting round...');
+    let newBettingRoundId: number | undefined;
     try {
       // --- 1. Check if an open round already exists (Task 4) ---
       const openRoundExists = await this._checkForExistingOpenRound();
@@ -273,6 +303,10 @@ export const roundManagementService = {
       // --- 2. Identify candidate fixtures (Task 2) ---
       log('Identifying candidate fixtures...');
       const candidateFixtures = await this.identifyCandidateFixtures();
+      if (candidateFixtures.length === 0) {
+        log('Process stopped: No candidate fixtures found.');
+        return; // Exit if no candidates
+      }
       // --- End Identification ---
 
       // --- 3. Group fixtures into a logical round (Task 3) ---
@@ -290,15 +324,15 @@ export const roundManagementService = {
       
       log('Creating betting round...');
       // --- 4b. Create Betting Round Record (Subtask 5.6) ---
-      const newBettingRoundId = await this._createBettingRoundRecord(metadata);
+      newBettingRoundId = await this._createBettingRoundRecord(metadata);
       // --- End Create Record ---
 
       // --- 5. Populate the betting_round_fixtures table (Task 6) ---
       log('Populating round fixtures...');
-      // TODO: Implement betting round fixture population using groupedFixtures and newBettingRoundId
       await this._populateBettingRoundFixtures(newBettingRoundId, groupedFixtures);
 
-      log('Successfully defined and opened the next betting round.');
+      log(`Successfully defined and opened betting round ${newBettingRoundId}.`);
+      return newBettingRoundId; // Return the ID on success
 
     } catch (err) {
       error('Failed to define and open next betting round:', err);
