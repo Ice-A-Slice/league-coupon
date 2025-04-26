@@ -132,9 +132,94 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
   });
 
   // TODO: Refactor remaining tests using the Dependency Injection pattern
-  it.todo('should return early if the round is already scored');
-  it.todo('should return early if the round is already being scored');
-  // ... keep other it.todo placeholders ...
+  it('should return early if the round is already scored', async () => {
+      // Arrange
+      const bettingRoundId = 102;
+      const mockRoundScored: MockBettingRound = { 
+        id: bettingRoundId, 
+        status: 'scored', 
+        name: 'BR 102', 
+        competition_id: 1, 
+        created_at: new Date().toISOString(), 
+        updated_at: new Date().toISOString(),
+        earliest_fixture_kickoff: null,
+        latest_fixture_kickoff: null,
+        scored_at: new Date().toISOString() 
+      }; 
+
+      // --- Mock Client Setup ---
+      const initialFetchSingleMock = jest.fn().mockResolvedValueOnce({ data: mockRoundScored, error: null });
+      const initialFetchEqMock = jest.fn().mockReturnValueOnce({ single: initialFetchSingleMock });
+      const initialFetchSelectMock = jest.fn().mockReturnValueOnce({ eq: initialFetchEqMock });
+
+      const mockClient = {
+          from: jest.fn().mockImplementation((tableName: string) => {
+            if (tableName === 'betting_rounds') {
+                return { select: initialFetchSelectMock }; // Only need select().eq().single() for this path
+            }
+            // Should not call other tables
+            throw new Error(`Unexpected table access in 'already scored' test: ${tableName}`);
+          }),
+      } as unknown as SupabaseClient<Database>;
+
+      // --- Act --- 
+      const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
+
+      // --- Assert --- 
+      expect(result.success).toBe(true); // Function returns success for already scored/scoring
+      expect(result.message).toContain('Scoring skipped: Round already scored');
+      expect(mockClient.from).toHaveBeenCalledTimes(1);
+      expect(mockClient.from).toHaveBeenCalledWith('betting_rounds');
+      expect(initialFetchSelectMock).toHaveBeenCalledTimes(1);
+      expect(initialFetchEqMock).toHaveBeenCalledTimes(1);
+      expect(initialFetchSingleMock).toHaveBeenCalledTimes(1);
+  });
+  
+  it('should return early if the round is already being scored', async () => {
+      // Arrange
+      const bettingRoundId = 103;
+      const mockRoundScoring: MockBettingRound = { 
+        id: bettingRoundId, 
+        status: 'scoring', // The key difference
+        name: 'BR 103', 
+        competition_id: 1, 
+        created_at: new Date().toISOString(), 
+        updated_at: new Date().toISOString(),
+        earliest_fixture_kickoff: null,
+        latest_fixture_kickoff: null,
+        scored_at: null 
+      }; 
+
+      // --- Mock Client Setup ---
+      const initialFetchSingleMock = jest.fn().mockResolvedValueOnce({ data: mockRoundScoring, error: null });
+      const initialFetchEqMock = jest.fn().mockReturnValueOnce({ single: initialFetchSingleMock });
+      const initialFetchSelectMock = jest.fn().mockReturnValueOnce({ eq: initialFetchEqMock });
+
+      const mockClient = {
+          from: jest.fn().mockImplementation((tableName: string) => {
+            if (tableName === 'betting_rounds') {
+                return { select: initialFetchSelectMock };
+            }
+            throw new Error(`Unexpected table access in 'already scoring' test: ${tableName}`);
+          }),
+      } as unknown as SupabaseClient<Database>;
+
+      // --- Act --- 
+      const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
+
+      // --- Assert --- 
+      expect(result.success).toBe(true); // Function returns success for already scored/scoring
+      expect(result.message).toContain('Scoring skipped: Round already scoring');
+      expect(mockClient.from).toHaveBeenCalledTimes(1);
+      expect(mockClient.from).toHaveBeenCalledWith('betting_rounds');
+      expect(initialFetchSelectMock).toHaveBeenCalledTimes(1);
+      expect(initialFetchEqMock).toHaveBeenCalledTimes(1);
+      expect(initialFetchSingleMock).toHaveBeenCalledTimes(1);
+  });
+
+  // ... Keep other it.todo placeholders ...
+  it.todo('should return an error if the betting round is not found');
+  // ... etc
 });
 
 // ... (Keep the TODO placeholders for the remaining tests) ...
@@ -518,6 +603,107 @@ it('should handle errors during user_bets upsert', async () => {
     expect(mockClient.from).toHaveBeenCalledWith('user_bets');
 });
 
-// This test is skipped for now as it requires more complex mocking
-// We've already verified the core functionality with the other tests
-it.todo('should handle errors during the final status update to scored');
+it('should handle errors during the final status update to scored', async () => {
+     // Arrange
+     const bettingRoundId = 110;
+     const mockFinalUpdateError = { message: 'Update failed - DB constraint?', code: 'DB501' };
+
+     // --- Mock Data --- 
+     const mockRoundClosed: MockBettingRound = { id: bettingRoundId, status: 'closed', name: 'BR 110', competition_id: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), earliest_fixture_kickoff: null, latest_fixture_kickoff: null, scored_at: null };
+     const mockLinks: MockBettingRoundFixture[] = [{ betting_round_id: bettingRoundId, fixture_id: 1005, created_at: new Date().toISOString() }];
+     const mockFixtures: Partial<MockFixture>[] = [ { id: 1005, status_short: 'FT', home_goals: 0, away_goals: 0, result: 'X' }];
+     const mockBets: MockUserBet[] = [
+         { id: 'bet2', user_id: 'user2', betting_round_id: bettingRoundId, fixture_id: 1005, prediction: '1', points_awarded: null, created_at: new Date().toISOString(), submitted_at: new Date().toISOString() },
+     ];
+     const expectedUpsertPayload = [{ id: 'bet2', points_awarded: 0 }]; // This bet gets 0 points (X != 1)
+
+     // --- Mock Client Setup (mimics the successful path until the last step) --- 
+      
+     // 1. Initial round fetch -> OK
+     const initialFetchSingleMock = jest.fn().mockResolvedValueOnce({ data: mockRoundClosed, error: null });
+     const initialFetchEqMock = jest.fn().mockReturnValueOnce({ single: initialFetchSingleMock });
+     const initialFetchSelectMock = jest.fn().mockReturnValueOnce({ eq: initialFetchEqMock });
+
+     // 2. Update round to 'scoring' -> OK
+     const scoringUpdateSingleMock = jest.fn().mockResolvedValueOnce({ error: null });
+     const scoringUpdateSelectMock = jest.fn().mockReturnValueOnce({ single: scoringUpdateSingleMock });
+     const scoringUpdateEqMock = jest.fn().mockReturnValueOnce({ select: scoringUpdateSelectMock });
+     const scoringUpdateMock = jest.fn().mockReturnValueOnce({ eq: scoringUpdateEqMock });
+
+     // 3. Fetch fixture links -> OK
+     const linksFetchEqMock = jest.fn().mockResolvedValueOnce({ data: mockLinks, error: null });
+     const linksFetchSelectMock = jest.fn().mockReturnValueOnce({ eq: linksFetchEqMock });
+
+     // 4. Fetch fixtures -> OK
+     const fixturesFetchInMock = jest.fn().mockResolvedValueOnce({ data: mockFixtures, error: null });
+     const fixturesFetchSelectMock = jest.fn().mockReturnValueOnce({ in: fixturesFetchInMock });
+
+     // 5. Fetch user bets -> OK
+     const betsFetchEqMock = jest.fn().mockResolvedValueOnce({ data: mockBets, error: null });
+     const betsFetchSelectMock = jest.fn().mockReturnValueOnce({ eq: betsFetchEqMock });
+
+     // 6. Upsert user bets -> OK
+     const betsUpsertMock = jest.fn().mockResolvedValueOnce({ error: null });
+
+     // 7. Final round update -> FAILS
+     const finalUpdateEqMock = jest.fn().mockResolvedValueOnce({ error: mockFinalUpdateError }); // <<< ERROR HERE
+     const finalUpdateMock = jest.fn().mockReturnValueOnce({ eq: finalUpdateEqMock });
+
+     // Create the main mock client object
+     const mockClient = {
+       from: jest.fn()
+         .mockImplementationOnce((tableName: string) => { // 1. Initial fetch
+           // @ts-expect-error - We know 'mock' exists on Jest mocks, TS struggles here
+           if (tableName !== 'betting_rounds') throw new Error('Expected betting_rounds');
+           return { select: initialFetchSelectMock };
+         })
+         .mockImplementationOnce((tableName: string) => { // 2. Scoring update
+           if (tableName !== 'betting_rounds') throw new Error('Expected betting_rounds');
+           return { update: scoringUpdateMock };
+         })
+         .mockImplementationOnce((tableName: string) => { // 3. Fetch links
+           if (tableName !== 'betting_round_fixtures') throw new Error('Expected betting_round_fixtures');
+           return { select: linksFetchSelectMock };
+         })
+         .mockImplementationOnce((tableName: string) => { // 4. Fetch fixtures
+           if (tableName !== 'fixtures') throw new Error('Expected fixtures');
+           return { select: fixturesFetchSelectMock };
+         })
+         .mockImplementationOnce((tableName: string) => { // 5. Fetch bets
+           if (tableName !== 'user_bets') throw new Error('Expected user_bets');
+           return { select: betsFetchSelectMock };
+         })
+         .mockImplementationOnce((tableName: string) => { // 6. Upsert bets
+           if (tableName !== 'user_bets') throw new Error('Expected user_bets');
+           return { upsert: betsUpsertMock };
+         })
+         .mockImplementationOnce((tableName: string) => { // 7. Final update (fails)
+           if (tableName !== 'betting_rounds') throw new Error('Expected betting_rounds');
+           return { update: finalUpdateMock }; 
+         }),
+     } as unknown as SupabaseClient<Database>;
+
+     // --- Act --- 
+     const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
+
+     // --- Assert --- 
+     expect(result.success).toBe(false);
+     expect(result.message).toBe("Points stored, but failed to mark round as fully scored."); 
+     expect(result.details?.betsProcessed).toBe(1);
+     expect(result.details?.betsUpdated).toBe(1); // The upsert succeeded
+     expect(result.details?.error).toEqual(mockFinalUpdateError);
+
+     // Verify calls - Check specific mock functions were called
+     expect(mockClient.from).toHaveBeenCalledTimes(7); // 7 distinct steps now
+     expect(initialFetchSelectMock).toHaveBeenCalledTimes(1);
+     expect(scoringUpdateMock).toHaveBeenCalledTimes(1);
+     expect(linksFetchSelectMock).toHaveBeenCalledTimes(1);
+     expect(fixturesFetchSelectMock).toHaveBeenCalledTimes(1);
+     expect(betsFetchSelectMock).toHaveBeenCalledTimes(1);
+     expect(betsUpsertMock).toHaveBeenCalledTimes(1);
+     expect(finalUpdateMock).toHaveBeenCalledTimes(1);
+     expect(finalUpdateEqMock).toHaveBeenCalledTimes(1); // Ensure the failing step's specific mock was hit
+     
+     // Check payloads
+     expect(scoringUpdateMock.mock.calls[0][0]).toEqual(expect.objectContaining({ status: 'scoring' }));
+});
