@@ -141,6 +141,56 @@ export const roundManagementService = {
   },
 
   /**
+   * PRIVATE HELPER: Inserts a new record into the betting_rounds table.
+   *
+   * @param metadata - Object containing the required data for the new round.
+   * @returns {Promise<number>} The ID of the newly created betting round.
+   * @throws {RoundManagementError} If the database insertion fails.
+   */
+  async _createBettingRoundRecord(metadata: {
+    name: string;
+    competitionId: number;
+    earliestKickoff: string;
+    latestKickoff: string;
+  }): Promise<number> {
+    log(`Inserting new betting round record: ${metadata.name}`);
+    const supabase = createClient();
+
+    const newRoundData: BettingRoundInsert = {
+      name: metadata.name,
+      competition_id: metadata.competitionId,
+      earliest_fixture_kickoff: metadata.earliestKickoff,
+      latest_fixture_kickoff: metadata.latestKickoff,
+      status: 'open' // Default status for a new round
+      // updated_at and created_at should be handled by DB defaults/triggers
+      // scored_at starts as null
+    };
+
+    try {
+      const { data, error } = await supabase
+        .from('betting_rounds')
+        .insert(newRoundData)
+        .select('id') // Select the ID of the newly inserted row
+        .single(); // Expecting only one row to be inserted and returned
+
+      if (error || !data?.id) {
+        // Log the error object itself or specific properties
+        console.error('[RoundManagementService Error] Error inserting new betting round record:', error);
+        throw new RoundManagementError('Failed to insert new betting round into database.');
+      }
+
+      const newRoundId = data.id;
+      log(`Successfully created betting round with ID: ${newRoundId}`);
+      return newRoundId;
+
+    } catch (err) {
+      error('Unexpected error during betting round insertion:', err);
+      if (err instanceof RoundManagementError) throw err;
+      throw new RoundManagementError('Unexpected error creating betting round record.');
+    }
+  },
+
+  /**
    * Orchestrates the entire process of:
    * 1. Checking for existing open rounds.
    * 2. Identifying candidate fixtures for the next betting round.
@@ -181,8 +231,9 @@ export const roundManagementService = {
       log(`Extracted metadata: Name=${metadata.name}, CompID=${metadata.competitionId}, Start=${metadata.earliestKickoff}, End=${metadata.latestKickoff}`);
       
       log('Creating betting round...');
-      // TODO: Implement betting round creation using metadata (Subtask 5.6)
-      // const newBettingRoundId = await this._createBettingRoundRecord(metadata);
+      // --- 4b. Create Betting Round Record (Subtask 5.6) ---
+      const newBettingRoundId = await this._createBettingRoundRecord(metadata);
+      // --- End Create Record ---
 
       // --- 5. Populate the betting_round_fixtures table (Task 6) ---
       log('Populating round fixtures...');
