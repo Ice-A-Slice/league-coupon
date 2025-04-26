@@ -1,8 +1,21 @@
-import { describe, it, expect } from '@jest/globals'; // Corrected to use Jest
+import { describe, it, expect, jest } from '@jest/globals';
 import { roundManagementService } from './roundManagementService';
+import type { Tables } from '@/types/supabase';
+
+// Define Fixture type - Use the actual type imported if possible, 
+// but ensure mock data matches required fields.
+type MockFixture = Partial<Tables<'fixtures'> & { id: number; kickoff: string }> & {
+  // Add required non-nullable fields for type safety
+  id: number;
+  kickoff: string;
+  api_fixture_id: number;
+  away_team_id: number;
+  home_team_id: number;
+  round_id: number;
+  status_short: string;
+};
 
 describe('roundManagementService', () => {
-
   describe('defineAndOpenNextBettingRound', () => {
     it('should exist as a function on the service', () => {
       // Basic check to ensure the function is exported correctly
@@ -10,18 +23,62 @@ describe('roundManagementService', () => {
     });
 
     // --- TODO: Add detailed behavior tests as functionality is implemented --- 
-
-    // Example placeholder for a future test (requires mocking etc.)
     it.todo('should check for existing open rounds before proceeding');
+  });
 
-    // TODO: Add tests for identifying candidate fixtures (Task 2)
-    // TODO: Add tests for grouping fixtures (Task 3)
-    // TODO: Add tests for betting round creation (Task 5)
-    // TODO: Add tests for populating fixtures (Task 6)
-    // TODO: Add tests for various error handling scenarios (e.g., no fixtures found, DB errors)
+  // --- Tests for groupFixturesForRound --- 
+  describe('groupFixturesForRound', () => {
+    // Create fixtures with specific time gaps to test the grouping logic
+    // These fixtures have a 72+ hour gap between fixture 3 and 4
+    const fixturesWithGap: MockFixture[] = [
+      { id: 1, kickoff: '2024-01-01T10:00:00Z', api_fixture_id: 101, away_team_id: 1, home_team_id: 2, round_id: 1, status_short: 'NS' }, 
+      { id: 2, kickoff: '2024-01-02T10:00:00Z', api_fixture_id: 102, away_team_id: 3, home_team_id: 4, round_id: 1, status_short: 'NS' }, 
+      { id: 3, kickoff: '2024-01-03T10:00:00Z', api_fixture_id: 103, away_team_id: 5, home_team_id: 6, round_id: 1, status_short: 'NS' }, 
+      // 4-day gap (96 hours) between fixture 3 and 4
+      { id: 4, kickoff: '2024-01-07T10:00:00Z', api_fixture_id: 104, away_team_id: 7, home_team_id: 8, round_id: 2, status_short: 'NS' }, 
+      { id: 5, kickoff: '2024-01-08T10:00:00Z', api_fixture_id: 105, away_team_id: 9, home_team_id: 10, round_id: 2, status_short: 'NS' }, 
+    ];
 
+    // These fixtures have no significant gaps (all less than 72 hours)
+    const fixturesWithoutGap: MockFixture[] = [
+      { id: 1, kickoff: '2024-01-01T10:00:00Z', api_fixture_id: 101, away_team_id: 1, home_team_id: 2, round_id: 1, status_short: 'NS' }, 
+      { id: 2, kickoff: '2024-01-02T10:00:00Z', api_fixture_id: 102, away_team_id: 3, home_team_id: 4, round_id: 1, status_short: 'NS' }, 
+      { id: 3, kickoff: '2024-01-03T10:00:00Z', api_fixture_id: 103, away_team_id: 5, home_team_id: 6, round_id: 1, status_short: 'NS' }, 
+      // Only 2-day gap (48 hours) between fixture 3 and 4
+      { id: 4, kickoff: '2024-01-05T10:00:00Z', api_fixture_id: 104, away_team_id: 7, home_team_id: 8, round_id: 2, status_short: 'NS' }, 
+      { id: 5, kickoff: '2024-01-06T10:00:00Z', api_fixture_id: 105, away_team_id: 9, home_team_id: 10, round_id: 2, status_short: 'NS' }, 
+    ];
+
+    it('should group fixtures before the first gap > 72 hours', async () => {
+      const result = await roundManagementService.groupFixturesForRound(fixturesWithGap as Tables<'fixtures'>[]);
+      
+      expect(result).toHaveLength(3);
+      expect(result?.map(f => f.id)).toEqual([1, 2, 3]); // Check IDs
+    });
+
+    it('should return all fixtures if no gap exceeds the threshold', async () => {
+      const result = await roundManagementService.groupFixturesForRound(fixturesWithoutGap as Tables<'fixtures'>[]);
+      
+      expect(result).toHaveLength(5);
+      expect(result?.map(f => f.id)).toEqual([1, 2, 3, 4, 5]);
+    });
+
+    it('should return a valid group for a single fixture', async () => {
+      const singleFixture: MockFixture[] = [
+        { id: 1, kickoff: '2024-01-01T10:00:00Z', api_fixture_id: 101, away_team_id: 1, home_team_id: 2, round_id: 1, status_short: 'NS' }
+      ];
+      
+      const result = await roundManagementService.groupFixturesForRound(singleFixture as Tables<'fixtures'>[]);
+      
+      expect(result).toHaveLength(1);
+      expect(result?.map(f => f.id)).toEqual([1]);
+    });
+
+    it('should return null if the input array is empty', async () => {
+      const result = await roundManagementService.groupFixturesForRound([]);
+      expect(result).toBeNull();
+    });
   });
 
   // TODO: Add describe blocks for other service methods if they are added later
-
-}); 
+});
