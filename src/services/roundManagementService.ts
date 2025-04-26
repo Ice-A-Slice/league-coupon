@@ -1,5 +1,10 @@
 import { createClient } from '@/utils/supabase/client'; // Corrected path
 import type { Database, Tables, TablesInsert, TablesUpdate, Enums } from '@/types/supabase';
+import { calculateTimeDifference } from '@/lib/utils';
+
+// --- Constants ---
+const TIME_GAP_THRESHOLD_HOURS = 72;
+const MIN_FIXTURES_PER_ROUND = 1; // Start with 1 for initial testing
 
 // --- Utilities ---
 
@@ -146,6 +151,74 @@ export const roundManagementService = {
       error('Error identifying candidate fixtures:', err);
       // Handle potential database errors, etc.
       throw new RoundManagementError('Failed to query candidate fixtures.');
+    }
+  },
+
+  /**
+   * Groups a list of sorted candidate fixtures into a logical betting round.
+   * The primary logic involves finding the first significant time gap (e.g., > 72 hours)
+   * between consecutive fixtures and taking all fixtures before that gap.
+   * Also includes validation for minimum fixture count.
+   *
+   * @param candidateFixtures - An array of candidate Fixture objects, *pre-sorted* by kickoff time.
+   * @returns {Promise<Fixture[] | null>} A promise resolving to an array of fixtures for the round, or null if no suitable group is found (e.g., minimum count not met).
+   * @throws {RoundManagementError} If an unexpected error occurs during grouping.
+   */
+  async groupFixturesForRound(candidateFixtures: Fixture[]): Promise<Fixture[] | null> {
+    log(`Attempting to group ${candidateFixtures.length} candidate fixtures...`);
+    if (candidateFixtures.length === 0) {
+      log('No candidate fixtures provided, cannot form a group.');
+      return null;
+    }
+
+    try {
+      // Input is already sorted by kickoff (from identifyCandidateFixtures)
+
+      // --- Find the first significant time gap ---
+      let groupEndIndex = candidateFixtures.length; // Default to all fixtures if no gap found
+
+      for (let i = 0; i < candidateFixtures.length - 1; i++) {
+        const fixture1 = candidateFixtures[i];
+        const fixture2 = candidateFixtures[i + 1];
+
+        const timeGapHours = calculateTimeDifference(
+          fixture1.kickoff,
+          fixture2.kickoff,
+          'hours'
+        );
+
+        log(`Time gap between fixture ${fixture1.id} and ${fixture2.id}: ${timeGapHours.toFixed(2)} hours`);
+
+        if (timeGapHours > TIME_GAP_THRESHOLD_HOURS) {
+          groupEndIndex = i + 1; // Group includes fixture1, ends before fixture2
+          log(`Found significant time gap (${timeGapHours.toFixed(2)}h > ${TIME_GAP_THRESHOLD_HOURS}h) after index ${i}. Grouping first ${groupEndIndex} fixtures.`);
+          break; // Stop at the first significant gap
+        }
+      }
+      // --- End Gap Finding ---
+
+      // --- Extract and Validate Group ---
+      const potentialGroup = candidateFixtures.slice(0, groupEndIndex);
+
+      if (potentialGroup.length < MIN_FIXTURES_PER_ROUND) {
+        log(`Potential group of ${potentialGroup.length} fixtures does not meet the minimum requirement of ${MIN_FIXTURES_PER_ROUND}.`);
+        return null; // Not enough fixtures for a valid round
+      }
+      // --- End Validation ---
+
+      const groupedFixtures: Fixture[] | null = potentialGroup; // Assign the validated group
+
+      if (groupedFixtures) {
+        log(`Successfully grouped ${groupedFixtures.length} fixtures for the round.`);
+      } else {
+        // This path should technically not be reached due to the null return above, but kept for clarity
+        log('Could not form a valid group based on the criteria.');
+      }
+      return groupedFixtures;
+
+    } catch (err) {
+      error('Error grouping fixtures:', err);
+      throw new RoundManagementError('An unexpected error occurred while grouping fixtures.');
     }
   },
 
