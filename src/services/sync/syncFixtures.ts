@@ -9,8 +9,8 @@ import type { Tables } from '@/types/supabase';
 // Define type for the data we need from the DB fixture record for comparison
 type DbFixtureComparable = Pick<
   Tables<'fixtures'>,
-  'id' | 'api_fixture_id' | 'kickoff' | 'status_short' | 'home_goals' | 'away_goals' | 'result' | 'home_goals_ht' | 'away_goals_ht' | 'referee' | 'round_id' |
-  'home_team_id' | 'away_team_id' // Added team IDs
+  'id' | 'api_fixture_id' | 'kickoff' | 'status_short' | 'status_long' | 'home_goals' | 'away_goals' | 'result' | 'home_goals_ht' | 'away_goals_ht' | 'referee' | 'round_id' |
+  'home_team_id' | 'away_team_id' | 'created_at' | 'venue_city' | 'venue_name' // Added team IDs and new fields
 >;
 
 // Define a more specific type for the expected season details structure
@@ -100,15 +100,17 @@ async function syncFixturesData(
 
     // 2. Fetch existing fixtures from DB for this season
     console.log(`Fetching existing fixtures from DB for season ID ${seasonDbId}...`);
-    // Select team IDs directly
+    // Select team IDs directly AND the newly added fields
     const { data: dbFixturesData, error: dbError } = await supabaseServerClient
         .from('fixtures')
         .select(`
-            id, api_fixture_id, kickoff, status_short, home_goals, away_goals, result, home_goals_ht, away_goals_ht, referee, round_id, 
-            home_team_id, away_team_id, 
+            id, api_fixture_id, kickoff, status_short, status_long, 
+            home_goals, away_goals, result, home_goals_ht, away_goals_ht, 
+            referee, round_id, home_team_id, away_team_id, 
+            created_at, venue_city, venue_name, 
             rounds ( season_id )
         `)
-        .eq('rounds.season_id', seasonDbId); // Filter by DB season ID
+        .eq('rounds.season_id', seasonDbId);
 
     if (dbError) {
         console.error('Error fetching fixtures from DB:', dbError);
@@ -125,6 +127,7 @@ async function syncFixturesData(
             comparableFixture.api_fixture_id = f.api_fixture_id;
             comparableFixture.kickoff = f.kickoff;
             comparableFixture.status_short = f.status_short;
+            comparableFixture.status_long = f.status_long;
             comparableFixture.home_goals = f.home_goals;
             comparableFixture.away_goals = f.away_goals;
             comparableFixture.result = f.result;
@@ -132,8 +135,11 @@ async function syncFixturesData(
             comparableFixture.away_goals_ht = f.away_goals_ht;
             comparableFixture.referee = f.referee;
             comparableFixture.round_id = f.round_id;
-            comparableFixture.home_team_id = f.home_team_id; // Add home_team_id
-            comparableFixture.away_team_id = f.away_team_id; // Add away_team_id
+            comparableFixture.home_team_id = f.home_team_id;
+            comparableFixture.away_team_id = f.away_team_id;
+            comparableFixture.created_at = f.created_at;
+            comparableFixture.venue_city = f.venue_city;
+            comparableFixture.venue_name = f.venue_name;
 
             dbFixturesMap.set(f.api_fixture_id, comparableFixture as DbFixtureComparable);
         }
@@ -146,13 +152,7 @@ async function syncFixturesData(
     for (const apiFixtureItem of apiFixtures) {
         const apiFixture = apiFixtureItem.fixture;
         const apiGoals = apiFixtureItem.goals;
-        const apiScore = apiFixtureItem.score; // For HT score
-
-        if (!apiFixture || !apiGoals || !apiScore) {
-            console.warn(`Skipping API fixture ${apiFixture?.id} due to incomplete data.`);
-            skippedCount++;
-            continue;
-        }
+        const apiScore = apiFixtureItem.score;
 
         const dbFixture = dbFixturesMap.get(apiFixture.id);
 
@@ -169,64 +169,71 @@ async function syncFixturesData(
             continue;
         }
 
-        // Compare relevant fields
+        // --- Build Candidate Payload from API Data ---
+        const apiKickoff = apiFixture.date;
+        const apiStatusShort = apiFixture.status?.short;
+        const apiStatusLong = apiFixture.status?.long;
+        const apiHomeGoals = apiGoals.home;
+        const apiAwayGoals = apiGoals.away;
+        const apiHomeGoalsHT = apiScore.halftime?.home;
+        const apiAwayGoalsHT = apiScore.halftime?.away;
+        const apiReferee = apiFixture.referee;
+        const apiResult = calculateResult(apiHomeGoals, apiAwayGoals);
+
+        // --- Check for Required API Data ---
+        // Crucial: Ensure status_short from API is available before comparing/updating
+        if (!apiStatusShort) {
+            console.warn(`Skipping API fixture ${apiFixture.id}: Missing required status_short from API data.`);
+            skippedCount++;
+            continue;
+        }
+
+        // --- Compare API Candidate with DB Fixture ---
         let needsUpdate = false;
-        // Start with non-nullable fields required for update
-        const updatePayload: Partial<Tables<'fixtures'>> & { id: number; api_fixture_id: number; round_id: number; home_team_id: number; away_team_id: number; kickoff: string; } = {
-             id: dbFixture.id, 
-             api_fixture_id: dbFixture.api_fixture_id, 
-             round_id: dbFixture.round_id, 
-             home_team_id: dbFixture.home_team_id, 
-             away_team_id: dbFixture.away_team_id, 
-             kickoff: dbFixture.kickoff // Explicitly include kickoff
-        }; 
-
-        // Compare kickoff time - *Now we only ADD if it differs from the already included kickoff*
-        if (apiFixture.date && apiFixture.date !== updatePayload.kickoff) {
-            updatePayload.kickoff = apiFixture.date;
-            needsUpdate = true;
-        }
-        // Compare status
-        if (apiFixture.status?.short && apiFixture.status.short !== dbFixture.status_short) {
-            updatePayload.status_short = apiFixture.status.short;
-            updatePayload.status_long = apiFixture.status.long; 
-            needsUpdate = true;
-        }
-        // Compare goals
-        if (apiGoals.home !== dbFixture.home_goals) {
-            updatePayload.home_goals = apiGoals.home;
-            needsUpdate = true;
-        }
-        if (apiGoals.away !== dbFixture.away_goals) {
-            updatePayload.away_goals = apiGoals.away;
-            needsUpdate = true;
-        }
-         // Compare HT goals
-         if (apiScore.halftime?.home !== dbFixture.home_goals_ht) {
-             updatePayload.home_goals_ht = apiScore.halftime.home;
-             needsUpdate = true;
-         }
-         if (apiScore.halftime?.away !== dbFixture.away_goals_ht) {
-             updatePayload.away_goals_ht = apiScore.halftime.away;
-             needsUpdate = true;
-         }
-         // Compare Referee
-         if (apiFixture.referee && apiFixture.referee !== dbFixture.referee) {
-            updatePayload.referee = apiFixture.referee;
-            needsUpdate = true;
-        }
-
-        // Recalculate result if goals changed
-        const currentApiResult = calculateResult(apiGoals.home, apiGoals.away);
-        if ((needsUpdate && updatePayload.home_goals !== undefined) || (needsUpdate && updatePayload.away_goals !== undefined) || currentApiResult !== dbFixture.result) {
-            if (currentApiResult !== dbFixture.result) {
-                 updatePayload.result = currentApiResult;
-                 needsUpdate = true;
-            }
-        }
+        if (apiKickoff && apiKickoff !== dbFixture.kickoff) needsUpdate = true;
+        if (apiStatusShort !== dbFixture.status_short) needsUpdate = true;
+        if (apiHomeGoals !== dbFixture.home_goals) needsUpdate = true;
+        if (apiAwayGoals !== dbFixture.away_goals) needsUpdate = true;
+        if (apiHomeGoalsHT !== dbFixture.home_goals_ht) needsUpdate = true;
+        if (apiAwayGoalsHT !== dbFixture.away_goals_ht) needsUpdate = true;
+        if (apiReferee !== dbFixture.referee) needsUpdate = true; // Allow null comparison
+        if (apiResult !== dbFixture.result) needsUpdate = true;
+        // Add comparisons for other fields if necessary (e.g., status_long)
+        if (apiStatusLong && apiStatusLong !== dbFixture.status_long) needsUpdate = true;
+        
 
         if (needsUpdate) {
-            updatePayload.last_api_update = new Date().toISOString(); 
+            // Construct the FULL payload for upsert, including the ID for matching
+            // and ALL non-nullable fields to satisfy DB constraints.
+            const updatePayload: Tables<'fixtures'> = {
+                // Key for upsert conflict resolution
+                id: dbFixture.id,
+                
+                // Non-nullable fields that *shouldn't* change during sync, 
+                // but need to be included to avoid constraint errors.
+                api_fixture_id: dbFixture.api_fixture_id,
+                away_team_id: dbFixture.away_team_id,
+                home_team_id: dbFixture.home_team_id,
+                round_id: dbFixture.round_id,
+
+                // Potentially updated fields (using API value if available)
+                kickoff: apiKickoff ?? dbFixture.kickoff, 
+                status_short: apiStatusShort, // We ensured this is not null above
+                status_long: apiStatusLong ?? dbFixture.status_long,
+                home_goals: apiHomeGoals,
+                away_goals: apiAwayGoals,
+                home_goals_ht: apiHomeGoalsHT,
+                away_goals_ht: apiAwayGoalsHT,
+                referee: apiReferee,
+                result: apiResult,
+                last_api_update: new Date().toISOString(),
+                
+                // Nullable fields from DB that we aren't explicitly updating here
+                // (could be added if needed, but potentially set to null if missing from API)
+                created_at: dbFixture.created_at, // Keep original created_at
+                venue_city: dbFixture.venue_city,
+                venue_name: dbFixture.venue_name,
+            };
             updates.push(updatePayload);
         } else {
             skippedCount++;
