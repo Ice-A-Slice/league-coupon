@@ -94,7 +94,23 @@ const createMockApiFixture = (id: number, status: string, home: number | null, a
     away: { id: 0, name: 'Away Team', logo: null } 
   } as MockApiTeams, 
 });
-const createMockDbFixture = (id: number, apiFixtureId: number, status: string, home: number | null, away: number | null, kickoff: string = '2024-01-01T12:00:00Z', roundId: number = 1, homeTeamId: number = 33, awayTeamId: number = 48): Partial<Tables<'fixtures'> & { rounds: { season_id: number } }> => ({ id, api_fixture_id: apiFixtureId, status_short: status, home_goals: home, away_goals: away, kickoff, result: home === null || away === null ? null : (home > away ? '1' : (home < away ? '2' : 'X')), home_goals_ht: 0, away_goals_ht: 0, referee: 'Ref', rounds: { season_id: 1 }, round_id: roundId, home_team_id: homeTeamId, away_team_id: awayTeamId });
+const createMockDbFixture = (id: number, apiFixtureId: number, status: string, home: number | null, away: number | null, kickoff: string = '2024-01-01T12:00:00Z', roundId: number = 1, homeTeamId: number = 33, awayTeamId: number = 48): Partial<Tables<'fixtures'> & { rounds: { season_id: number } }> => ({
+  id,
+  api_fixture_id: apiFixtureId,
+  status_short: status,
+  status_long: `Status ${status}`,
+  home_goals: home,
+  away_goals: away,
+  kickoff,
+  result: home === null || away === null ? null : (home > away ? '1' : (home < away ? '2' : 'X')),
+  home_goals_ht: 0,
+  away_goals_ht: 0,
+  referee: 'Ref',
+  rounds: { season_id: 1 },
+  round_id: roundId,
+  home_team_id: homeTeamId,
+  away_team_id: awayTeamId
+});
 // --- End Helpers ---
 
 
