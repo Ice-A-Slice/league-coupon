@@ -37,103 +37,125 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
       const mockLinks: MockBettingRoundFixture[] = [ { betting_round_id: bettingRoundId, fixture_id: fixtureId1, created_at: new Date().toISOString() }, { betting_round_id: bettingRoundId, fixture_id: fixtureId2, created_at: new Date().toISOString() }];
       const mockFixtures: Partial<MockFixture>[] = [ { id: fixtureId1, home_goals: 2, away_goals: 1, status_short: 'FT', result: '1' }, { id: fixtureId2, home_goals: 0, away_goals: 0, status_short: 'FT', result: 'X' }];
       const mockBets: MockUserBet[] = [
+          // Bet 1: Correct prediction (1 vs 1)
           { id: 'bet1', user_id: userId1, betting_round_id: bettingRoundId, fixture_id: fixtureId1, prediction: '1', points_awarded: null, created_at: new Date().toISOString(), submitted_at: new Date().toISOString() },
+          // Bet 2: Incorrect prediction (2 vs X)
           { id: 'bet2', user_id: userId1, betting_round_id: bettingRoundId, fixture_id: fixtureId2, prediction: '2', points_awarded: null, created_at: new Date().toISOString(), submitted_at: new Date().toISOString() },
+          // Bet 3: Incorrect prediction (X vs 1)
           { id: 'bet3', user_id: userId2, betting_round_id: bettingRoundId, fixture_id: fixtureId1, prediction: 'X', points_awarded: null, created_at: new Date().toISOString(), submitted_at: new Date().toISOString() },
+          // Bet 4: Correct prediction (X vs X)
           { id: 'bet4', user_id: userId2, betting_round_id: bettingRoundId, fixture_id: fixtureId2, prediction: 'X', points_awarded: null, created_at: new Date().toISOString(), submitted_at: new Date().toISOString() },
-          { id: 'bet5', user_id: userId1, betting_round_id: bettingRoundId, fixture_id: fixtureId1, prediction: '1', points_awarded: 1, created_at: new Date().toISOString(), submitted_at: new Date().toISOString() }, // Already scored
+          // Bet 5: Already scored (should be skipped)
+          { id: 'bet5', user_id: userId1, betting_round_id: bettingRoundId, fixture_id: fixtureId1, prediction: '1', points_awarded: 1, created_at: new Date().toISOString(), submitted_at: new Date().toISOString() }, 
       ];
 
-      // --- Mock Client Setup --- 
-      // Define specific mocks for each distinct call chain
+      // --- Mock Client Setup (More Granular) --- 
+      const mockClient = { from: jest.fn() } as unknown as SupabaseClient<Database>; // Use jest.fn() directly
 
-      // 1. Initial round fetch: from('betting_rounds').select('status').eq('id', bettingRoundId).single()
-      const initialFetchSingleMock = jest.fn().mockResolvedValueOnce({ data: mockRoundClosed, error: null });
-      const initialFetchEqMock = jest.fn().mockReturnValueOnce({ single: initialFetchSingleMock });
-      const initialFetchSelectMock = jest.fn().mockReturnValueOnce({ eq: initialFetchEqMock });
+      // Mock sequence of calls for different tables
+      (mockClient.from as jest.Mock)
+          // 1. Fetch round status (betting_rounds)
+          .mockImplementationOnce((tableName: string) => {
+              if (tableName !== 'betting_rounds') throw new Error('Test Setup Error: Expected betting_rounds');
+              return {
+                  select: jest.fn().mockReturnThis(),
+                  eq: jest.fn().mockReturnThis(),
+                  single: jest.fn().mockResolvedValueOnce({ data: mockRoundClosed, error: null })
+              };
+          })
+          // 2. Update round to 'scoring' (betting_rounds)
+          .mockImplementationOnce((tableName: string) => {
+              if (tableName !== 'betting_rounds') throw new Error('Test Setup Error: Expected betting_rounds update');
+              return {
+                  update: jest.fn().mockReturnThis(),
+                  eq: jest.fn().mockReturnThis(),
+                  select: jest.fn().mockReturnThis(),
+                  single: jest.fn().mockResolvedValueOnce({ data: { status: 'scoring' }, error: null }) // Simulate success
+              };
+          })
+          // 3. Fetch fixture links (betting_round_fixtures)
+          .mockImplementationOnce((tableName: string) => {
+              if (tableName !== 'betting_round_fixtures') throw new Error('Test Setup Error: Expected betting_round_fixtures');
+              return {
+                  select: jest.fn().mockReturnThis(),
+                  eq: jest.fn().mockResolvedValueOnce({ data: mockLinks, error: null })
+              };
+          })
+          // 4. Fetch fixtures (fixtures)
+          .mockImplementationOnce((tableName: string) => {
+               if (tableName !== 'fixtures') throw new Error('Test Setup Error: Expected fixtures');
+              return {
+                  select: jest.fn().mockReturnThis(),
+                  in: jest.fn().mockResolvedValueOnce({ data: mockFixtures, error: null })
+              };
+          })
+          // 5. Fetch user bets (user_bets)
+          .mockImplementationOnce((tableName: string) => {
+              if (tableName !== 'user_bets') throw new Error('Test Setup Error: Expected user_bets select');
+              return {
+                  select: jest.fn().mockReturnThis(),
+                  eq: jest.fn().mockResolvedValueOnce({ data: mockBets, error: null })
+              };
+          });
+          
+      // Mock the individual update calls for user_bets
+      const betUpdateMocks = {
+          bet1: jest.fn().mockResolvedValue({ error: null }),
+          bet2: jest.fn().mockResolvedValue({ error: null }),
+          bet3: jest.fn().mockResolvedValue({ error: null }),
+          bet4: jest.fn().mockResolvedValue({ error: null }),
+      };
 
-      // 2. Update round to 'scoring': ...
-      const scoringUpdateSingleMock = jest.fn().mockResolvedValueOnce({ data: { status: 'scoring' }, error: null });
-      const scoringUpdateSelectMock = jest.fn().mockReturnValueOnce({ single: scoringUpdateSingleMock });
-      const scoringUpdateEqMock = jest.fn().mockReturnValueOnce({ select: scoringUpdateSelectMock });
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const scoringUpdateMock = jest.fn().mockReturnValueOnce({ eq: scoringUpdateEqMock });
+      // We need to mock the subsequent calls to from('user_bets').update().eq()
+      // Let's add specific mocks for each expected update call
+      (mockClient.from as jest.Mock)
+          .mockImplementationOnce((tableName: string) => { // Update for bet1
+              if (tableName !== 'user_bets') throw new Error('Test Setup Error: Expected user_bets update bet1');
+              return { update: jest.fn((updateData) => ({ eq: betUpdateMocks.bet1.mockImplementation(() => { expect(updateData.points_awarded).toBe(1); return Promise.resolve({ error: null }); }) })) };
+          })
+          .mockImplementationOnce((tableName: string) => { // Update for bet2
+              if (tableName !== 'user_bets') throw new Error('Test Setup Error: Expected user_bets update bet2');
+              return { update: jest.fn((updateData) => ({ eq: betUpdateMocks.bet2.mockImplementation(() => { expect(updateData.points_awarded).toBe(0); return Promise.resolve({ error: null }); }) })) };
+          })
+          .mockImplementationOnce((tableName: string) => { // Update for bet3
+              if (tableName !== 'user_bets') throw new Error('Test Setup Error: Expected user_bets update bet3');
+              return { update: jest.fn((updateData) => ({ eq: betUpdateMocks.bet3.mockImplementation(() => { expect(updateData.points_awarded).toBe(0); return Promise.resolve({ error: null }); }) })) };
+          })
+          .mockImplementationOnce((tableName: string) => { // Update for bet4
+              if (tableName !== 'user_bets') throw new Error('Test Setup Error: Expected user_bets update bet4');
+              return { update: jest.fn((updateData) => ({ eq: betUpdateMocks.bet4.mockImplementation(() => { expect(updateData.points_awarded).toBe(1); return Promise.resolve({ error: null }); }) })) };
+          });
+          
+       // Mock the final status update to 'scored'
+      (mockClient.from as jest.Mock)
+          .mockImplementationOnce((tableName: string) => {
+              if (tableName !== 'betting_rounds') throw new Error('Test Setup Error: Expected final betting_rounds update');
+              return {
+                  update: jest.fn().mockReturnThis(),
+                  eq: jest.fn().mockResolvedValueOnce({ error: null }) // Simulate success
+              };
+          });
 
-      // 3. Fetch fixture links: from('betting_round_fixtures').select('fixture_id').eq('betting_round_id', bettingRoundId)
-      const linksFetchEqMock = jest.fn().mockResolvedValueOnce({ data: mockLinks, error: null });
-      const linksFetchSelectMock = jest.fn().mockReturnValueOnce({ eq: linksFetchEqMock });
-
-      // 4. Fetch fixtures: from('fixtures').select(...).in('id', fixtureIds)
-      const fixturesFetchInMock = jest.fn().mockResolvedValueOnce({ data: mockFixtures, error: null });
-      const fixturesFetchSelectMock = jest.fn().mockReturnValueOnce({ in: fixturesFetchInMock });
-
-      // 5. Fetch user bets: from('user_bets').select(...).eq('betting_round_id', bettingRoundId)
-      const betsFetchEqMock = jest.fn().mockResolvedValueOnce({ data: mockBets, error: null });
-      const betsFetchSelectMock = jest.fn().mockReturnValueOnce({ eq: betsFetchEqMock });
-
-      // 6. Upsert user bets: from('user_bets').upsert(betsToUpdate)
-      // Removed unused betsUpsertMock
-      // const betsUpsertMock = jest.fn().mockResolvedValueOnce({ error: null });
-
-      // 7. Final round update: ...
-      const finalUpdateEqMock = jest.fn().mockResolvedValueOnce({ data: { status: 'scored' }, error: null });
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const finalUpdateMock = jest.fn().mockReturnValueOnce({ eq: finalUpdateEqMock });
-
-      // Create a more flexible mock client object
-      const mockClient = {
-        from: jest.fn().mockImplementation((tableName: string) => {
-          if (tableName === 'betting_rounds') {
-            return {
-              select: initialFetchSelectMock,
-              update: jest.fn().mockReturnValue({
-                eq: jest.fn().mockReturnValue({
-                  select: jest.fn().mockReturnValue({
-                    single: jest.fn().mockResolvedValue({ data: { status: 'scoring' }, error: null })
-                  })
-                })
-              })
-            };
-          } else if (tableName === 'betting_round_fixtures') {
-            return {
-              select: linksFetchSelectMock
-            };
-          } else if (tableName === 'fixtures') {
-            return {
-              select: fixturesFetchSelectMock
-            };
-          } else if (tableName === 'user_bets') {
-            return {
-              select: betsFetchSelectMock,
-              update: jest.fn().mockReturnValue({
-                eq: jest.fn().mockResolvedValue({ error: null })
-              })
-            };
-          }
-          throw new Error(`Unexpected table name in mock: ${tableName}`);
-        }),
-      } as unknown as SupabaseClient<Database>;
-
-      // --- Configure mock responses for this specific test --- 
-      // (Configuration is now done above by defining the specific mock chains)
-      
       // --- Act --- 
       const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
 
       // --- Assert --- 
       expect(result.success).toBe(true);
       expect(result.message).toContain("Scoring completed successfully");
-      expect(result.details?.betsProcessed).toBe(5);
-      expect(result.details?.betsUpdated).toBe(4); // Bet 5 was already scored
+      expect(result.details?.betsProcessed).toBe(5); // Processed all 5
+      expect(result.details?.betsUpdated).toBe(4); // Updated 4 (bet5 was skipped)
 
-      // Verify the client was called
-      expect(mockClient.from).toHaveBeenCalledTimes(10); // 1 initial fetch + 1 scoring update + 1 link fetch + 1 fixture fetch + 1 bets fetch + 4 bet updates + 1 final update = 10
+      // Verify the specific bet updates were called correctly
+      expect(betUpdateMocks.bet1).toHaveBeenCalledWith('id', 'bet1');
+      expect(betUpdateMocks.bet2).toHaveBeenCalledWith('id', 'bet2');
+      expect(betUpdateMocks.bet3).toHaveBeenCalledWith('id', 'bet3');
+      expect(betUpdateMocks.bet4).toHaveBeenCalledWith('id', 'bet4');
+      // expect(betUpdateMocks.bet5).not.toHaveBeenCalled(); // Bet 5 should be skipped
       
-      // We're not checking individual mock functions anymore since our implementation changed
-      // Instead, we're focusing on the overall success of the operation
+      // Verify the overall calls to .from()
+      // 1(round status) + 1(round update scoring) + 1(links) + 1(fixtures) + 1(bets select) + 4(bet updates) + 1(round update scored) = 10
+      expect(mockClient.from).toHaveBeenCalledTimes(10); 
       
-      // We're not checking specific payloads anymore since our implementation changed
-      // The success of the operation and the correct result is what matters
   });
 
   // TODO: Refactor remaining tests using the Dependency Injection pattern

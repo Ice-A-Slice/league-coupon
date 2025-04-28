@@ -2,6 +2,7 @@
 
 import { type SupabaseClient } from '@supabase/supabase-js'; // Import the type
 import type { Database } from '@/types/supabase';
+import { logger } from '@/utils/logger'; // Import the logger
 
 type BettingRoundId = number;
 type FixtureId = number;
@@ -32,10 +33,8 @@ export async function calculateAndStoreMatchPoints(
   bettingRoundId: BettingRoundId,
   client: SupabaseClient<Database> // Add client parameter
 ): Promise<ScoreCalculationResult> {
-  console.log(`Starting score calculation for betting_round_id: ${bettingRoundId}`);
+  logger.info({ bettingRoundId }, `Starting score calculation.`);
   
-  // Placeholder return for now
-  // TODO: Implement the actual logic
   try {
     // Step 1: Check idempotency & set status to 'scoring'
     const { data: roundData, error: fetchError } = await client // Use passed-in client
@@ -45,17 +44,17 @@ export async function calculateAndStoreMatchPoints(
       .single();
 
     if (fetchError) {
-      console.error(`Error fetching betting round status for ID ${bettingRoundId}:`, fetchError);
+      logger.error({ bettingRoundId, error: fetchError }, "Failed to fetch betting round status.");
       return { success: false, message: "Failed to fetch betting round status.", details: { betsProcessed: 0, betsUpdated: 0, error: fetchError } };
     }
 
     if (!roundData) {
+       logger.warn({ bettingRoundId }, "Betting round not found during scoring attempt.");
        return { success: false, message: `Betting round with ID ${bettingRoundId} not found.`, details: { betsProcessed: 0, betsUpdated: 0 } };
     }
 
     if (roundData.status === 'scored' || roundData.status === 'scoring') {
-      console.log(`Betting round ${bettingRoundId} is already ${roundData.status}. Skipping calculation.`);
-      // It's not an error, the desired state is already achieved or in progress.
+      logger.info({ bettingRoundId, status: roundData.status }, `Scoring skipped: Round already ${roundData.status}.`);
       return { success: true, message: `Scoring skipped: Round already ${roundData.status}.`, details: { betsProcessed: 0, betsUpdated: 0 } };
     }
 
@@ -70,20 +69,16 @@ export async function calculateAndStoreMatchPoints(
       .single(); // We expect to update one row
 
     if (updateStatusError) {
-        // Handle potential race condition if status changed between select and update
-        if (updateStatusError.code === 'PGRST116') { // PostgREST code for "MATCHING ROWS NOT FOUND"
-             console.warn(`Could not set status to 'scoring' for round ${bettingRoundId}, likely already processed concurrently.`);
-             // Treat as success because another process is likely handling it
+        if (updateStatusError.code === 'PGRST116') { 
+             logger.warn({ bettingRoundId }, `Could not set status to 'scoring', likely already processed concurrently.`);
              return { success: true, message: "Scoring likely handled by concurrent process.", details: { betsProcessed: 0, betsUpdated: 0 }};
         }
-        console.error(`Error updating betting round ${bettingRoundId} status to 'scoring':`, updateStatusError);
+        logger.error({ bettingRoundId, error: updateStatusError }, "Failed to set betting round status to 'scoring'.");
         return { success: false, message: "Failed to set betting round status to 'scoring'.", details: { betsProcessed: 0, betsUpdated: 0, error: updateStatusError } };
     }
 
-    console.log(`Betting round ${bettingRoundId} status set to 'scoring'. Proceeding...`);
+    logger.info({ bettingRoundId }, `Betting round status set to 'scoring'. Proceeding...`);
 
-    // --- Steps 2-8 will go here ---
-    
     // 2. Fetch Fixture IDs associated with the betting round
     const { data: fixtureLinks, error: linkError } = await client // Use passed-in client
       .from('betting_round_fixtures')
@@ -91,13 +86,12 @@ export async function calculateAndStoreMatchPoints(
       .eq('betting_round_id', bettingRoundId);
 
     if (linkError) {
-      console.error(`Error fetching fixture links for betting round ${bettingRoundId}:`, linkError);
-      // TODO: Consider resetting status from 'scoring'
+      logger.error({ bettingRoundId, error: linkError }, "Failed to fetch associated fixtures.");
       return { success: false, message: "Failed to fetch associated fixtures.", details: { betsProcessed: 0, betsUpdated: 0, error: linkError } };
     }
 
     if (!fixtureLinks || fixtureLinks.length === 0) {
-      console.warn(`No fixtures found linked to betting round ${bettingRoundId}. Marking as scored.`);
+      logger.warn({ bettingRoundId }, `No fixtures found linked to betting round. Marking as scored.`);
       // If there are no fixtures, there's nothing to score. Mark as done.
       const { error: updateStatusError } = await client // Use passed-in client
         .from('betting_rounds')
@@ -105,18 +99,15 @@ export async function calculateAndStoreMatchPoints(
         .eq('id', bettingRoundId);
         
       if (updateStatusError) {
-           console.error(`Error marking empty betting round ${bettingRoundId} as scored:`, updateStatusError);
-           // Status might still be 'scoring' here, which isn't ideal but hard to recover automatically
+           logger.error({ bettingRoundId, error: updateStatusError }, "Failed to mark empty betting round as scored.");
            return { success: false, message: "Failed to mark empty round as scored.", details: { betsProcessed: 0, betsUpdated: 0, error: updateStatusError } };
       }
       return { success: true, message: "No fixtures linked to this round; marked as scored.", details: { betsProcessed: 0, betsUpdated: 0 } };
     }
 
     const fixtureIds = fixtureLinks.map(link => link.fixture_id);
-    console.log(`Found ${fixtureIds.length} fixtures for round ${bettingRoundId}: ${fixtureIds.join(', ')}`);
+    logger.info({ bettingRoundId, fixtureCount: fixtureIds.length }, `Found ${fixtureIds.length} fixtures.`);
 
-    // --- Steps 3-8 will follow ---
-    
     // 3. Fetch final results for these fixtures
     const { data: fixturesData, error: fixturesError } = await client // Use passed-in client
       .from('fixtures')
@@ -124,8 +115,7 @@ export async function calculateAndStoreMatchPoints(
       .in('id', fixtureIds); // Use the array of IDs from Step 2
 
     if (fixturesError) {
-      console.error(`Error fetching fixture details for round ${bettingRoundId}:`, fixturesError);
-      // TODO: Consider resetting status from 'scoring'
+      logger.error({ bettingRoundId, fixtureIds, error: fixturesError }, "Failed to fetch fixture details.");
       return { success: false, message: "Failed to fetch fixture details.", details: { betsProcessed: 0, betsUpdated: 0, error: fixturesError } };
     }
 
@@ -148,8 +138,7 @@ export async function calculateAndStoreMatchPoints(
           if(finalResult) { // Only add if we have a valid result (1, X, or 2)
               finishedFixtureResults.set(fixture.id, { result: finalResult });
           } else {
-              console.warn(`Fixture ${fixture.id} has finished status '${fixture.status_short}' but null/invalid goals/result. Cannot score.`);
-              // Decide how to handle - treat as unfinished for now? Or error out?
+              logger.warn({ bettingRoundId, fixtureId: fixture.id, status: fixture.status_short }, `Fixture has finished status but null/invalid goals/result. Cannot score.`);
               allFixturesFinished = false; // Treat as not finished if result can't be determined
           }
       } else {
@@ -160,14 +149,11 @@ export async function calculateAndStoreMatchPoints(
     // If not all fixtures linked to the round are finished, we cannot score the round yet.
     if (!allFixturesFinished || finishedFixtureResults.size !== fixtureIds.length) {
         const missingCount = fixtureIds.length - finishedFixtureResults.size;
-        console.log(`Scoring deferred for betting round ${bettingRoundId}: Not all ${fixtureIds.length} fixtures have finished and have valid results (${missingCount} pending/invalid). Status remains 'scoring'.`);
-         // We leave the status as 'scoring' so the next run picks it up
+        logger.info({ bettingRoundId, totalFixtures: fixtureIds.length, finishedFixtures: finishedFixtureResults.size, missingCount }, `Scoring deferred: Not all fixtures finished or have valid results.`);
         return { success: true, message: `Scoring deferred: Not all fixtures finished or have valid results.`, details: { betsProcessed: 0, betsUpdated: 0 } };
     }
     
-    console.log(`Results fetched for ${finishedFixtureResults.size} finished fixtures in round ${bettingRoundId}.`);
-
-    // --- Steps 4-8 will follow ---
+    logger.info({ bettingRoundId, count: finishedFixtureResults.size }, `Results fetched for finished fixtures.`);
 
     // 4. Fetch all user bets for this betting round
     const { data: userBets, error: betsError } = await client // Use passed-in client
@@ -176,13 +162,12 @@ export async function calculateAndStoreMatchPoints(
       .eq('betting_round_id', bettingRoundId);
 
     if (betsError) {
-      console.error(`Error fetching user bets for betting round ${bettingRoundId}:`, betsError);
-      // TODO: Consider resetting status from 'scoring'
+      logger.error({ bettingRoundId, error: betsError }, "Failed to fetch user bets.");
       return { success: false, message: "Failed to fetch user bets.", details: { betsProcessed: 0, betsUpdated: 0, error: betsError } };
     }
 
     if (!userBets || userBets.length === 0) {
-      console.log(`No user bets found for betting round ${bettingRoundId}. Marking as scored.`);
+      logger.info({ bettingRoundId }, `No user bets found for betting round. Marking as scored.`);
       // If there are no bets, we can mark the round as scored immediately.
       const { error: updateStatusError } = await client // Use passed-in client
         .from('betting_rounds')
@@ -190,15 +175,13 @@ export async function calculateAndStoreMatchPoints(
         .eq('id', bettingRoundId);
         
       if (updateStatusError) {
-           console.error(`Error marking no-bets round ${bettingRoundId} as scored:`, updateStatusError);
+           logger.error({ bettingRoundId, error: updateStatusError }, "Failed to mark no-bets round as scored.");
            return { success: false, message: "Failed to mark no-bets round as scored.", details: { betsProcessed: 0, betsUpdated: 0, error: updateStatusError } };
       }
       return { success: true, message: "No user bets for this round; marked as scored.", details: { betsProcessed: 0, betsUpdated: 0 } };
     }
     
-    console.log(`Fetched ${userBets.length} user bets for round ${bettingRoundId}.`);
-
-    // --- Steps 5-8 will follow ---
+    logger.info({ bettingRoundId, count: userBets.length }, `Fetched user bets.`);
 
     // 5. Calculate Points & 6. Prepare Updates
     const betsToUpdate: { id: string; points_awarded: number }[] = [];
@@ -217,7 +200,7 @@ export async function calculateAndStoreMatchPoints(
         // This check should technically be unnecessary because of the earlier check in Step 3,
         // but it's good defensive programming.
         if (!fixtureResult || !fixtureResult.result) {
-            console.warn(`Skipping bet ID ${bet.id} for fixture ${bet.fixture_id}: Missing or invalid final result.`);
+            logger.warn({ bettingRoundId, betId: bet.id, fixtureId: bet.fixture_id }, `Skipping bet scoring: Missing or invalid final result for fixture.`);
             continue; 
         }
 
@@ -231,13 +214,11 @@ export async function calculateAndStoreMatchPoints(
         });
     }
     
-    console.log(`Calculated scores for ${betsToUpdate.length} bets out of ${betsProcessed} total for round ${bettingRoundId}.`);
-
-    // --- Steps 7-8 will follow ---
+    logger.info({ bettingRoundId, calculatedCount: betsToUpdate.length, totalBets: betsProcessed }, `Calculated scores for bets.`);
 
     // 7. Update user_bets table with calculated points
     if (betsToUpdate.length > 0) {
-      console.log(`Updating points for ${betsToUpdate.length} bets...`);
+      logger.info({ bettingRoundId, count: betsToUpdate.length }, `Updating points for bets...`);
       
       let updateErrorOccurred = false;
       let firstUpdateError: unknown = null;
@@ -250,7 +231,7 @@ export async function calculateAndStoreMatchPoints(
           .eq('id', betUpdate.id);
           
         if (individualUpdateError) {
-            console.error(`Error updating points for bet ID ${betUpdate.id}:`, individualUpdateError);
+            logger.error({ bettingRoundId, betId: betUpdate.id, error: individualUpdateError }, `Error updating points for bet.`);
             updateErrorOccurred = true;
             if (!firstUpdateError) {
                 firstUpdateError = individualUpdateError; // Store the first error encountered
@@ -262,21 +243,17 @@ export async function calculateAndStoreMatchPoints(
 
       // Check if any error occurred during the loop
       if (updateErrorOccurred) {
-        // TODO: Consider resetting status from 'scoring' more robustly
         return { 
           success: false, 
           message: "Failed to store calculated points for one or more bets.", 
-          // Include the first error encountered for debugging purposes
           details: { betsProcessed: betsProcessed, betsUpdated: betsToUpdate.length - 1, error: firstUpdateError } 
         };
       }
       
-      console.log(`Successfully updated points for ${betsToUpdate.length} bets.`);
+      logger.info({ bettingRoundId, count: betsToUpdate.length }, `Successfully updated points for bets.`);
     } else {
-        console.log(`No bets required point updates for round ${bettingRoundId}.`);
+        logger.info({ bettingRoundId }, `No bets required point updates.`);
     }
-
-    // --- Step 8 will follow ---
 
     // 8. Update betting_round status to 'scored'
     const now = new Date().toISOString();
@@ -293,8 +270,7 @@ export async function calculateAndStoreMatchPoints(
       // We primarily care if an error occurred.
 
     if (finalStatusError) {
-      console.error(`Error marking betting round ${bettingRoundId} as scored:`, finalStatusError);
-      // Critical state: Points awarded but round not marked as scored. Manual intervention might be needed.
+      logger.error({ bettingRoundId, error: finalStatusError }, "Failed to mark betting round as scored after points update.");
       return { 
         success: false, 
         message: "Points stored, but failed to mark round as fully scored.", 
@@ -302,7 +278,7 @@ export async function calculateAndStoreMatchPoints(
       };
     }
 
-    console.log(`Successfully marked betting round ${bettingRoundId} as scored at ${now}.`);
+    logger.info({ bettingRoundId, scoredAt: now }, `Successfully marked betting round as scored.`);
 
     // 10. Return final success result
     return {
@@ -312,7 +288,8 @@ export async function calculateAndStoreMatchPoints(
     };
 
   } catch (error) {
-    console.error(`Error during score calculation for betting_round_id: ${bettingRoundId}`, error);
+    logger.error({ bettingRoundId, error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined }, 
+                 `Unexpected error during score calculation.`);
     // TODO: Add logic to potentially revert status if needed
     return {
       success: false,
