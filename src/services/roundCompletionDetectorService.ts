@@ -6,10 +6,11 @@ import { logger } from '@/utils/logger';
 
 // Define the set of fixture statuses considered 'finished'
 const FINISHED_FIXTURE_STATUSES: ReadonlySet<string> = new Set([
-    'FT', // Finished
-    'AET', // Finished after extra time
-    'PEN' // Finished after penalties
-    // Add other statuses if needed (e.g., awarded, cancelled but counts as finished for round?)
+    'FT', // Finished - Regular Time
+    'AET', // Finished - After Extra Time
+    'PEN', // Finished - After Penalties
+    'AWD', // Technical Loss
+    'WO' // WalkOver
 ]);
 
 class RoundCompletionDetectorService {
