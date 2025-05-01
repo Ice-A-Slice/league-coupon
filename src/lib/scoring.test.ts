@@ -49,10 +49,22 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
           { id: 'bet5', user_id: userId1, betting_round_id: bettingRoundId, fixture_id: fixtureId1, prediction: '1', points_awarded: 1, created_at: new Date().toISOString(), submitted_at: new Date().toISOString() }, 
       ];
 
-      // --- Mock Client Setup (More Granular) --- 
-      const mockClient = { from: jest.fn() } as unknown as SupabaseClient<Database>; // Use jest.fn() directly
+      // Expected payload for the RPC call (bets that need scoring)
+      const expectedRpcPayload = [
+          { bet_id: 'bet1', points: 1 },
+          { bet_id: 'bet2', points: 0 },
+          { bet_id: 'bet3', points: 0 },
+          { bet_id: 'bet4', points: 1 },
+      ];
 
-      // Mock sequence of calls for different tables
+      // --- Mock Client Setup (Refactored for RPC) --- 
+      const mockRpc = jest.fn().mockResolvedValue({ error: null }); // Mock the RPC call itself
+      const mockClient = { 
+          from: jest.fn(), 
+          rpc: mockRpc // Add the mocked rpc function
+      } as unknown as SupabaseClient<Database>; 
+
+      // Mock sequence of calls for from()
       (mockClient.from as jest.Mock)
           // 1. Fetch round status (betting_rounds)
           .mockImplementationOnce((tableName: string) => {
@@ -70,7 +82,7 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
                   update: jest.fn().mockReturnThis(),
                   eq: jest.fn().mockReturnThis(),
                   select: jest.fn().mockReturnThis(),
-                  single: jest.fn().mockResolvedValueOnce({ data: { status: 'scoring' }, error: null }) // Simulate success
+                  single: jest.fn().mockResolvedValueOnce({ data: { status: 'scoring' }, error: null }) 
               };
           })
           // 3. Fetch fixture links (betting_round_fixtures)
@@ -98,44 +110,6 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
               };
           });
           
-      // Mock the individual update calls for user_bets
-      const betUpdateMocks = {
-          bet1: jest.fn().mockResolvedValue({ error: null }),
-          bet2: jest.fn().mockResolvedValue({ error: null }),
-          bet3: jest.fn().mockResolvedValue({ error: null }),
-          bet4: jest.fn().mockResolvedValue({ error: null }),
-      };
-
-      // We need to mock the subsequent calls to from('user_bets').update().eq()
-      // Let's add specific mocks for each expected update call
-      (mockClient.from as jest.Mock)
-          .mockImplementationOnce((tableName: string) => { // Update for bet1
-              if (tableName !== 'user_bets') throw new Error('Test Setup Error: Expected user_bets update bet1');
-              return { update: jest.fn((updateData) => ({ eq: betUpdateMocks.bet1.mockImplementation(() => { expect(updateData.points_awarded).toBe(1); return Promise.resolve({ error: null }); }) })) };
-          })
-          .mockImplementationOnce((tableName: string) => { // Update for bet2
-              if (tableName !== 'user_bets') throw new Error('Test Setup Error: Expected user_bets update bet2');
-              return { update: jest.fn((updateData) => ({ eq: betUpdateMocks.bet2.mockImplementation(() => { expect(updateData.points_awarded).toBe(0); return Promise.resolve({ error: null }); }) })) };
-          })
-          .mockImplementationOnce((tableName: string) => { // Update for bet3
-              if (tableName !== 'user_bets') throw new Error('Test Setup Error: Expected user_bets update bet3');
-              return { update: jest.fn((updateData) => ({ eq: betUpdateMocks.bet3.mockImplementation(() => { expect(updateData.points_awarded).toBe(0); return Promise.resolve({ error: null }); }) })) };
-          })
-          .mockImplementationOnce((tableName: string) => { // Update for bet4
-              if (tableName !== 'user_bets') throw new Error('Test Setup Error: Expected user_bets update bet4');
-              return { update: jest.fn((updateData) => ({ eq: betUpdateMocks.bet4.mockImplementation(() => { expect(updateData.points_awarded).toBe(1); return Promise.resolve({ error: null }); }) })) };
-          });
-          
-       // Mock the final status update to 'scored'
-      (mockClient.from as jest.Mock)
-          .mockImplementationOnce((tableName: string) => {
-              if (tableName !== 'betting_rounds') throw new Error('Test Setup Error: Expected final betting_rounds update');
-              return {
-                  update: jest.fn().mockReturnThis(),
-                  eq: jest.fn().mockResolvedValueOnce({ error: null }) // Simulate success
-              };
-          });
-
       // --- Act --- 
       const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
 
@@ -143,18 +117,21 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
       expect(result.success).toBe(true);
       expect(result.message).toContain("Scoring completed successfully");
       expect(result.details?.betsProcessed).toBe(5); // Processed all 5
-      expect(result.details?.betsUpdated).toBe(4); // Updated 4 (bet5 was skipped)
+      expect(result.details?.betsUpdated).toBe(4); // Sent 4 updates to RPC
 
-      // Verify the specific bet updates were called correctly
-      expect(betUpdateMocks.bet1).toHaveBeenCalledWith('id', 'bet1');
-      expect(betUpdateMocks.bet2).toHaveBeenCalledWith('id', 'bet2');
-      expect(betUpdateMocks.bet3).toHaveBeenCalledWith('id', 'bet3');
-      expect(betUpdateMocks.bet4).toHaveBeenCalledWith('id', 'bet4');
-      // expect(betUpdateMocks.bet5).not.toHaveBeenCalled(); // Bet 5 should be skipped
-      
-      // Verify the overall calls to .from()
-      // 1(round status) + 1(round update scoring) + 1(links) + 1(fixtures) + 1(bets select) + 4(bet updates) + 1(round update scored) = 10
-      expect(mockClient.from).toHaveBeenCalledTimes(10); 
+      // Verify the RPC call
+      expect(mockRpc).toHaveBeenCalledTimes(1);
+      expect(mockRpc).toHaveBeenCalledWith('handle_round_scoring', {
+          p_betting_round_id: bettingRoundId,
+          p_bet_updates: expect.arrayContaining(expectedRpcPayload) // Check if the payload matches
+          // Using arrayContaining because order might not be guaranteed depending on implementation
+      });
+      // Also check the length explicitly to ensure no extra bets were included
+      expect(mockRpc.mock.calls[0][1].p_bet_updates).toHaveLength(expectedRpcPayload.length);
+
+      // Verify the overall calls to .from() - reduced because updates are now in RPC
+      // 1(round status) + 1(round update scoring) + 1(links) + 1(fixtures) + 1(bets select) = 5
+      expect(mockClient.from).toHaveBeenCalledTimes(5);
       
   });
 
@@ -246,504 +223,343 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
 
   // ... Keep other it.todo placeholders ...
   // ... etc
-});
 
-// ... (Keep the TODO placeholders for the remaining tests) ...
-
-// Refactored tests using dependency injection pattern:
-it('should return an error if the betting round is not found', async () => {
-    // Arrange
-    const bettingRoundId = 104;
-    
-    // Create a mock client that returns null for the betting round
-    const mockClient = {
-        from: jest.fn().mockImplementation((tableName: string) => {
-            if (tableName === 'betting_rounds') {
-                return {
-                    select: jest.fn().mockReturnValue({
-                        eq: jest.fn().mockReturnValue({
-                            single: jest.fn().mockResolvedValue({ data: null, error: null })
-                        })
-                    })
-                };
-            }
-            // We don't expect other tables to be accessed in this test
-            return {
-                select: jest.fn().mockReturnValue({
-                    eq: jest.fn().mockReturnValue({
-                        single: jest.fn().mockResolvedValue({ data: null, error: null })
-                    })
-                })
-            };
-        })
-    } as unknown as SupabaseClient<Database>;
-
-    // Act
-    const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
-
-    // Assert
-    expect(result.success).toBe(false);
-    expect(result.message).toBe(`Betting round with ID ${bettingRoundId} not found.`);
-    expect(mockClient.from).toHaveBeenCalledTimes(1); // Only initial fetch
-    expect(mockClient.from).toHaveBeenCalledWith('betting_rounds');
-});
-
-it('should return an error if fetching the betting round fails', async () => {
-    // Arrange
-    const bettingRoundId = 105;
-    const mockError = { message: 'Database connection failed', code: 'DB500' };
-    
-    // Create a mock client that returns an error for the betting round
-    const mockClient = {
-        from: jest.fn().mockImplementation((tableName: string) => {
-            if (tableName === 'betting_rounds') {
-                return {
-                    select: jest.fn().mockReturnValue({
-                        eq: jest.fn().mockReturnValue({
-                            single: jest.fn().mockResolvedValue({ data: null, error: mockError })
-                        })
-                    })
-                };
-            }
-            // We don't expect other tables to be accessed in this test
-            return {
-                select: jest.fn().mockReturnValue({
-                    eq: jest.fn().mockReturnValue({
-                        single: jest.fn().mockResolvedValue({ data: null, error: null })
-                    })
-                })
-            };
-        })
-    } as unknown as SupabaseClient<Database>;
-
-    // Act
-    const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
-
-    // Assert
-    expect(result.success).toBe(false);
-    expect(result.message).toBe("Failed to fetch betting round status.");
-    expect(mockClient.from).toHaveBeenCalledTimes(1);
-    expect(mockClient.from).toHaveBeenCalledWith('betting_rounds');
-});
-
-it('should handle rounds with no linked fixtures correctly', async () => {
-    // Arrange
-    const bettingRoundId = 106;
-    const mockRoundClosed: MockBettingRound = {
-        id: bettingRoundId,
-        status: 'closed',
-        name: 'BR 106',
-        competition_id: 1,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        earliest_fixture_kickoff: null,
-        latest_fixture_kickoff: null,
-        scored_at: null
-    };
-    const mockLinks: MockBettingRoundFixture[] = []; // No links
-
-    // Create a mock client that returns empty fixture links
-    const mockClient = {
-        from: jest.fn().mockImplementation((tableName: string) => {
-            if (tableName === 'betting_rounds') {
-                return {
-                    select: jest.fn().mockReturnValue({
-                        eq: jest.fn().mockReturnValue({
-                            single: jest.fn().mockResolvedValue({ data: mockRoundClosed, error: null })
-                        })
-                    }),
-                    update: jest.fn().mockReturnValue({
-                        eq: jest.fn().mockReturnValue({
-                            select: jest.fn().mockReturnValue({
-                                single: jest.fn().mockResolvedValue({ data: { status: 'scoring' }, error: null })
-                            })
-                        })
-                    })
-                };
-            } else if (tableName === 'betting_round_fixtures') {
-                return {
-                    select: jest.fn().mockReturnValue({
-                        eq: jest.fn().mockResolvedValue({ data: mockLinks, error: null })
-                    })
-                };
-            }
-            // Default mock for other tables
-            return {
-                select: jest.fn().mockReturnValue({
-                    eq: jest.fn().mockResolvedValue({ data: [], error: null })
-                })
-            };
-        })
-    } as unknown as SupabaseClient<Database>;
-
-    // Act
-    const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
-
-    // Assert
-    expect(result.success).toBe(true);
-    expect(result.message).toContain("No fixtures linked to this round; marked as scored");
-    expect(result.details?.betsProcessed).toBe(0);
-    expect(result.details?.betsUpdated).toBe(0);
-    expect(mockClient.from).toHaveBeenCalledWith('betting_rounds');
-    expect(mockClient.from).toHaveBeenCalledWith('betting_round_fixtures');
-});
-
-it('should return early if not all fixtures are finished', async () => {
-    // Arrange
-    const bettingRoundId = 107;
-    const mockRoundClosed: MockBettingRound = {
-        id: bettingRoundId,
-        status: 'closed',
-        name: 'BR 107',
-        competition_id: 1,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        earliest_fixture_kickoff: null,
-        latest_fixture_kickoff: null,
-        scored_at: null
-    };
-    const mockLinks: MockBettingRoundFixture[] = [
-        { betting_round_id: bettingRoundId, fixture_id: 1001, created_at: new Date().toISOString() },
-        { betting_round_id: bettingRoundId, fixture_id: 1002, created_at: new Date().toISOString() },
-    ];
-    const mockFixtures: Partial<MockFixture>[] = [
-        { id: 1001, status_short: 'FT', home_goals: 2, away_goals: 1, result: '1' },
-        { id: 1002, status_short: 'NS', home_goals: null, away_goals: null, result: null },
-    ];
-
-    // Create a mock client that returns fixtures with one not finished
-    const mockClient = {
-        from: jest.fn().mockImplementation((tableName: string) => {
-            if (tableName === 'betting_rounds') {
-                return {
-                    select: jest.fn().mockReturnValue({
-                        eq: jest.fn().mockReturnValue({
-                            single: jest.fn().mockResolvedValue({ data: mockRoundClosed, error: null })
-                        })
-                    }),
-                    update: jest.fn().mockReturnValue({
-                        eq: jest.fn().mockReturnValue({
-                            select: jest.fn().mockReturnValue({
-                                single: jest.fn().mockResolvedValue({ data: { status: 'scoring' }, error: null })
-                            })
-                        })
-                    })
-                };
-            } else if (tableName === 'betting_round_fixtures') {
-                return {
-                    select: jest.fn().mockReturnValue({
-                        eq: jest.fn().mockResolvedValue({ data: mockLinks, error: null })
-                    })
-                };
-            } else if (tableName === 'fixtures') {
-                return {
-                    select: jest.fn().mockReturnValue({
-                        in: jest.fn().mockResolvedValue({ data: mockFixtures, error: null })
-                    })
-                };
-            }
-            // Default mock for other tables
-            return {
-                select: jest.fn().mockReturnValue({
-                    eq: jest.fn().mockResolvedValue({ data: [], error: null })
-                })
-            };
-        })
-    } as unknown as SupabaseClient<Database>;
-
-    // Act
-    const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
-
-    // Assert
-    expect(result.success).toBe(true); // The implementation returns success: true with a message about deferring
-    expect(result.message).toContain("Scoring deferred: Not all fixtures finished");
-    expect(mockClient.from).toHaveBeenCalledWith('betting_rounds');
-    expect(mockClient.from).toHaveBeenCalledWith('betting_round_fixtures');
-    expect(mockClient.from).toHaveBeenCalledWith('fixtures');
-});
-
-it('should handle rounds with no user bets correctly', async () => {
-    // Arrange
-    const bettingRoundId = 108;
-    const mockRoundClosed: MockBettingRound = {
-        id: bettingRoundId,
-        status: 'closed',
-        name: 'BR 108',
-        competition_id: 1,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        earliest_fixture_kickoff: null,
-        latest_fixture_kickoff: null,
-        scored_at: null
-    };
-    const mockLinks: MockBettingRoundFixture[] = [
-        { betting_round_id: bettingRoundId, fixture_id: 1003, created_at: new Date().toISOString() },
-    ];
-    const mockFixtures: Partial<MockFixture>[] = [
-        { id: 1003, status_short: 'FT', home_goals: 3, away_goals: 0, result: '1' },
-    ];
-    const mockBets: MockUserBet[] = []; // No bets
-
-    // Create a mock client that returns empty user bets
-    const mockClient = {
-        from: jest.fn().mockImplementation((tableName: string) => {
-            if (tableName === 'betting_rounds') {
-                return {
-                    select: jest.fn().mockReturnValue({
-                        eq: jest.fn().mockReturnValue({
-                            single: jest.fn().mockResolvedValue({ data: mockRoundClosed, error: null })
-                        })
-                    }),
-                    update: jest.fn().mockReturnValue({
-                        eq: jest.fn().mockReturnValue({
-                            select: jest.fn().mockReturnValue({
-                                single: jest.fn().mockResolvedValue({ data: { status: 'scoring' }, error: null })
-                            })
-                        })
-                    })
-                };
-            } else if (tableName === 'betting_round_fixtures') {
-                return {
-                    select: jest.fn().mockReturnValue({
-                        eq: jest.fn().mockResolvedValue({ data: mockLinks, error: null })
-                    })
-                };
-            } else if (tableName === 'fixtures') {
-                return {
-                    select: jest.fn().mockReturnValue({
-                        in: jest.fn().mockResolvedValue({ data: mockFixtures, error: null })
-                    })
-                };
-            } else if (tableName === 'user_bets') {
-                return {
-                    select: jest.fn().mockReturnValue({
-                        eq: jest.fn().mockResolvedValue({ data: mockBets, error: null })
-                    }),
-                    upsert: jest.fn().mockResolvedValue({ error: null })
-                };
-            }
-            // Default mock for other tables
-            return {
-                select: jest.fn().mockReturnValue({
-                    eq: jest.fn().mockResolvedValue({ data: [], error: null })
-                })
-            };
-        })
-    } as unknown as SupabaseClient<Database>;
-
-    // Act
-    const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
-
-    // Assert
-    expect(result.success).toBe(true);
-    expect(result.message).toContain('No user bets for this round; marked as scored');
-    expect(result.details?.betsProcessed).toBe(0);
-    expect(result.details?.betsUpdated).toBe(0);
-    expect(mockClient.from).toHaveBeenCalledWith('betting_rounds');
-    expect(mockClient.from).toHaveBeenCalledWith('betting_round_fixtures');
-    expect(mockClient.from).toHaveBeenCalledWith('fixtures');
-    expect(mockClient.from).toHaveBeenCalledWith('user_bets');
-});
-
-it('should handle errors during user_bets upsert', async () => {
-    // Arrange
-    const bettingRoundId = 109;
-    const mockError = { message: 'Upsert constraint violation', code: '23505' };
-    const mockRoundClosed: MockBettingRound = {
-        id: bettingRoundId,
-        status: 'closed',
-        name: 'BR 109',
-        competition_id: 1,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        earliest_fixture_kickoff: null,
-        latest_fixture_kickoff: null,
-        scored_at: null
-    };
-    const mockLinks: MockBettingRoundFixture[] = [
-        { betting_round_id: bettingRoundId, fixture_id: 1004, created_at: new Date().toISOString() }
-    ];
-    const mockFixtures: Partial<MockFixture>[] = [
-        { id: 1004, status_short: 'FT', home_goals: 1, away_goals: 1, result: 'X' }
-    ];
-    const mockBets: MockUserBet[] = [
-        { id: 'bet1', user_id: 'user1', betting_round_id: bettingRoundId, fixture_id: 1004, prediction: 'X', points_awarded: null, created_at: new Date().toISOString(), submitted_at: new Date().toISOString() }
-    ];
-    const betIdToFail = 'bet1'; // Specify which bet's update should fail
-
-    // Create a mock client that returns an error during one of the updates
-    const mockClient = {
-        from: jest.fn().mockImplementation((tableName: string) => {
-            if (tableName === 'betting_rounds') {
-                return {
-                    select: jest.fn().mockReturnValue({
-                        eq: jest.fn().mockReturnValue({
-                            single: jest.fn().mockResolvedValue({ data: mockRoundClosed, error: null })
-                        })
-                    }),
-                    update: jest.fn().mockReturnValue({ // Mock for initial 'scoring' update
-                        eq: jest.fn().mockReturnValue({
-                            select: jest.fn().mockReturnValue({
-                                single: jest.fn().mockResolvedValue({ data: { status: 'scoring' }, error: null })
-                            })
-                        })
-                    })
-                };
-            } else if (tableName === 'betting_round_fixtures') {
-                return {
-                    select: jest.fn().mockReturnValue({
-                        eq: jest.fn().mockResolvedValue({ data: mockLinks, error: null })
-                    })
-                };
-            } else if (tableName === 'fixtures') {
-                return {
-                    select: jest.fn().mockReturnValue({
-                        in: jest.fn().mockResolvedValue({ data: mockFixtures, error: null })
-                    })
-                };
-            } else if (tableName === 'user_bets') {
-                return {
-                    select: jest.fn().mockReturnValue({
-                        eq: jest.fn().mockResolvedValue({ data: mockBets, error: null })
-                    }),
-                    // Mock the update function to fail for a specific bet
-                    update: jest.fn().mockImplementation((_updateData: { points_awarded: number }) => ({ // Return object with eq
-                        eq: jest.fn().mockImplementation((column: string, value: string) => { // eq takes column and value
-                            if (column === 'id' && value === betIdToFail) {
-                                return Promise.resolve({ error: mockError }); // Fail for the specific bet ID
-                            } else {
-                                return Promise.resolve({ error: null }); // Succeed for others
-                            }
-                        })
-                    }))
-                };
-            }
-            // Default mock for other tables
-            return {
-                select: jest.fn().mockReturnValue({
-                    eq: jest.fn().mockResolvedValue({ data: [], error: null })
-                })
-            };
-        })
-    } as unknown as SupabaseClient<Database>;
-
-    // Act
-    const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
-
-    // Assert
-    expect(result.success).toBe(false);
-    // Update the expected error message
-    expect(result.message).toBe("Failed to store calculated points for one or more bets."); 
-    expect(mockClient.from).toHaveBeenCalledWith('betting_rounds');
-    expect(mockClient.from).toHaveBeenCalledWith('betting_round_fixtures');
-    expect(mockClient.from).toHaveBeenCalledWith('fixtures');
-    expect(mockClient.from).toHaveBeenCalledWith('user_bets');
-    // Optionally, assert that the specific error is included in details
-    expect(result.details?.error).toEqual(mockError);
-});
-
-it('should handle errors during the final status update to scored', async () => {
-     // Arrange
-     const bettingRoundId = 110;
-     const mockFinalUpdateError = { message: 'Update failed - DB constraint?', code: 'DB501' };
-
-     // --- Mock Data --- 
-     const mockRoundClosed: MockBettingRound = { id: bettingRoundId, status: 'closed', name: 'BR 110', competition_id: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), earliest_fixture_kickoff: null, latest_fixture_kickoff: null, scored_at: null };
-     const mockLinks: MockBettingRoundFixture[] = [{ betting_round_id: bettingRoundId, fixture_id: 1005, created_at: new Date().toISOString() }];
-     const mockFixtures: Partial<MockFixture>[] = [ { id: 1005, status_short: 'FT', home_goals: 0, away_goals: 0, result: 'X' }];
-     const mockBets: MockUserBet[] = [
-         { id: 'bet2', user_id: 'user2', betting_round_id: bettingRoundId, fixture_id: 1005, prediction: '1', points_awarded: null, created_at: new Date().toISOString(), submitted_at: new Date().toISOString() },
-     ];
-
-     // --- Mock Client Setup (mimics the successful path until the last step) --- 
+  // Refactored tests using dependency injection pattern:
+  it('should return an error if the betting round is not found', async () => {
+      // Arrange
+      const bettingRoundId = 104;
       
-     // 1. Initial round fetch -> OK
-     const initialFetchSingleMock = jest.fn().mockResolvedValueOnce({ data: mockRoundClosed, error: null });
-     const initialFetchEqMock = jest.fn().mockReturnValueOnce({ single: initialFetchSingleMock });
-     const initialFetchSelectMock = jest.fn().mockReturnValueOnce({ eq: initialFetchEqMock });
+      // Create a mock client that returns null for the betting round
+      const mockClient = {
+          from: jest.fn().mockImplementation((tableName: string) => {
+              if (tableName === 'betting_rounds') {
+                  return {
+                      select: jest.fn().mockReturnValue({
+                          eq: jest.fn().mockReturnValue({
+                              single: jest.fn().mockResolvedValue({ data: null, error: null })
+                          })
+                      })
+                  };
+              }
+              // We don't expect other tables to be accessed in this test
+              return {
+                  select: jest.fn().mockReturnValue({
+                      eq: jest.fn().mockReturnValue({
+                          single: jest.fn().mockResolvedValue({ data: null, error: null })
+                      })
+                  })
+              };
+          })
+      } as unknown as SupabaseClient<Database>;
 
-     // 2. Update round to 'scoring' -> OK
-     const scoringUpdateSingleMock = jest.fn().mockResolvedValueOnce({ error: null });
-     const scoringUpdateSelectMock = jest.fn().mockReturnValueOnce({ single: scoringUpdateSingleMock });
-     const scoringUpdateEqMock = jest.fn().mockReturnValueOnce({ select: scoringUpdateSelectMock });
-     const scoringUpdateMock = jest.fn().mockReturnValueOnce({ eq: scoringUpdateEqMock });
+      // Act
+      const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
 
-     // 3. Fetch fixture links -> OK
-     const linksFetchEqMock = jest.fn().mockResolvedValueOnce({ data: mockLinks, error: null });
-     const linksFetchSelectMock = jest.fn().mockReturnValueOnce({ eq: linksFetchEqMock });
+      // Assert
+      expect(result.success).toBe(false);
+      expect(result.message).toBe(`Betting round with ID ${bettingRoundId} not found.`);
+      expect(mockClient.from).toHaveBeenCalledTimes(1); // Only initial fetch
+      expect(mockClient.from).toHaveBeenCalledWith('betting_rounds');
+  });
 
-     // 4. Fetch fixtures -> OK
-     const fixturesFetchInMock = jest.fn().mockResolvedValueOnce({ data: mockFixtures, error: null });
-     const fixturesFetchSelectMock = jest.fn().mockReturnValueOnce({ in: fixturesFetchInMock });
+  it('should return an error if fetching the betting round fails', async () => {
+      // Arrange
+      const bettingRoundId = 105;
+      const mockError = { message: 'Database connection failed', code: 'DB500' };
+      
+      // Create a mock client that returns an error for the betting round
+      const mockClient = {
+          from: jest.fn().mockImplementation((tableName: string) => {
+              if (tableName === 'betting_rounds') {
+                  return {
+                      select: jest.fn().mockReturnValue({
+                          eq: jest.fn().mockReturnValue({
+                              single: jest.fn().mockResolvedValue({ data: null, error: mockError })
+                          })
+                      })
+                  };
+              }
+              // We don't expect other tables to be accessed in this test
+              return {
+                  select: jest.fn().mockReturnValue({
+                      eq: jest.fn().mockReturnValue({
+                          single: jest.fn().mockResolvedValue({ data: null, error: null })
+                      })
+                  })
+              };
+          })
+      } as unknown as SupabaseClient<Database>;
 
-     // 5. Fetch user bets -> OK
-     const betsFetchEqMock = jest.fn().mockResolvedValueOnce({ data: mockBets, error: null });
-     const betsFetchSelectMock = jest.fn().mockReturnValueOnce({ eq: betsFetchEqMock });
+      // Act
+      const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
 
-     // 6. Upsert user bets -> OK (Changed to simulate successful update loop)
-     const successfulBetUpdateEqMock = jest.fn().mockResolvedValue({ error: null });
-     const successfulBetUpdateMock = jest.fn().mockReturnValue({ eq: successfulBetUpdateEqMock });
-     // const betsUpsertMock = jest.fn().mockResolvedValueOnce({ error: null }); // No longer used
+      // Assert
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("Failed to fetch betting round status.");
+      expect(mockClient.from).toHaveBeenCalledTimes(1);
+      expect(mockClient.from).toHaveBeenCalledWith('betting_rounds');
+  });
 
-     // 7. Final round update -> FAILS
-     const finalUpdateEqMock = jest.fn().mockResolvedValueOnce({ error: mockFinalUpdateError }); // <<< ERROR HERE
-     const finalUpdateMock = jest.fn().mockReturnValueOnce({ eq: finalUpdateEqMock });
+  it('should handle rounds with no linked fixtures correctly', async () => {
+      // Arrange
+      const bettingRoundId = 106;
+      const mockRoundClosed: MockBettingRound = {
+          id: bettingRoundId,
+          status: 'closed',
+          name: 'BR 106',
+          competition_id: 1,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          earliest_fixture_kickoff: null,
+          latest_fixture_kickoff: null,
+          scored_at: null
+      };
+      const mockLinks: MockBettingRoundFixture[] = []; // No links
 
-     // Create the main mock client object
-     const mockClient = {
-       from: jest.fn()
-         .mockImplementationOnce((tableName: string) => { // 1. Initial fetch
-           if (tableName !== 'betting_rounds') throw new Error('Expected betting_rounds');
-           return { select: initialFetchSelectMock };
-         })
-         .mockImplementationOnce((tableName: string) => { // 2. Scoring update
-           if (tableName !== 'betting_rounds') throw new Error('Expected betting_rounds');
-           return { update: scoringUpdateMock };
-         })
-         .mockImplementationOnce((tableName: string) => { // 3. Fetch links
-           if (tableName !== 'betting_round_fixtures') throw new Error('Expected betting_round_fixtures');
-           return { select: linksFetchSelectMock };
-         })
-         .mockImplementationOnce((tableName: string) => { // 4. Fetch fixtures
-           if (tableName !== 'fixtures') throw new Error('Expected fixtures');
-           return { select: fixturesFetchSelectMock };
-         })
-         .mockImplementationOnce((tableName: string) => { // 5. Fetch bets
-           if (tableName !== 'user_bets') throw new Error('Expected user_bets');
-           return { select: betsFetchSelectMock };
-         })
-         .mockImplementationOnce((tableName: string) => { // 6. Simulate SUCCESSFUL bet updates
-           if (tableName !== 'user_bets') throw new Error('Expected user_bets');
-           return { update: successfulBetUpdateMock }; // Use the named mock
-         })
-         .mockImplementationOnce((tableName: string) => { // 7. Final update (fails)
-           if (tableName !== 'betting_rounds') throw new Error('Expected betting_rounds');
-           return { update: finalUpdateMock }; 
-         }),
-     } as unknown as SupabaseClient<Database>;
+      // Create a mock client that returns empty fixture links
+      const mockClient = {
+          from: jest.fn().mockImplementation((tableName: string) => {
+              if (tableName === 'betting_rounds') {
+                  return {
+                      select: jest.fn().mockReturnValue({
+                          eq: jest.fn().mockReturnValue({
+                              single: jest.fn().mockResolvedValue({ data: mockRoundClosed, error: null })
+                          })
+                      }),
+                      update: jest.fn().mockReturnValue({
+                          eq: jest.fn().mockReturnValue({
+                              select: jest.fn().mockReturnValue({
+                                  single: jest.fn().mockResolvedValue({ data: { status: 'scoring' }, error: null })
+                              })
+                          })
+                      })
+                  };
+              } else if (tableName === 'betting_round_fixtures') {
+                  return {
+                      select: jest.fn().mockReturnValue({
+                          eq: jest.fn().mockResolvedValue({ data: mockLinks, error: null })
+                      })
+                  };
+              }
+              // Default mock for other tables
+              return {
+                  select: jest.fn().mockReturnValue({
+                      eq: jest.fn().mockResolvedValue({ data: [], error: null })
+                  })
+              };
+          })
+      } as unknown as SupabaseClient<Database>;
 
-     // --- Act --- 
-     const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
+      // Act
+      const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
 
-     // --- Assert --- 
-     expect(result.success).toBe(false);
-     // Ensure this assertion expects the correct message for this failure scenario
-     expect(result.message).toBe("Points stored, but failed to mark round as fully scored."); 
-     expect(result.details?.betsProcessed).toBe(1);
-     expect(result.details?.betsUpdated).toBe(1); // The upsert succeeded (now means the loop tried to update 1)
-     expect(result.details?.error).toEqual(mockFinalUpdateError);
+      // Assert
+      expect(result.success).toBe(true);
+      expect(result.message).toContain("No fixtures linked to this round; marked as scored");
+      expect(result.details?.betsProcessed).toBe(0);
+      expect(result.details?.betsUpdated).toBe(0);
+      expect(mockClient.from).toHaveBeenCalledWith('betting_rounds');
+      expect(mockClient.from).toHaveBeenCalledWith('betting_round_fixtures');
+  });
 
-     // Verify calls - Check specific mock functions were called
-     expect(mockClient.from).toHaveBeenCalledTimes(7); // 7 distinct steps now
-     expect(initialFetchSelectMock).toHaveBeenCalledTimes(1);
-     expect(scoringUpdateMock).toHaveBeenCalledTimes(1);
-     expect(linksFetchSelectMock).toHaveBeenCalledTimes(1);
-     expect(fixturesFetchSelectMock).toHaveBeenCalledTimes(1);
-     expect(betsFetchSelectMock).toHaveBeenCalledTimes(1);
-     expect(successfulBetUpdateEqMock).toHaveBeenCalledTimes(1); // Add check for the successful update mock
-     expect(finalUpdateMock).toHaveBeenCalledTimes(1);
-     expect(finalUpdateEqMock).toHaveBeenCalledTimes(1); // Ensure the failing step's specific mock was hit
-     
-     // Check payloads
-     expect(scoringUpdateMock.mock.calls[0][0]).toEqual(expect.objectContaining({ status: 'scoring' }));
+  it('should return early if not all fixtures are finished', async () => {
+      // Arrange
+      const bettingRoundId = 107;
+      const mockRoundClosed: MockBettingRound = {
+          id: bettingRoundId,
+          status: 'closed',
+          name: 'BR 107',
+          competition_id: 1,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          earliest_fixture_kickoff: null,
+          latest_fixture_kickoff: null,
+          scored_at: null
+      };
+      const mockLinks: MockBettingRoundFixture[] = [
+          { betting_round_id: bettingRoundId, fixture_id: 1001, created_at: new Date().toISOString() },
+          { betting_round_id: bettingRoundId, fixture_id: 1002, created_at: new Date().toISOString() },
+      ];
+      const mockFixtures: Partial<MockFixture>[] = [
+          { id: 1001, status_short: 'FT', home_goals: 2, away_goals: 1, result: '1' },
+          { id: 1002, status_short: 'NS', home_goals: null, away_goals: null, result: null },
+      ];
+
+      // Create a mock client that returns fixtures with one not finished
+      const mockClient = {
+          from: jest.fn().mockImplementation((tableName: string) => {
+              if (tableName === 'betting_rounds') {
+                  return {
+                      select: jest.fn().mockReturnValue({
+                          eq: jest.fn().mockReturnValue({
+                              single: jest.fn().mockResolvedValue({ data: mockRoundClosed, error: null })
+                          })
+                      }),
+                      update: jest.fn().mockReturnValue({
+                          eq: jest.fn().mockReturnValue({
+                              select: jest.fn().mockReturnValue({
+                                  single: jest.fn().mockResolvedValue({ data: { status: 'scoring' }, error: null })
+                              })
+                          })
+                      })
+                  };
+              } else if (tableName === 'betting_round_fixtures') {
+                  return {
+                      select: jest.fn().mockReturnValue({
+                          eq: jest.fn().mockResolvedValue({ data: mockLinks, error: null })
+                      })
+                  };
+              } else if (tableName === 'fixtures') {
+                  return {
+                      select: jest.fn().mockReturnValue({
+                          in: jest.fn().mockResolvedValue({ data: mockFixtures, error: null })
+                      })
+                  };
+              }
+              // Default mock for other tables
+              return {
+                  select: jest.fn().mockReturnValue({
+                      eq: jest.fn().mockResolvedValue({ data: [], error: null })
+                  })
+              };
+          })
+      } as unknown as SupabaseClient<Database>;
+
+      // Act
+      const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
+
+      // Assert
+      expect(result.success).toBe(true); // The implementation returns success: true with a message about deferring
+      expect(result.message).toContain("Scoring deferred: Not all fixtures finished");
+      expect(mockClient.from).toHaveBeenCalledWith('betting_rounds');
+      expect(mockClient.from).toHaveBeenCalledWith('betting_round_fixtures');
+      expect(mockClient.from).toHaveBeenCalledWith('fixtures');
+  });
+
+  it('should handle rounds with no user bets correctly', async () => {
+      // Arrange
+      const bettingRoundId = 108;
+      const mockRoundClosed: MockBettingRound = {
+          id: bettingRoundId,
+          status: 'closed',
+          name: 'BR 108',
+          competition_id: 1,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          earliest_fixture_kickoff: null,
+          latest_fixture_kickoff: null,
+          scored_at: null
+      };
+      const mockLinks: MockBettingRoundFixture[] = [
+          { betting_round_id: bettingRoundId, fixture_id: 1003, created_at: new Date().toISOString() },
+      ];
+      const mockFixtures: Partial<MockFixture>[] = [
+          { id: 1003, status_short: 'FT', home_goals: 3, away_goals: 0, result: '1' },
+      ];
+      const mockBets: MockUserBet[] = []; // No bets
+
+      // Create a mock client that returns empty user bets
+      const mockClient = {
+          from: jest.fn().mockImplementation((tableName: string) => {
+              if (tableName === 'betting_rounds') {
+                  return {
+                      select: jest.fn().mockReturnValue({
+                          eq: jest.fn().mockReturnValue({
+                              single: jest.fn().mockResolvedValue({ data: mockRoundClosed, error: null })
+                          })
+                      }),
+                      update: jest.fn().mockReturnValue({
+                          eq: jest.fn().mockReturnValue({
+                              select: jest.fn().mockReturnValue({
+                                  single: jest.fn().mockResolvedValue({ data: { status: 'scoring' }, error: null })
+                              })
+                          })
+                      })
+                  };
+              } else if (tableName === 'betting_round_fixtures') {
+                  return {
+                      select: jest.fn().mockReturnValue({
+                          eq: jest.fn().mockResolvedValue({ data: mockLinks, error: null })
+                      })
+                  };
+              } else if (tableName === 'fixtures') {
+                  return {
+                      select: jest.fn().mockReturnValue({
+                          in: jest.fn().mockResolvedValue({ data: mockFixtures, error: null })
+                      })
+                  };
+              } else if (tableName === 'user_bets') {
+                  return {
+                      select: jest.fn().mockReturnValue({
+                          eq: jest.fn().mockResolvedValue({ data: mockBets, error: null })
+                      }),
+                      upsert: jest.fn().mockResolvedValue({ error: null })
+                  };
+              }
+              // Default mock for other tables
+              return {
+                  select: jest.fn().mockReturnValue({
+                      eq: jest.fn().mockResolvedValue({ data: [], error: null })
+                  })
+              };
+          })
+      } as unknown as SupabaseClient<Database>;
+
+      // Act
+      const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
+
+      // Assert
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('No user bets for this round; marked as scored');
+      expect(result.details?.betsProcessed).toBe(0);
+      expect(result.details?.betsUpdated).toBe(0);
+      expect(mockClient.from).toHaveBeenCalledWith('betting_rounds');
+      expect(mockClient.from).toHaveBeenCalledWith('betting_round_fixtures');
+      expect(mockClient.from).toHaveBeenCalledWith('fixtures');
+      expect(mockClient.from).toHaveBeenCalledWith('user_bets');
+  });
+
+  it('should handle errors during the RPC call', async () => {
+      // Arrange
+      const bettingRoundId = 199;
+      const mockRpcError = { message: 'Database error during RPC', code: 'DB999' };
+      // ... (Setup mock data similar to the first test: round, links, fixtures, bets) ...
+      const mockRoundClosed: MockBettingRound = { id: bettingRoundId, status: 'closed', name: 'BR 199', competition_id: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), earliest_fixture_kickoff: null, latest_fixture_kickoff: null, scored_at: null };
+      const mockLinks: MockBettingRoundFixture[] = [{ betting_round_id: bettingRoundId, fixture_id: 299, created_at: new Date().toISOString() }];
+      const mockFixtures: Partial<MockFixture>[] = [{ id: 299, home_goals: 1, away_goals: 1, status_short: 'FT', result: 'X' }];
+      const mockBets: MockUserBet[] = [{ id: 'bet99', user_id: 'user99', betting_round_id: bettingRoundId, fixture_id: 299, prediction: 'X', points_awarded: null, created_at: new Date().toISOString(), submitted_at: new Date().toISOString() }];
+
+      const mockRpc = jest.fn().mockResolvedValue({ error: mockRpcError }); // Mock RPC to return an error
+      const mockClient = { 
+          from: jest.fn(), 
+          rpc: mockRpc
+      } as unknown as SupabaseClient<Database>;
+
+      // Mock the .from() calls needed to reach the RPC step
+      (mockClient.from as jest.Mock)
+          .mockImplementationOnce(() => ({ select: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis(), single: jest.fn().mockResolvedValueOnce({ data: mockRoundClosed, error: null }) })) // Fetch round
+          .mockImplementationOnce(() => ({ update: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis(), select: jest.fn().mockReturnThis(), single: jest.fn().mockResolvedValueOnce({ data: { status: 'scoring' }, error: null }) })) // Update round to scoring
+          .mockImplementationOnce(() => ({ select: jest.fn().mockReturnThis(), eq: jest.fn().mockResolvedValueOnce({ data: mockLinks, error: null }) })) // Fetch links
+          .mockImplementationOnce(() => ({ select: jest.fn().mockReturnThis(), in: jest.fn().mockResolvedValueOnce({ data: mockFixtures, error: null }) })) // Fetch fixtures
+          .mockImplementationOnce(() => ({ select: jest.fn().mockReturnThis(), eq: jest.fn().mockResolvedValueOnce({ data: mockBets, error: null }) })); // Fetch bets
+
+      // Act
+      const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
+
+      // Assert
+      expect(result.success).toBe(false);
+      expect(result.message).toContain("Failed to store scores transactionally via RPC function.");
+      expect(result.details?.error).toEqual(mockRpcError);
+      expect(mockRpc).toHaveBeenCalledTimes(1);
+      expect(mockClient.from).toHaveBeenCalledTimes(5);
+  });
+
+  // TODO: Review and potentially refactor other tests that mock the update/upsert calls
+  // For example, the test 'should handle errors during user_bets upsert' needs to be changed
+  // to mock an error from the RPC call instead.
+  // The test 'should handle errors during the final status update' might become irrelevant
+  // or needs rethinking as the RPC handles the final status update.
+
+  // Keep existing tests for early exits (already scored, scoring, no fixtures, no bets, not all finished)
+  // as they don't reach the RPC call and their mocking should still be valid.
 });

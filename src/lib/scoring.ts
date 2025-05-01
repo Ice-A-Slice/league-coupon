@@ -1,7 +1,7 @@
 // src/lib/scoring.ts
 
 import { type SupabaseClient } from '@supabase/supabase-js'; // Import the type
-import type { Database } from '@/types/supabase';
+import type { Database, Json } from '@/types/supabase'; // Import Json type
 import { logger } from '@/utils/logger'; // Import the logger
 
 type BettingRoundId = number;
@@ -16,7 +16,14 @@ interface ScoreCalculationResult {
     betsProcessed: number;
     betsUpdated: number;
     error?: unknown;
+    durationMs?: number; // Add durationMs as optional
   };
+}
+
+// Define the structure for bet updates expected by the RPC function
+interface BetUpdatePayload {
+    bet_id: string; // Use the bet's primary key UUID
+    points: number;
 }
 
 /**
@@ -31,10 +38,12 @@ interface ScoreCalculationResult {
  */
 export async function calculateAndStoreMatchPoints(
   bettingRoundId: BettingRoundId,
-  client: SupabaseClient<Database> // Add client parameter
+  client: SupabaseClient<Database> 
 ): Promise<ScoreCalculationResult> {
   logger.info({ bettingRoundId }, `Starting score calculation.`);
-  
+  const startTime = Date.now(); // For performance monitoring
+  let betsProcessed = 0;
+
   try {
     // Step 1: Check idempotency & set status to 'scoring'
     const { data: roundData, error: fetchError } = await client // Use passed-in client
@@ -183,23 +192,20 @@ export async function calculateAndStoreMatchPoints(
     
     logger.info({ bettingRoundId, count: userBets.length }, `Fetched user bets.`);
 
-    // 5. Calculate Points & 6. Prepare Updates
-    const betsToUpdate: { id: string; points_awarded: number }[] = [];
-    let betsProcessed = 0;
+    // 5. Calculate Points & Prepare Payload for RPC
+    const betUpdatesForRPC: BetUpdatePayload[] = []; // Changed variable name and type
 
     for (const bet of userBets) {
         betsProcessed++;
-        
+
         // Skip if points already awarded (idempotency)
-        if (bet.points_awarded !== null) {
-            continue; 
+        if (bet.points_awarded !== null) { 
+            continue;
         }
 
         const fixtureResult = finishedFixtureResults.get(bet.fixture_id);
 
-        // This check should technically be unnecessary because of the earlier check in Step 3,
-        // but it's good defensive programming.
-        if (!fixtureResult || !fixtureResult.result) {
+        if (!fixtureResult || !fixtureResult.result) { 
             logger.warn({ bettingRoundId, betId: bet.id, fixtureId: bet.fixture_id }, `Skipping bet scoring: Missing or invalid final result for fixture.`);
             continue; 
         }
@@ -207,94 +213,84 @@ export async function calculateAndStoreMatchPoints(
         // Calculate points (1 for correct, 0 for incorrect)
         const points = bet.prediction === fixtureResult.result ? 1 : 0;
 
-        // Add to our list of updates needed
-        betsToUpdate.push({
-            id: bet.id, // The primary key of the user_bets row
-            points_awarded: points
+        // Add to our list of updates for the RPC function
+        betUpdatesForRPC.push({
+            bet_id: bet.id, // Use the bet's primary key
+            points: points
         });
     }
-    
-    logger.info({ bettingRoundId, calculatedCount: betsToUpdate.length, totalBets: betsProcessed }, `Calculated scores for bets.`);
 
-    // 7. Update user_bets table with calculated points
-    if (betsToUpdate.length > 0) {
-      logger.info({ bettingRoundId, count: betsToUpdate.length }, `Updating points for bets...`);
-      
-      let updateErrorOccurred = false;
-      let firstUpdateError: unknown = null;
+    logger.info({ bettingRoundId, calculatedCount: betUpdatesForRPC.length, totalBets: betsProcessed }, `Calculated scores for bets.`);
 
-      // Iterate and update each bet individually
-      for (const betUpdate of betsToUpdate) {
-        const { error: individualUpdateError } = await client
-          .from('user_bets')
-          .update({ points_awarded: betUpdate.points_awarded })
-          .eq('id', betUpdate.id);
-          
-        if (individualUpdateError) {
-            logger.error({ bettingRoundId, betId: betUpdate.id, error: individualUpdateError }, `Error updating points for bet.`);
-            updateErrorOccurred = true;
-            if (!firstUpdateError) {
-                firstUpdateError = individualUpdateError; // Store the first error encountered
-            }
-            // Decide if we should continue trying other updates or break
-            // For now, let's continue to try and update as many as possible
+    // 6. Call the RPC function to update bets and round status transactionally
+    if (betUpdatesForRPC.length > 0) {
+        logger.info({ bettingRoundId, count: betUpdatesForRPC.length }, `Calling handle_round_scoring function...`);
+        
+        const { error: rpcError } = await client.rpc('handle_round_scoring', {
+            p_betting_round_id: bettingRoundId,
+            p_bet_updates: betUpdatesForRPC as unknown as Json // Use two-step cast
+        });
+
+        if (rpcError) {
+            logger.error({ bettingRoundId, error: rpcError }, "Error calling handle_round_scoring function.");
+            // Attempt to reset status back to 'closed'? Maybe too complex, just log and return error.
+            // Note: The transaction within the RPC function should have rolled back.
+            return {
+                success: false,
+                message: "Failed to store scores transactionally via RPC function.",
+                details: { betsProcessed: betsProcessed, betsUpdated: 0, error: rpcError } 
+            };
         }
-      }
+        logger.info({ bettingRoundId, count: betUpdatesForRPC.length }, `Successfully called handle_round_scoring function.`);
 
-      // Check if any error occurred during the loop
-      if (updateErrorOccurred) {
-        return { 
-          success: false, 
-          message: "Failed to store calculated points for one or more bets.", 
-          details: { betsProcessed: betsProcessed, betsUpdated: betsToUpdate.length - 1, error: firstUpdateError } 
-        };
-      }
-      
-      logger.info({ bettingRoundId, count: betsToUpdate.length }, `Successfully updated points for bets.`);
     } else {
-        logger.info({ bettingRoundId }, `No bets required point updates.`);
+        // If no bets required scoring (e.g., all were already scored, or round had no bets initially)
+        // We still need to ensure the round is marked as 'scored' if it reached this point.
+        // Note: Cases with no links or no bets are handled earlier and return before this.
+        // This case primarily handles rounds where all bets were *already* scored previously.
+        logger.info({ bettingRoundId }, `No new bets required scoring. Ensuring round status is 'scored'.`);
+         const { error: finalStatusError } = await client
+             .from('betting_rounds')
+             .update({ status: 'scored', scored_at: new Date().toISOString() })
+             .eq('id', bettingRoundId)
+             .not('status', 'eq', 'scored'); // Only update if not already scored
+
+        if (finalStatusError) {
+            logger.error({ bettingRoundId, error: finalStatusError }, "Failed to mark round as scored (no updates needed case)." );
+             return { 
+                 success: false, 
+                 message: "No points needed storing, but failed to mark round as fully scored.", 
+                 details: { betsProcessed: betsProcessed, betsUpdated: 0, error: finalStatusError } 
+             };
+         }
+         logger.info({ bettingRoundId }, `Round status confirmed/updated to 'scored' (no new bet updates).`);
     }
 
-    // 8. Update betting_round status to 'scored'
-    const now = new Date().toISOString();
-    const { error: finalStatusError } = await client // Use passed-in client
-      .from('betting_rounds')
-      .update({ 
-          status: 'scored', 
-          scored_at: now, 
-          updated_at: now // Also update updated_at
-      })
-      .eq('id', bettingRoundId);
-      // Note: No .single() here as update doesn't guarantee returning the row by default
-      // unless specific PostgREST headers are used or select() is added.
-      // We primarily care if an error occurred.
-
-    if (finalStatusError) {
-      logger.error({ bettingRoundId, error: finalStatusError }, "Failed to mark betting round as scored after points update.");
-      return { 
-        success: false, 
-        message: "Points stored, but failed to mark round as fully scored.", 
-        details: { betsProcessed: betsProcessed, betsUpdated: betsToUpdate.length, error: finalStatusError } 
-      };
-    }
-
-    logger.info({ bettingRoundId, scoredAt: now }, `Successfully marked betting round as scored.`);
-
-    // 10. Return final success result
+    // 7. Final success result
+    const duration = Date.now() - startTime;
+    logger.info({ bettingRoundId, durationMs: duration }, `Scoring completed successfully.`);
     return {
       success: true,
-      message: `Scoring completed successfully for betting round ${bettingRoundId}.`,
-      details: { betsProcessed: betsProcessed, betsUpdated: betsToUpdate.length }
+      message: "Scoring completed successfully.",
+      details: { 
+          betsProcessed: betsProcessed, 
+          betsUpdated: betUpdatesForRPC.length, // Number of bets sent to RPC
+          durationMs: duration 
+      }
     };
 
   } catch (error) {
-    logger.error({ bettingRoundId, error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined }, 
+    const duration = Date.now() - startTime;
+    logger.error({ bettingRoundId, durationMs: duration, error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined }, 
                  `Unexpected error during score calculation.`);
-    // TODO: Add logic to potentially revert status if needed
-    return {
-      success: false,
-      message: "An unexpected error occurred during scoring.",
-      details: { betsProcessed: 0, betsUpdated: 0, error: error instanceof Error ? error.message : String(error) }
+    
+    // Attempt to reset status back to 'closed' if it was set to 'scoring'?
+    // Consider adding this later if needed.
+
+    return { 
+        success: false, 
+        message: "An unexpected error occurred during scoring.",
+        details: { betsProcessed: betsProcessed, betsUpdated: 0, durationMs: duration, error: error instanceof Error ? error : new Error(String(error)) } 
     };
   }
 }
