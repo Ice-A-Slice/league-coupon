@@ -1,13 +1,11 @@
 import { createClient } from '@/utils/supabase/client'; // Corrected path
-import type { Database, Tables, TablesInsert, TablesUpdate /*, Enums */ } from '@/types/supabase';
 import { calculateTimeDifference } from '@/lib/utils';
-import { SupabaseClient } from '@supabase/supabase-js';
+import { Tables, TablesInsert /*, Database, TablesUpdate */ } from '@/types/supabase';
 import { logger } from '@/utils/logger';
 
 // --- Constants ---
 const TIME_GAP_THRESHOLD_HOURS = 72;
-const MIN_FIXTURES_PER_ROUND = 1; // Start with 1 for initial testing
-const TIME_WINDOW_HOURS_START = 72; // Look 72 hours ahead
+const MIN_FIXTURES_PER_ROUND = 1; // Minimum fixtures needed to form a round
 
 // --- Utilities ---
 
@@ -509,24 +507,9 @@ export const roundManagementService = {
 
 // --- Type Aliases ---
 
-/** Represents a row in the public.betting_rounds table. */
-// type BettingRound = Tables<'betting_rounds'>; // Commented out unused type
-/** Represents the shape of data needed to insert a new row into public.betting_rounds. */
-type BettingRoundInsert = TablesInsert<'betting_rounds'>;
-/** Represents the shape of data needed to update a row in public.betting_rounds. */
-// type BettingRoundUpdate = Tables<'betting_rounds', 'Update'>; // Commented out unused type
-/** Represents the possible statuses for a betting round from the enum. */
-// type BettingRoundStatus = Enums<'betting_round_status'>; // Commented out unused type
-
 /** Represents a row in the public.fixtures table. */
 type Fixture = Tables<'fixtures'>;
 
-interface FixtureGroup {
-  fixtures: Fixture[];
-  isValid: boolean; 
-}
-
-// Define the types based on your Supabase schema
-type Season = Tables<'seasons'>;
-type Round = Tables<'rounds'>;
+/** Represents the shape of data needed to insert a new row into public.betting_rounds. */
+type BettingRoundInsert = TablesInsert<'betting_rounds'>;
  

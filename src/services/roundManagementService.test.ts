@@ -1,8 +1,30 @@
 // import { jest } from '@jest/globals'; // Removed unused import
-import { describe, it, expect } from '@jest/globals';
+// Removed unused import: import { RoundManagementService } from './roundManagementService';
+// Removed unused import: import { calculateTimeDifference } from '@/lib/utils';
+// Removed unused import: import { describe, it, expect, beforeEach } from '@jest/globals';
+import { describe, it, expect } from '@jest/globals'; // Import only used functions
+
+// Mock the logger
+jest.mock('@/utils/logger', () => ({
+  logger: {
+    info: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
+
+// Import the actual service export (lowercase 'r')
 import { roundManagementService } from './roundManagementService';
-import type { Tables } from '@/types/supabase';
-import { calculateTimeDifference } from '@/lib/utils';
+// Import the missing Tables type
+import { Tables } from '@/types/supabase';
+
+// Need the actual service for its static/instance methods if testing the class directly
+// If just testing the helper function, this might not be needed.
+// Re-importing RoundManagementService as it's likely needed for the `describe` block target
+// Corrected import statement syntax
+// Removed unused class import, kept the actual service export
+// import { RoundManagementService } from './roundManagementService'; 
 
 // Define Fixture type - Use the actual type imported if possible, 
 // but ensure mock data matches required fields.
@@ -55,14 +77,14 @@ describe('roundManagementService', () => {
       const result = await roundManagementService.groupFixturesForRound(fixturesWithGap as Tables<'fixtures'>[]);
       
       expect(result).toHaveLength(3);
-      expect(result?.map(f => f.id)).toEqual([1, 2, 3]); // Check IDs
+      expect(result?.map((f: Tables<'fixtures'>) => f.id)).toEqual([1, 2, 3]); // Check IDs
     });
 
     it('should return all fixtures if no gap exceeds the threshold', async () => {
       const result = await roundManagementService.groupFixturesForRound(fixturesWithoutGap as Tables<'fixtures'>[]);
       
       expect(result).toHaveLength(5);
-      expect(result?.map(f => f.id)).toEqual([1, 2, 3, 4, 5]);
+      expect(result?.map((f: Tables<'fixtures'>) => f.id)).toEqual([1, 2, 3, 4, 5]);
     });
 
     it('should return a valid group for a single fixture', async () => {
@@ -73,7 +95,7 @@ describe('roundManagementService', () => {
       const result = await roundManagementService.groupFixturesForRound(singleFixture as Tables<'fixtures'>[]);
       
       expect(result).toHaveLength(1);
-      expect(result?.map(f => f.id)).toEqual([1]);
+      expect(result?.map((f: Tables<'fixtures'>) => f.id)).toEqual([1]);
     });
 
     it('should return null if the input array is empty', async () => {

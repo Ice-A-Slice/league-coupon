@@ -1,8 +1,8 @@
 // src/lib/scoring.ts
 
-import { type SupabaseClient } from '@supabase/supabase-js'; // Import the type
-import type { Database, Json, Tables } from '@/types/supabase'; // Import Json type
-import { logger } from '@/utils/logger'; // Import the logger
+import { SupabaseClient } from '@supabase/supabase-js';
+import { logger } from '@/utils/logger';
+import { Database, Json } from '@/types/supabase'; // Import Database AND Json type
 
 type BettingRoundId = number;
 type FixtureId = number;
@@ -10,8 +10,8 @@ type Prediction = Database['public']['Enums']['prediction_type']; // '1' | 'X' |
 type Result = Prediction | null; // Fixtures might not have a result yet, or goals could be null
 
 // Type definitions
-type UserBet = Tables<'user_bets'>;
-type Fixture = Tables<'fixtures'>;
+// Removed unused type: type UserBet = Tables<'user_bets'>;
+// Removed unused type: type Fixture = Tables<'fixtures'>;
 
 // Export the result type
 export interface ScoreCalculationResult {

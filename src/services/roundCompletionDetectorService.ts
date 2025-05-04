@@ -1,10 +1,7 @@
 import 'server-only'; // Ensure this is server-side
 
 import { supabaseServerClient } from '@/lib/supabase/server';
-// import type { Tables } from '@/types/supabase'; // Removed unused import
 import { logger } from '@/utils/logger';
-import { SupabaseClient } from '@supabase/supabase-js';
-import { Database, Tables } from '@/types/supabase';
 
 // Define the set of fixture statuses considered 'finished'
 const FINISHED_FIXTURE_STATUSES: ReadonlySet<string> = new Set([
@@ -14,10 +11,6 @@ const FINISHED_FIXTURE_STATUSES: ReadonlySet<string> = new Set([
     'AWD', // Technical Loss
     'WO' // WalkOver
 ]);
-
-// Define the types based on your Supabase schema
-type BettingRound = Tables<'betting_rounds'>;
-type Fixture = Tables<'fixtures'>;
 
 /**
  * Service responsible for detecting when betting rounds are complete

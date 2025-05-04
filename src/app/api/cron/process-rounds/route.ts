@@ -4,9 +4,6 @@ import { logger } from '@/utils/logger'; // Assuming path
 import { getSupabaseServiceRoleClient } from '@/utils/supabase/service'; // Use the new service client utility
 import { RoundCompletionDetectorService } from '@/services/roundCompletionDetectorService'; // Import class
 
-// Define your database type based on generated types
-import { Database } from '@/types/supabase'; 
-
 // Defined a specific type for the results array
 interface ProcessingResult extends ScoreCalculationResult {
   roundId: number;

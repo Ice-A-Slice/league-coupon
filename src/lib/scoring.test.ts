@@ -8,16 +8,18 @@
 
 // --- End Manual Mock Implementation ---
 
-import { type SupabaseClient } from '@supabase/supabase-js'; // Keep this type import
+// Removed unused import: import { type SupabaseClient } from '@supabase/supabase-js'; // Keep this type import
+import { SupabaseClient } from '@supabase/supabase-js'; // Need the actual type now
 import { calculateAndStoreMatchPoints } from './scoring';
-import type { Database } from '@/types/supabase';
+// Removed unused import: import type { Database, Tables } from '@/types/supabase';
+import type { Database } from '@/types/supabase'; // Import only Database
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 
 // Type definitions remain the same...
-type MockBettingRound = Database['public']['Tables']['betting_rounds']['Row'];
+// Removed unused type: type MockBettingRound = Database['public']['Tables']['betting_rounds']['Row'];
 type MockFixture = Database['public']['Tables']['fixtures']['Row'];
 type MockUserBet = Database['public']['Tables']['user_bets']['Row'];
-type MockBettingRoundFixture = Database['public']['Tables']['betting_round_fixtures']['Row'];
+// Removed unused type: type MockBettingRoundFixture = Database['public']['Tables']['betting_round_fixtures']['Row'];
 
 // Mock the logger to prevent actual logging during tests
 jest.mock('@/utils/logger', () => ({
@@ -36,45 +38,48 @@ type MockFixtureLink = { fixture_id: number };
 
 // Define an interface for the mocked client methods we use
 // Use more specific types for Jest mocks instead of `any`
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// Removed unnecessary eslint-disable comments
+/* // Removing the specific mock interface, will try Partial<SupabaseClient>
 interface MockSupabaseClient {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   from: jest.Mock<Promise<{ data: any[] | null; error: any | null }>, [string]>; // Mock `from` returning a promise
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   rpc: jest.Mock<Promise<{ data: any | null; error: any | null }>, [string, any]>; // Mock `rpc` returning a promise
   // Add other methods if needed by specific tests, e.g.:
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   // select: jest.Mock<Promise<{ data: any[] | null; error: any | null }>, []>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   // eq: jest.Mock<Promise<{ data: any[] | null; error: any | null }>, [string, any]>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   // single: jest.Mock<Promise<{ data: any | null; error: any | null }>, []>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   // update: jest.Mock<Promise<{ data: any[] | null; error: any | null }>, [any]>;
 }
-// eslint-enable-next-line @typescript-eslint/no-explicit-any
+*/
+
+// Create mocks for specific Supabase functions we need to control
+// ... existing code ...
 
 describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
-  // Use the specific mock interface instead of 'any'
-  let mockClient: MockSupabaseClient;
-  let mockRpc: jest.Mock; // Mock for the RPC function
+  // Use Partial<SupabaseClient> and define mocks inline
+  let mockClient: Partial<SupabaseClient<Database>>;
+  let mockRpc: jest.Mock;
 
   beforeEach(() => {
     // Reset mocks before each test
     mockRpc = jest.fn();
+    // Removed unused `tableName` parameter from mock implementation
+    // Initialize only the methods we actually use in the tests
     mockClient = {
-      from: jest.fn().mockReturnThis(),
-      select: jest.fn().mockReturnThis(),
-      eq: jest.fn().mockReturnThis(),
-      in: jest.fn().mockReturnThis(),
-      single: jest.fn(), // Mock potentially needed if other parts use it
-      update: jest.fn().mockReturnThis(), // Mock for potential final status update via RPC
-      rpc: mockRpc,                        // Use the mock RPC function
+      from: jest.fn().mockImplementation(() => ({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        in: jest.fn().mockReturnThis(),
+        update: jest.fn().mockReturnThis(),
+        single: jest.fn(), // Needed by some mock setups potentially
+        // Add other chained methods if needed by tests
+      })),
+      rpc: mockRpc,
     };
 
     // Default mock implementation for .from()
     // This ensures basic chaining works, specific tests will override
-    mockClient.from.mockImplementation((tableName: string) => mockClient);
+    // Already handled in the initialization above
+    // mockClient.from.mockImplementation(/* Remove unused tableName */ () => mockClient);
   });
 
   it('should correctly score a completed round with simple predictions', async () => {
@@ -99,9 +104,15 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
     ];
 
     // Mock database calls
-    mockClient.from.mockImplementation((table: string) => {
+    // Removed unused `tableName` parameter from mock implementation
+    // Use mockImplementation directly on the initialized mockClient.from
+    (mockClient.from as jest.Mock).mockImplementation((table: string) => {
       if (table === 'betting_round_fixtures') {
-        return { select: () => ({ eq: () => Promise.resolve({ data: mockFixtureLinks, error: null }) }) };
+        return {
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockResolvedValue({ data: mockFixtureLinks, error: null })
+          })
+        };
       } else if (table === 'fixtures') {
         return { select: () => ({ in: () => Promise.resolve({ data: mockFixturesData, error: null }) }) };
       } else if (table === 'user_bets') {
@@ -114,7 +125,7 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
     mockRpc.mockResolvedValue({ error: null });
 
     // --- Act ---
-    const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
+    const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient as SupabaseClient<Database>);
 
     // --- Assert --- 
     expect(result.success).toBe(true); // Expect overall success
@@ -152,15 +163,20 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
     const mockLinkError = { message: 'Failed to fetch links', code: '42P01' }; // Example error
 
     // Mock the fixture link fetch to fail
-    mockClient.from.mockImplementation((table: string) => {
+    // Removed unused `tableName` parameter
+    (mockClient.from as jest.Mock).mockImplementation((table: string) => {
       if (table === 'betting_round_fixtures') {
-        return { select: () => ({ eq: () => Promise.resolve({ data: null, error: mockLinkError }) }) };
+        return {
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockResolvedValue({ data: null, error: mockLinkError })
+          })
+        };
       }
       return mockClient;
     });
 
     // Act
-    const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
+    const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient as SupabaseClient<Database>);
 
     // Assert
     expect(result.success).toBe(false);
@@ -182,9 +198,14 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
     ];
       
     // Mock DB calls
-    mockClient.from.mockImplementation((table: string) => {
+    // Removed unused `tableName` parameter
+    (mockClient.from as jest.Mock).mockImplementation((table: string) => {
       if (table === 'betting_round_fixtures') {
-          return { select: () => ({ eq: () => Promise.resolve({ data: mockFixtureLinks, error: null }) }) };
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockResolvedValue({ data: mockFixtureLinks, error: null })
+            })
+          };
       } else if (table === 'fixtures') {
           // Ensure the correct chaining for the fixture fetch
           return { select: () => ({ in: () => Promise.resolve({ data: mockFixturesData, error: null }) }) }; 
@@ -193,7 +214,7 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
     });
 
     // Act
-    const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
+    const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient as SupabaseClient<Database>);
 
     // Assert
     expect(result.success).toBe(true); // Should return success but indicate deferral
@@ -215,9 +236,14 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
     const mockRpcError = { message: 'Transaction failed', code: 'P0001' };
 
     // Setup mocks for successful fixture/bet fetching
-    mockClient.from.mockImplementation((table: string) => {
+    // Removed unused `tableName` parameter
+    (mockClient.from as jest.Mock).mockImplementation((table: string) => {
       if (table === 'betting_round_fixtures') {
-          return { select: () => ({ eq: () => Promise.resolve({ data: mockFixtureLinks, error: null }) }) };
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockResolvedValue({ data: mockFixtureLinks, error: null })
+            })
+          };
       } else if (table === 'fixtures') {
           return { select: () => ({ in: () => Promise.resolve({ data: mockFixturesData, error: null }) }) };
       } else if (table === 'user_bets') {
@@ -230,7 +256,7 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
     mockRpc.mockResolvedValue({ error: mockRpcError }); // Simulate RPC error
 
     // Act
-    const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
+    const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient as SupabaseClient<Database>);
 
     // Assert
     expect(result.success).toBe(false); // Expect overall failure due to RPC error
@@ -249,9 +275,14 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
     const mockFixtureLinks: MockFixtureLink[] = []; // Empty array
     const mockUpdate = jest.fn().mockResolvedValue({ error: null }); // Mock for final status update
 
-    mockClient.from.mockImplementation((table: string) => {
+    // Removed unused `tableName` parameter
+    (mockClient.from as jest.Mock).mockImplementation((table: string) => {
       if (table === 'betting_round_fixtures') {
-        return { select: () => ({ eq: () => Promise.resolve({ data: mockFixtureLinks, error: null }) }) };
+        return {
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockResolvedValue({ data: mockFixtureLinks, error: null })
+          })
+        };
       } else if (table === 'betting_rounds') {
         // Mock the update call for setting status to 'scored'
         return { update: () => ({ eq: () => mockUpdate() }) }; 
@@ -260,7 +291,7 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
     });
 
     // Act
-    const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
+    const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient as SupabaseClient<Database>);
 
     // Assert
     expect(result.success).toBe(true);
@@ -281,9 +312,14 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
     const mockUserBets: MockUserBet[] = []; // Empty array
     const mockUpdate = jest.fn().mockResolvedValue({ error: null }); // Mock for final status update
 
-     mockClient.from.mockImplementation((table: string) => {
+    // Removed unused `tableName` parameter
+    (mockClient.from as jest.Mock).mockImplementation((table: string) => {
         if (table === 'betting_round_fixtures') {
-            return { select: () => ({ eq: () => Promise.resolve({ data: mockFixtureLinks, error: null }) }) };
+            return {
+              select: jest.fn().mockReturnValue({
+                eq: jest.fn().mockResolvedValue({ data: mockFixtureLinks, error: null })
+              })
+            };
         } else if (table === 'fixtures') {
             return { select: () => ({ in: () => Promise.resolve({ data: mockFixturesData, error: null }) }) };
         } else if (table === 'user_bets') {
@@ -295,7 +331,7 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
       });
 
     // Act
-    const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
+    const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient as SupabaseClient<Database>);
 
     // Assert
     expect(result.success).toBe(true);
