@@ -66,8 +66,8 @@ jest.mock('@/services/football-api/client', () => ({
 import { fetchFixtures } from '@/services/football-api/client';
 
 // --- Helper Functions (Keep as is) ---
-interface MockApiLeague { id: number; name: string; country: string; logo: string | null; flag?: string; season?: number; round?: string; }
-interface MockApiTeamInfo { id: number; name: string; logo: string | null; winner?: boolean | null; }
+interface MockApiLeague { id: number; name: string; country: string; logo: string | null; season?: number; round?: string; }
+interface MockApiTeamInfo { id: number; name: string; logo: string | null; }
 interface MockApiTeams { home: MockApiTeamInfo; away: MockApiTeamInfo; }
 const createMockApiFixture = (id: number, status: string, home: number | null, away: number | null, kickoff: string = '2024-01-01T12:00:00Z'): ApiFixturesResponse['response'][0] => ({
   fixture: { 
@@ -116,6 +116,9 @@ const createMockDbFixture = (id: number, apiFixtureId: number, status: string, h
 
 describe('Fixture Synchronization Logic', () => {
 
+  // Add mock for .not()
+  let mockNotFn: jest.Mock;
+
   beforeEach(() => {
     // Clear all mock function calls and reset implementations
     jest.clearAllMocks();
@@ -133,6 +136,12 @@ describe('Fixture Synchronization Logic', () => {
     mockUpsertFn.mockResolvedValue({ error: null });
     mockEqFn = jest.fn().mockResolvedValue({ data: [], error: null }); // Default: find no existing fixtures
     mockSelectFn = jest.fn().mockImplementation(() => ({ eq: mockEqFn })); // Re-link select to eq
+    // Initialize .not mock
+    mockNotFn = jest.fn().mockReturnThis();
+
+    // Update mockEqFn to return an object including the mocked .not
+    // This ensures that .not can be chained after .eq
+    mockEqFn = jest.fn().mockImplementation(async () => ({ data: [], error: null, not: mockNotFn }));
 
     // Reset fetchFixtures mock
     (fetchFixtures as jest.Mock).mockResolvedValue({ response: [], results: 0 });
