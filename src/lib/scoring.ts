@@ -1,7 +1,7 @@
 // src/lib/scoring.ts
 
 import { type SupabaseClient } from '@supabase/supabase-js'; // Import the type
-import type { Database, Json } from '@/types/supabase'; // Import Json type
+import type { Database, Json, Tables } from '@/types/supabase'; // Import Json type
 import { logger } from '@/utils/logger'; // Import the logger
 
 type BettingRoundId = number;
@@ -9,7 +9,12 @@ type FixtureId = number;
 type Prediction = Database['public']['Enums']['prediction_type']; // '1' | 'X' | '2'
 type Result = Prediction | null; // Fixtures might not have a result yet, or goals could be null
 
-interface ScoreCalculationResult {
+// Type definitions
+type UserBet = Tables<'user_bets'>;
+type Fixture = Tables<'fixtures'>;
+
+// Export the result type
+export interface ScoreCalculationResult {
   success: boolean;
   message: string;
   details?: {
@@ -45,6 +50,11 @@ export async function calculateAndStoreMatchPoints(
   let betsProcessed = 0;
 
   try {
+    // Step 1: Fetch round data (status is implicitly checked by the calling process)
+    // Removed initial status check and redundant update to 'scoring'
+    // The detector service should have already marked the round as 'scoring'
+    // if it was ready.
+    /*
     // Step 1: Check idempotency & set status to 'scoring'
     const { data: roundData, error: fetchError } = await client // Use passed-in client
       .from('betting_rounds')
@@ -87,6 +97,8 @@ export async function calculateAndStoreMatchPoints(
     }
 
     logger.info({ bettingRoundId }, `Betting round status set to 'scoring'. Proceeding...`);
+    */
+    // --- End of removed block ---
 
     // 2. Fetch Fixture IDs associated with the betting round
     const { data: fixtureLinks, error: linkError } = await client // Use passed-in client

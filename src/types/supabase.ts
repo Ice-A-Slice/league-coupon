@@ -511,7 +511,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      handle_round_scoring: {
+        Args: { p_betting_round_id: number; p_bet_updates: Json }
+        Returns: undefined
+      }
     }
     Enums: {
       betting_round_status: "open" | "closed" | "scoring" | "scored"

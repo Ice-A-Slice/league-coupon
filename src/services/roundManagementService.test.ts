@@ -1,6 +1,8 @@
-import { describe, it, expect, jest } from '@jest/globals';
+// import { jest } from '@jest/globals'; // Removed unused import
+import { describe, it, expect } from '@jest/globals';
 import { roundManagementService } from './roundManagementService';
 import type { Tables } from '@/types/supabase';
+import { calculateTimeDifference } from '@/lib/utils';
 
 // Define Fixture type - Use the actual type imported if possible, 
 // but ensure mock data matches required fields.

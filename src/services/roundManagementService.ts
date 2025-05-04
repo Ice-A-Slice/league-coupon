@@ -1,18 +1,33 @@
 import { createClient } from '@/utils/supabase/client'; // Corrected path
-import type { Database, Tables, TablesInsert, TablesUpdate, Enums } from '@/types/supabase';
+import type { Database, Tables, TablesInsert, TablesUpdate /*, Enums */ } from '@/types/supabase';
 import { calculateTimeDifference } from '@/lib/utils';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { logger } from '@/utils/logger';
 
 // --- Constants ---
 const TIME_GAP_THRESHOLD_HOURS = 72;
 const MIN_FIXTURES_PER_ROUND = 1; // Start with 1 for initial testing
+const TIME_WINDOW_HOURS_START = 72; // Look 72 hours ahead
 
 // --- Utilities ---
 
 /** Basic console logger prefixed with service name. */
 const log = (...args: unknown[]) => console.log('[RoundManagementService]', ...args);
 
-/** Basic console error logger prefixed with service name. */
-const error = (...args: unknown[]) => console.error('[RoundManagementService Error]', ...args);
+/** 
+ * Helper for logging errors with service context.
+ * Handles different argument patterns for logger.error.
+ */
+const error = (...args: unknown[]) => {
+  const serviceContext = { service: 'RoundManagementService' };
+  if (args.length === 1 && typeof args[0] === 'object' && args[0] !== null) {
+    // If single object (like an Error), log it with context
+    logger.error({ ...serviceContext, err: args[0] as Record<string, unknown> }, (args[0] as Error)?.message ?? 'Error object logged');
+  } else {
+    // Otherwise, assume string message possibly followed by other args
+    logger.error(serviceContext, args[0] as string, ...args.slice(1));
+  }
+};
 
 /** Custom error class for specific errors originating from the Round Management Service. */
 class RoundManagementError extends Error {
@@ -495,14 +510,23 @@ export const roundManagementService = {
 // --- Type Aliases ---
 
 /** Represents a row in the public.betting_rounds table. */
-type BettingRound = Tables<'betting_rounds'>;
+// type BettingRound = Tables<'betting_rounds'>; // Commented out unused type
 /** Represents the shape of data needed to insert a new row into public.betting_rounds. */
 type BettingRoundInsert = TablesInsert<'betting_rounds'>;
 /** Represents the shape of data needed to update a row in public.betting_rounds. */
-type BettingRoundUpdate = TablesUpdate<'betting_rounds'>;
+// type BettingRoundUpdate = Tables<'betting_rounds', 'Update'>; // Commented out unused type
 /** Represents the possible statuses for a betting round from the enum. */
-type BettingRoundStatus = Database['public']['Enums']['betting_round_status'];
+// type BettingRoundStatus = Enums<'betting_round_status'>; // Commented out unused type
 
 /** Represents a row in the public.fixtures table. */
 type Fixture = Tables<'fixtures'>;
+
+interface FixtureGroup {
+  fixtures: Fixture[];
+  isValid: boolean; 
+}
+
+// Define the types based on your Supabase schema
+type Season = Tables<'seasons'>;
+type Round = Tables<'rounds'>;
  

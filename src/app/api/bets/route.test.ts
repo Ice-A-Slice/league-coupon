@@ -419,4 +419,36 @@ describe('POST /api/bets', () => {
       expect(mockNextResponseJson).toHaveBeenCalledWith({ error: 'Internal server error: Could not verify betting round details.' }, { status: 500 });
   });
 
+  it('should return 400 if fixtures belong to different rounds (if applicable)', async () => {
+    // Arrange
+    const mockUserId = 'test-user-404';
+    const invalidFixtureId = 9999;
+    const requestBody = [{ fixture_id: invalidFixtureId, prediction: '1' }];
+    const submittedFixtureIds = [invalidFixtureId];
+     const request = new Request('http://localhost/api/bets', {
+      method: 'POST',
+      body: JSON.stringify(requestBody),
+      headers: { 'Content-Type': 'application/json' },
+    });
+    mockSupabaseGetUser.mockResolvedValue({ data: { user: { id: mockUserId } }, error: null });
+    // Mock betting_round_fixtures lookup to return NO results
+    mockInRoundFixtures.mockResolvedValue({ data: [], error: null }); 
+
+    // Act
+    await POST(request);
+
+    // Assert
+    expect(mockSupabaseGetUser).toHaveBeenCalledTimes(1);
+    // Check that only the first part of validation was called
+    expect(mockFrom).toHaveBeenCalledWith('betting_round_fixtures');
+    expect(mockSelectRoundFixtures).toHaveBeenCalledWith('betting_round_id');
+    expect(mockInRoundFixtures).toHaveBeenCalledWith('fixture_id', submittedFixtureIds);
+    // Ensure other DB calls were NOT made
+    expect(mockFrom).toHaveBeenCalledTimes(1); 
+    expect(mockSelectRound).not.toHaveBeenCalled();
+    expect(mockSupabaseUpsert).not.toHaveBeenCalled(); 
+    // Check final response
+    expect(mockNextResponseJson).toHaveBeenCalledTimes(1);
+    expect(mockNextResponseJson).toHaveBeenCalledWith({ error: 'Invalid submission: Fixtures do not belong to a betting round.' }, { status: 400 });
+  });
 }); 

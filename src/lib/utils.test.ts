@@ -10,7 +10,7 @@ describe('Utility Functions (src/lib/utils.ts)', () => {
 
     const date1 = new Date(date1Str);
     const date2 = new Date(date2Str);
-    const date3 = new Date(date3Str);
+    // const date3 = new Date(date3Str); // Removed unused variable
 
     it('should calculate the difference in hours by default', () => {
       expect(calculateTimeDifference(date1, date2)).toBeCloseTo(2.5);

@@ -1,0 +1,43 @@
+# Task ID: 7
+# Title: Implement Round Completion Detection
+# Status: pending
+# Dependencies: 2, 5, 6
+# Priority: medium
+# Description: Create logic to detect when all fixtures in a round have finished and trigger scoring.
+# Details:
+Develop a function that checks if all fixtures for a given round_id have a finished status ('FT', 'AET', 'PEN'). When a round is detected as complete, trigger the scoring logic from Task 6 for all user bets associated with that round. Update the rounds.scored_at timestamp when scoring is complete.
+
+# Test Strategy:
+Test with various fixture status combinations to verify correct completion detection. Verify scoring is only triggered once all fixtures are complete.
+
+# Subtasks:
+## 1. Define Fixture Completion Criteria [pending]
+### Dependencies: None
+### Description: Establish the set of statuses that indicate a fixture is finished (e.g., 'FT', 'AET', 'PEN') and ensure these are consistently represented in the fixture data model.
+### Details:
+Review the fixture status values in the database or application model. Create a constant or configuration that lists all statuses considered as 'finished'. Ensure all relevant parts of the codebase use this standardized set for completion checks.
+
+## 2. Implement Round Completion Check Function [pending]
+### Dependencies: 7.1
+### Description: Develop a function that, given a round_id, checks whether all fixtures in that round have a finished status as defined in Subtask 1.
+### Details:
+Query all fixtures associated with the provided round_id. Iterate through the fixtures and verify that each has a status in the finished set. Return a boolean indicating whether the round is complete.
+
+## 3. Trigger Scoring Logic Upon Round Completion [pending]
+### Dependencies: 7.2
+### Description: Integrate the round completion check with the scoring logic so that when a round is detected as complete, the scoring process from Task 6 is triggered for all user bets in that round.
+### Details:
+Set up an event or scheduled job that invokes the round completion check after fixture status updates. If the round is complete, call the scoring function for all user bets associated with the round. Ensure idempotency so scoring is only triggered once per round.
+
+## 4. Update Round Metadata After Scoring [pending]
+### Dependencies: 7.3
+### Description: After scoring is successfully completed for a round, update the rounds.scored_at timestamp to reflect when scoring was performed.
+### Details:
+Modify the rounds table or data model to set the scored_at field to the current timestamp once scoring completes. Ensure this update occurs only after successful scoring and is not repeated if scoring is re-attempted.
+
+## 5. Test and Validate Round Completion and Scoring Workflow [pending]
+### Dependencies: 7.4
+### Description: Develop and execute comprehensive tests to ensure the round completion detection, scoring trigger, and metadata update work as intended.
+### Details:
+Write unit and integration tests covering scenarios such as all fixtures finished, some fixtures unfinished, scoring triggered only once, and correct updating of scored_at. Validate with sample data and edge cases to ensure robustness.
+
