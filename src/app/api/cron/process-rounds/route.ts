@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { calculateAndStoreMatchPoints, ScoreCalculationResult } from '@/lib/scoring'; // Assuming path and ScoreCalculationResult is exported
 import { logger } from '@/utils/logger'; // Assuming path
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service'; // Use the new service client utility
+import { getSupabaseServiceRoleClient } from '@/utils/supabase/service'; // Reverted path
 import { RoundCompletionDetectorService } from '@/services/roundCompletionDetectorService'; // Import class
 
 // Defined a specific type for the results array
