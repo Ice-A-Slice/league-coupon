@@ -32,8 +32,31 @@ jest.mock('@/utils/logger', () => ({
 // Define types for mock data for clarity
 type MockFixtureLink = { fixture_id: number };
 
+// --- Mocks Setup ---
+
+// Define an interface for the mocked client methods we use
+// Use more specific types for Jest mocks instead of `any`
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+interface MockSupabaseClient {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  from: jest.Mock<Promise<{ data: any[] | null; error: any | null }>, [string]>; // Mock `from` returning a promise
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rpc: jest.Mock<Promise<{ data: any | null; error: any | null }>, [string, any]>; // Mock `rpc` returning a promise
+  // Add other methods if needed by specific tests, e.g.:
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // select: jest.Mock<Promise<{ data: any[] | null; error: any | null }>, []>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eq: jest.Mock<Promise<{ data: any[] | null; error: any | null }>, [string, any]>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // single: jest.Mock<Promise<{ data: any | null; error: any | null }>, []>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // update: jest.Mock<Promise<{ data: any[] | null; error: any | null }>, [any]>;
+}
+// eslint-enable-next-line @typescript-eslint/no-explicit-any
+
 describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
-  let mockClient: any; // Use 'any' for simplicity in mocking, refine if needed
+  // Use the specific mock interface instead of 'any'
+  let mockClient: MockSupabaseClient;
   let mockRpc: jest.Mock; // Mock for the RPC function
 
   beforeEach(() => {
