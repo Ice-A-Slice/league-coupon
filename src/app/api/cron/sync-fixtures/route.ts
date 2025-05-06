@@ -4,6 +4,10 @@ import { syncFixturesForActiveSeason } from '@/services/sync/syncFixtures';
 export async function GET(request: Request) {
   // Recommended security: Check for Vercel Cron secret
   const authHeader = request.headers.get('authorization');
+  // --- DEBUGGING LOGS ---
+  console.log("[sync-fixtures] Received Authorization Header:", authHeader);
+  console.log("[sync-fixtures] Expected Secret (from process.env):", process.env.CRON_SECRET);
+  // --- END DEBUGGING LOGS ---
   if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     console.warn('Unauthorized cron access attempt');
     return new NextResponse('Unauthorized', {

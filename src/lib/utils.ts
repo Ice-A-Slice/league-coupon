@@ -108,3 +108,34 @@ export function filterComboboxOptions(
     }
   });
 }
+
+/**
+ * Calculates the time difference between two dates.
+ *
+ * @param date1 - The first date (Date object or ISO string).
+ * @param date2 - The second date (Date object or ISO string).
+ * @param unit - The unit for the returned difference ('hours', 'minutes', 'seconds', 'milliseconds'). Defaults to 'hours'.
+ * @returns The difference between date2 and date1 in the specified unit.
+ */
+export function calculateTimeDifference(
+  date1: Date | string,
+  date2: Date | string,
+  unit: 'hours' | 'minutes' | 'seconds' | 'milliseconds' = 'hours'
+): number {
+  const d1 = typeof date1 === 'string' ? new Date(date1) : date1;
+  const d2 = typeof date2 === 'string' ? new Date(date2) : date2;
+
+  const diffMilliseconds = d2.getTime() - d1.getTime();
+
+  switch (unit) {
+    case 'milliseconds':
+      return diffMilliseconds;
+    case 'seconds':
+      return diffMilliseconds / 1000;
+    case 'minutes':
+      return diffMilliseconds / (1000 * 60);
+    case 'hours':
+    default:
+      return diffMilliseconds / (1000 * 60 * 60);
+  }
+}

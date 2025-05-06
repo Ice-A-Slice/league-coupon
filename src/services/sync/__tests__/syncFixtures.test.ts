@@ -66,8 +66,8 @@ jest.mock('@/services/football-api/client', () => ({
 import { fetchFixtures } from '@/services/football-api/client';
 
 // --- Helper Functions (Keep as is) ---
-interface MockApiLeague { id: number; name: string; country: string; logo: string | null; flag?: string; season?: number; round?: string; }
-interface MockApiTeamInfo { id: number; name: string; logo: string | null; winner?: boolean | null; }
+interface MockApiLeague { id: number; name: string; country: string; logo: string | null; season?: number; round?: string; }
+interface MockApiTeamInfo { id: number; name: string; logo: string | null; }
 interface MockApiTeams { home: MockApiTeamInfo; away: MockApiTeamInfo; }
 const createMockApiFixture = (id: number, status: string, home: number | null, away: number | null, kickoff: string = '2024-01-01T12:00:00Z'): ApiFixturesResponse['response'][0] => ({
   fixture: { 
@@ -94,11 +94,30 @@ const createMockApiFixture = (id: number, status: string, home: number | null, a
     away: { id: 0, name: 'Away Team', logo: null } 
   } as MockApiTeams, 
 });
-const createMockDbFixture = (id: number, apiFixtureId: number, status: string, home: number | null, away: number | null, kickoff: string = '2024-01-01T12:00:00Z', roundId: number = 1, homeTeamId: number = 33, awayTeamId: number = 48): Partial<Tables<'fixtures'> & { rounds: { season_id: number } }> => ({ id, api_fixture_id: apiFixtureId, status_short: status, home_goals: home, away_goals: away, kickoff, result: home === null || away === null ? null : (home > away ? '1' : (home < away ? '2' : 'X')), home_goals_ht: 0, away_goals_ht: 0, referee: 'Ref', rounds: { season_id: 1 }, round_id: roundId, home_team_id: homeTeamId, away_team_id: awayTeamId });
+const createMockDbFixture = (id: number, apiFixtureId: number, status: string, home: number | null, away: number | null, kickoff: string = '2024-01-01T12:00:00Z', roundId: number = 1, homeTeamId: number = 33, awayTeamId: number = 48): Partial<Tables<'fixtures'> & { rounds: { season_id: number } }> => ({
+  id,
+  api_fixture_id: apiFixtureId,
+  status_short: status,
+  status_long: `Status ${status}`,
+  home_goals: home,
+  away_goals: away,
+  kickoff,
+  result: home === null || away === null ? null : (home > away ? '1' : (home < away ? '2' : 'X')),
+  home_goals_ht: 0,
+  away_goals_ht: 0,
+  referee: 'Ref',
+  rounds: { season_id: 1 },
+  round_id: roundId,
+  home_team_id: homeTeamId,
+  away_team_id: awayTeamId
+});
 // --- End Helpers ---
 
 
 describe('Fixture Synchronization Logic', () => {
+
+  // Add mock for .not()
+  let mockNotFn: jest.Mock;
 
   beforeEach(() => {
     // Clear all mock function calls and reset implementations
@@ -117,6 +136,12 @@ describe('Fixture Synchronization Logic', () => {
     mockUpsertFn.mockResolvedValue({ error: null });
     mockEqFn = jest.fn().mockResolvedValue({ data: [], error: null }); // Default: find no existing fixtures
     mockSelectFn = jest.fn().mockImplementation(() => ({ eq: mockEqFn })); // Re-link select to eq
+    // Initialize .not mock
+    mockNotFn = jest.fn().mockReturnThis();
+
+    // Update mockEqFn to return an object including the mocked .not
+    // This ensures that .not can be chained after .eq
+    mockEqFn = jest.fn().mockImplementation(async () => ({ data: [], error: null, not: mockNotFn }));
 
     // Reset fetchFixtures mock
     (fetchFixtures as jest.Mock).mockResolvedValue({ response: [], results: 0 });

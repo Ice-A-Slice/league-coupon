@@ -61,6 +61,24 @@ npm run dev
 
 ---
 
+## Core Concepts
+
+### Dynamic Betting Rounds
+
+A key concept in this application is the dynamic handling of betting rounds. While the underlying football data API provides static rounds (e.g., "Regular Season - 34"), user betting and scoring operate on dynamically generated **Betting Rounds** (stored in the `betting_rounds` table).
+
+**Problem:** Fixtures for a single betting coupon presented to the user might span multiple official API rounds due to scheduling (e.g., midweek games). Relying solely on static API rounds for locking bets and scoring leads to a disjointed user experience.
+
+**Solution:**
+
+1.  **Dynamic Generation:** The `getCurrentBettingRoundFixtures` logic identifies the next group of fixtures based on time gaps (e.g., within 72 hours), potentially combining fixtures from different API rounds (resulting in names like "Round 34/35").
+2.  **Persistence:** When a user submits bets for such a group, a record is created in the `betting_rounds` table to represent this specific instance. This record stores the dynamic name, the associated `competition_id`, and lifecycle status (`open`, `closed`, `scoring`, `scored`).
+3.  **Fixture Linking:** The `betting_round_fixtures` join table explicitly links each `betting_rounds` instance to the specific `fixtures` it contained.
+4.  **Bet Linking:** User submissions (`user_bets` table) reference the `betting_rounds.id` via the `betting_round_id` foreign key, *not* the static API `rounds.id`.
+5.  **Scoring Context:** This `betting_rounds` instance becomes the unit for scoring calculations, round completion detection, and standings updates, ensuring consistency with the user's betting experience.
+
+---
+
 ## Original Next.js README Content:
 
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).

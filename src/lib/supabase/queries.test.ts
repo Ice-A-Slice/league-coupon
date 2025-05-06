@@ -186,15 +186,68 @@ describe('Supabase Queries', () => {
     });
   });
 
-  // --- Tests for getCurrentBettingRoundFixtures ---
+  // --- Tests for getCurrentBettingRoundFixtures (Refactored) ---
   describe('getCurrentBettingRoundFixtures', () => {
+    // Mocks for the different stages of the function
+    let fromBettingRoundsMock: jest.Mock;
+    let fromBettingRoundFixturesMock: jest.Mock;
+    let fromFixturesMock: jest.Mock;
 
-    it('should return null if no NS fixtures are found', async () => {
-      // Arrange: Mock DB to return empty array
-      // @ts-expect-error // Type mismatch due to simplified mock
-      (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({
-         data: [],
-         error: null,
+    beforeEach(() => {
+      jest.clearAllMocks();
+
+      // Mock implementation setup - This is complex due to chaining
+      // We will mock the *final* method call in each chain within the specific test
+      fromBettingRoundsMock = jest.fn();
+      fromBettingRoundFixturesMock = jest.fn();
+      fromFixturesMock = jest.fn();
+
+      // @ts-expect-error - Assigning mock implementation
+      supabaseServerClient.from = jest.fn((tableName: string) => {
+        if (tableName === 'betting_rounds') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                limit: jest.fn(() => ({
+                  single: fromBettingRoundsMock // Mock the final .single() call
+                }))
+              }))
+            }))
+          };
+        }
+        if (tableName === 'betting_round_fixtures') {
+          return {
+            select: jest.fn(() => ({ // Mock .select()
+              eq: fromBettingRoundFixturesMock // Mock the final .eq() call for this chain
+            }))
+          };
+        }
+        if (tableName === 'fixtures') {
+          return {
+            select: jest.fn(() => ({ // Mock .select()
+              in: jest.fn(() => ({ // Mock .in()
+                order: fromFixturesMock // Mock the final .order() call
+              }))
+            }))
+          };
+        }
+        // Fallback for any unexpected table name
+        return { 
+          select: jest.fn().mockReturnThis(), 
+          eq: jest.fn().mockReturnThis(), 
+          limit: jest.fn().mockReturnThis(), 
+          single: jest.fn(), 
+          in: jest.fn().mockReturnThis(), 
+          order: jest.fn() 
+        };
+      });
+    });
+
+    it('should return null if no open betting round is found', async () => {
+      // Arrange: Mock the .single() call for betting_rounds to return a "no rows" error
+      fromBettingRoundsMock.mockResolvedValueOnce({
+        data: null,
+        error: { code: 'PGRST116', message: 'No rows found' },
       });
 
       // Act
@@ -202,176 +255,152 @@ describe('Supabase Queries', () => {
 
       // Assert
       expect(result).toBeNull();
-      expect(supabaseServerClient.from).toHaveBeenCalledWith('fixtures');
-      // @ts-expect-error // Type mismatch due to simplified mock
-      expect(supabaseServerClient.eq).toHaveBeenCalledWith('status_short', 'NS');
-      // @ts-expect-error // Type mismatch due to simplified mock
-      expect(supabaseServerClient.order).toHaveBeenCalledWith('kickoff', { ascending: true });
+      expect(supabaseServerClient.from).toHaveBeenCalledWith('betting_rounds');
+      expect(fromBettingRoundsMock).toHaveBeenCalledTimes(1);
+      // Ensure other mocks were not called
+      expect(fromBettingRoundFixturesMock).not.toHaveBeenCalled();
+      expect(fromFixturesMock).not.toHaveBeenCalled();
     });
 
-    it('should return a single fixture if only one NS fixture exists', async () => {
-      // Arrange: Mock DB to return one fixture
-      const mockFixture = createMockFixture(201, '2024-09-01T12:00:00Z', 50, 'Regular Season - 5');
-      // @ts-expect-error // Type mismatch due to simplified mock
-      (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({
-         data: [mockFixture],
-         error: null,
+    it('should return null on unexpected error fetching open round', async () => {
+      // Arrange: Mock the .single() call to throw a different error
+      const mockError = new Error('DB connection failed');
+      fromBettingRoundsMock.mockResolvedValueOnce({ data: null, error: mockError });
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+      // Act
+      const result = await getCurrentBettingRoundFixtures();
+
+      // Assert
+      expect(result).toBeNull();
+      expect(supabaseServerClient.from).toHaveBeenCalledWith('betting_rounds');
+      expect(fromBettingRoundsMock).toHaveBeenCalledTimes(1);
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error fetching open betting round:', mockError);
+      expect(consoleErrorSpy).toHaveBeenCalledWith('An error occurred in getCurrentBettingRoundFixtures:', mockError);
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should return round info with empty matches if open round has no fixtures', async () => {
+      // Arrange:
+      // 1. Mock finding the open round (successful)
+      fromBettingRoundsMock.mockResolvedValueOnce({ data: { id: 99, name: 'Open Round 99' }, error: null });
+      // 2. Mock finding no associated fixtures (returns empty array)
+      fromBettingRoundFixturesMock.mockResolvedValueOnce({ data: [], error: null });
+      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      // Act
+      const result = await getCurrentBettingRoundFixtures();
+
+      // Assert
+      expect(result).toEqual({
+        roundId: 99,
+        roundName: 'Open Round 99',
+        matches: [],
       });
+      expect(supabaseServerClient.from).toHaveBeenCalledWith('betting_rounds');
+      expect(fromBettingRoundsMock).toHaveBeenCalledTimes(1);
+      expect(supabaseServerClient.from).toHaveBeenCalledWith('betting_round_fixtures');
+      expect(fromBettingRoundFixturesMock).toHaveBeenCalledTimes(1);
+      expect(consoleWarnSpy).toHaveBeenCalledWith('Query: Open betting round 99 has no associated fixtures.');
+      // Ensure final fixtures query was NOT made
+      expect(fromFixturesMock).not.toHaveBeenCalled();
+      consoleWarnSpy.mockRestore();
+    });
+
+    it('should return the correct round and fixtures when an open round exists', async () => {
+      // Arrange:
+      const openRound = { id: 101, name: 'Current Open Round' };
+      const roundFixtureLinks = [{ fixture_id: 201 }, { fixture_id: 202 }];
+      const fixtureDetails = [
+          createMockFixture(201, '2024-09-10T12:00:00Z', openRound.id, openRound.name, 'NS'),
+          createMockFixture(202, '2024-09-10T14:00:00Z', openRound.id, openRound.name, 'NS'),
+      ];
+
+      // 1. Mock finding the open round
+      fromBettingRoundsMock.mockResolvedValueOnce({ data: openRound, error: null });
+      // 2. Mock finding associated fixture IDs
+      fromBettingRoundFixturesMock.mockResolvedValueOnce({ data: roundFixtureLinks, error: null });
+      // 3. Mock fetching fixture details
+      fromFixturesMock.mockResolvedValueOnce({ data: fixtureDetails, error: null });
 
       // Act
       const result = await getCurrentBettingRoundFixtures();
 
       // Assert
       expect(result).not.toBeNull();
-      expect(result?.matches).toHaveLength(1);
-      expect(result?.matches[0].id).toBe(201);
-      expect(result?.roundId).toBe(50);
-      expect(result?.roundName).toBe('Round 5'); // Check custom name extraction
-      expect(supabaseServerClient.from).toHaveBeenCalledWith('fixtures');
-      // @ts-expect-error // Type mismatch due to simplified mock
-      expect(supabaseServerClient.eq).toHaveBeenCalledWith('status_short', 'NS');
-      // @ts-expect-error // Type mismatch due to simplified mock
-      expect(supabaseServerClient.order).toHaveBeenCalledWith('kickoff', { ascending: true });
-    });
-
-    it('should group multiple fixtures within the time gap', async () => {
-      // Arrange: 3 fixtures, 48 hours apart (within 72h threshold)
-      const fixture1 = createMockFixture(301, '2024-09-05T12:00:00Z', 60, 'Regular Season - 6');
-      const fixture2 = createMockFixture(302, '2024-09-07T12:00:00Z', 60, 'Regular Season - 6'); // 48h gap
-      const fixture3 = createMockFixture(303, '2024-09-09T12:00:00Z', 60, 'Regular Season - 6'); // 48h gap
-      // @ts-expect-error // Type mismatch due to simplified mock
-      (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({
-         data: [fixture1, fixture2, fixture3],
-         error: null,
-      });
-
-      // Act
-      const result = await getCurrentBettingRoundFixtures();
-
-      // Assert
-      expect(result).not.toBeNull();
-      expect(result?.matches).toHaveLength(3);
-      expect(result?.matches.map(m => m.id)).toEqual([301, 302, 303]);
-      expect(result?.roundId).toBe(60);
-      expect(result?.roundName).toBe('Round 6');
-    });
-
-    it('should stop grouping when the time gap exceeds the threshold', async () => {
-      // Arrange: 3 fixtures, first gap 48h, second gap 80h (over 72h threshold)
-      const fixture1 = createMockFixture(401, '2024-09-10T12:00:00Z', 70, 'Regular Season - 7');
-      const fixture2 = createMockFixture(402, '2024-09-12T12:00:00Z', 70, 'Regular Season - 7'); // 48h gap
-      const fixture3 = createMockFixture(403, '2024-09-15T20:00:00Z', 70, 'Regular Season - 7'); // 80h gap
-      // @ts-expect-error // Type mismatch due to simplified mock
-       (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({
-         data: [fixture1, fixture2, fixture3],
-         error: null,
-      });
-
-      // Act
-      const result = await getCurrentBettingRoundFixtures();
-
-      // Assert
-      expect(result).not.toBeNull();
-      expect(result?.matches).toHaveLength(2); // Should only include the first two
-      expect(result?.matches.map(m => m.id)).toEqual([401, 402]);
-      expect(result?.roundId).toBe(70);
-      expect(result?.roundName).toBe('Round 7');
-    });
-
-    it('should group fixtures with a gap just under the threshold', async () => {
-       // Arrange: Gap of 71 hours (just under 72h)
-      const fixture1 = createMockFixture(501, '2024-09-20T12:00:00Z', 80, 'Regular Season - 8');
-      const fixture2 = createMockFixture(502, '2024-09-23T11:00:00Z', 80, 'Regular Season - 8'); // 71h gap
-      // @ts-expect-error // Type mismatch due to simplified mock
-       (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({
-         data: [fixture1, fixture2],
-         error: null,
-      });
-
-      // Act
-      const result = await getCurrentBettingRoundFixtures();
-
-      // Assert
-      expect(result).not.toBeNull();
+      expect(result?.roundId).toBe(openRound.id);
+      expect(result?.roundName).toBe(openRound.name);
       expect(result?.matches).toHaveLength(2);
-      expect(result?.matches.map(m => m.id)).toEqual([501, 502]);
-      expect(result?.roundId).toBe(80);
-      expect(result?.roundName).toBe('Round 8');
+      expect(result?.matches.map(m => m.id)).toEqual([201, 202]);
+
+      // Verify mock calls
+      expect(supabaseServerClient.from).toHaveBeenCalledWith('betting_rounds');
+      expect(fromBettingRoundsMock).toHaveBeenCalledTimes(1);
+      expect(supabaseServerClient.from).toHaveBeenCalledWith('betting_round_fixtures');
+      expect(fromBettingRoundFixturesMock).toHaveBeenCalledTimes(1);
+      expect(supabaseServerClient.from).toHaveBeenCalledWith('fixtures');
+      expect(fromFixturesMock).toHaveBeenCalledTimes(1);
+
+      // We might want more specific checks on the *arguments* passed to the final methods
+      // e.g., checking that eq() was called with the correct roundId, and in() with the fixtureIds
+      // However, the current mock setup makes this very verbose. This check confirms the flow.
     });
 
-    it('should generate mixed round names correctly (e.g., Round 9/10)', async () => {
-      // Arrange: Fixtures from different API rounds within the time gap
-      const fixture1 = createMockFixture(601, '2024-10-01T12:00:00Z', 90, 'Regular Season - 9');
-      const fixture2 = createMockFixture(602, '2024-10-02T12:00:00Z', 90, 'Regular Season - 9'); // 24h gap
-      const fixture3 = createMockFixture(603, '2024-10-03T12:00:00Z', 100, 'Regular Season - 10'); // 24h gap, different round
-      const fixture4 = createMockFixture(604, '2024-10-05T12:00:00Z', 100, 'Regular Season - 10'); // 48h gap
-      // Fixture 5 has a large gap, should not be included
-      const fixture5 = createMockFixture(605, '2024-10-10T12:00:00Z', 110, 'Regular Season - 11'); // 120h gap
-      // @ts-expect-error // Type mismatch due to simplified mock
-      (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({
-         data: [fixture1, fixture2, fixture3, fixture4, fixture5],
-         error: null,
-      });
+    it('should return null on error fetching round fixtures', async () => {
+      // Arrange:
+      fromBettingRoundsMock.mockResolvedValueOnce({ data: { id: 102, name: 'Another Open Round' }, error: null });
+      const mockError = new Error('Failed to get round fixtures');
+      fromBettingRoundFixturesMock.mockResolvedValueOnce({ data: null, error: mockError }); // Error here
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
       // Act
       const result = await getCurrentBettingRoundFixtures();
 
       // Assert
-      expect(result).not.toBeNull();
-      expect(result?.matches).toHaveLength(4); // Includes fixtures 1-4
-      expect(result?.matches.map(m => m.id)).toEqual([601, 602, 603, 604]);
-      expect(result?.roundId).toBe(90); // ID from the first fixture
-      expect(result?.roundName).toBe('Round 9/10'); // Custom mixed name
+      expect(result).toBeNull();
+      expect(supabaseServerClient.from).toHaveBeenCalledWith('betting_rounds');
+      expect(fromBettingRoundsMock).toHaveBeenCalledTimes(1);
+      expect(supabaseServerClient.from).toHaveBeenCalledWith('betting_round_fixtures');
+      expect(fromBettingRoundFixturesMock).toHaveBeenCalledTimes(1);
+      expect(fromFixturesMock).not.toHaveBeenCalled(); // Final query shouldn't happen
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error fetching fixtures for betting round 102:', mockError);
+      expect(consoleErrorSpy).toHaveBeenCalledWith('An error occurred in getCurrentBettingRoundFixtures:', mockError);
+      consoleErrorSpy.mockRestore();
     });
 
-    it('should skip fixtures with missing kickoff times but continue grouping', async () => {
-      // Arrange
-      const fixture1 = createMockFixture(701, '2024-11-01T12:00:00Z', 120, 'Regular Season - 12');
-      // Fixture 2 is missing kickoff
-      const fixture2 = { ...createMockFixture(702, '', 120, 'Regular Season - 12'), kickoff: null };
-      const fixture3 = createMockFixture(703, '2024-11-02T12:00:00Z', 120, 'Regular Season - 12'); // Small gap from fixture1
-      const fixture4 = createMockFixture(704, '2024-11-05T12:00:00Z', 120, 'Regular Season - 12'); // Large gap from fixture3
-      // @ts-expect-error // Type mismatch due to simplified mock
-      (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({
-         data: [fixture1, fixture2, fixture3, fixture4],
-         error: null,
-      });
-      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    it('should return null on error fetching fixture details', async () => {
+      // Arrange:
+      const openRound = { id: 103, name: 'Round With Fixture Fetch Error' };
+      const roundFixtureLinks = [{ fixture_id: 301 }];
+      const mockError = new Error('Failed to get fixture details');
+
+      fromBettingRoundsMock.mockResolvedValueOnce({ data: openRound, error: null });
+      fromBettingRoundFixturesMock.mockResolvedValueOnce({ data: roundFixtureLinks, error: null });
+      fromFixturesMock.mockResolvedValueOnce({ data: null, error: mockError }); // Error here
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
       // Act
       const result = await getCurrentBettingRoundFixtures();
 
       // Assert
-      expect(result).not.toBeNull();
-      expect(consoleWarnSpy).toHaveBeenCalledWith('Fixture ID 702 missing kickoff time. Skipping.');
-      expect(result?.matches).toHaveLength(2); // Includes 1 and 3
-      expect(result?.matches.map(m => m.id)).toEqual([701, 703]);
-      expect(result?.roundName).toBe('Round 12');
-      consoleWarnSpy.mockRestore();
+      expect(result).toBeNull();
+      expect(supabaseServerClient.from).toHaveBeenCalledWith('betting_rounds');
+      expect(fromBettingRoundsMock).toHaveBeenCalledTimes(1);
+      expect(supabaseServerClient.from).toHaveBeenCalledWith('betting_round_fixtures');
+      expect(fromBettingRoundFixturesMock).toHaveBeenCalledTimes(1);
+      expect(supabaseServerClient.from).toHaveBeenCalledWith('fixtures');
+      expect(fromFixturesMock).toHaveBeenCalledTimes(1);
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error fetching fixture details for round 103:', mockError);
+      expect(consoleErrorSpy).toHaveBeenCalledWith('An error occurred in getCurrentBettingRoundFixtures:', mockError);
+      consoleErrorSpy.mockRestore();
     });
 
-    it('should use fallback round name if number extraction fails', async () => {
-      // Arrange
-      const fixture1 = createMockFixture(801, '2024-12-01T12:00:00Z', 130, 'Round without number');
-      // @ts-expect-error // Type mismatch due to simplified mock
-      (supabaseServerClient.order as jest.Mock).mockResolvedValueOnce({
-         data: [fixture1],
-         error: null,
-      });
-      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-
-      // Act
-      const result = await getCurrentBettingRoundFixtures();
-
-      // Assert
-      expect(result).not.toBeNull();
-      expect(result?.matches).toHaveLength(1);
-      expect(result?.matches[0].id).toBe(801);
-      expect(result?.roundId).toBe(130);
-      expect(result?.roundName).toBe('Round ID 130'); // Fallback name
-      expect(consoleWarnSpy).toHaveBeenCalledWith("Could not extract numeric round numbers from the group. Using fallback name.");
-      consoleWarnSpy.mockRestore();
+    // Old tests remain commented out
+    /*
+    it('should return null if no NS fixtures are found', async () => {
+// ... existing code ...
     });
+    */
   });
 });
 
