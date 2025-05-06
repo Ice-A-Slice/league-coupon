@@ -231,12 +231,6 @@ export type CurrentRoundFixturesResult = {
   matches: Match[]; // The grouped fixtures for the current betting round
 } | null;
 
-// Constants (consider moving to a config file)
-const ACTIVE_LEAGUE_API_ID = 39; // Premier League
-const ACTIVE_SEASON_YEAR = 2024;
-const MAX_TIME_GAP_HOURS = 72; // Max hours between fixtures to be included in the same betting round
-const MAX_TIME_GAP_MS = MAX_TIME_GAP_HOURS * 60 * 60 * 1000;
-
 /**
  * Identifies the current betting round by querying the `betting_rounds` table
  * for the round explicitly marked as 'open'. Then fetches the associated fixtures.
