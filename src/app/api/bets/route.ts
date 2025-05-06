@@ -102,82 +102,99 @@ export async function POST(request: Request) {
 
   console.log(`Received ${submissions.length} bet submissions from user ${userId}.`);
 
-  // Declare roundId variable - we might still need it later for upsert, but not for the primary lock check
-  let roundId: number | null = null;
-  let earliestSubmittedFixtureKickoff: Date | null = null; // Store the determined kickoff time
+  // --- Refactored: Find Betting Round, Validate Status & Deadline (Task related fix) ---
+  let bettingRoundId: number;
+  let bettingRoundStatus: string;
+  let bettingRoundDeadline: Date;
 
-  // 3. Locking Check (Refined Logic)
   try {
-    // Extract all unique fixture IDs from the submission payload
     const submittedFixtureIds = [...new Set(submissions.map(sub => sub.fixture_id))];
     if (submittedFixtureIds.length === 0) {
-        return NextResponse.json({ error: 'No fixture IDs found in submission.' }, { status: 400 });
+      return NextResponse.json({ error: 'No fixture IDs found in submission.' }, { status: 400 });
+    }
+    // Log the specific IDs being checked
+    console.log(`Validating submission for fixture IDs: ${submittedFixtureIds.join(', ')}`);
+
+    // 1. Find the betting round ID(s) these fixtures belong to
+    const { data: roundFixtureLinks, error: linkError } = await supabase
+      .from('betting_round_fixtures')
+      .select('betting_round_id')
+      .in('fixture_id', submittedFixtureIds);
+
+    if (linkError) {
+      console.error(`Validation Error: Could not fetch betting round links for fixtures:`, linkError);
+      return NextResponse.json({ error: 'Internal server error: Could not validate submission.' }, { status: 500 });
     }
 
-    // Find the earliest kickoff time AMONG THE SUBMITTED FIXTURES
-    const { data: earliestKickoffData, error: kickoffError } = await supabase
-      .from('fixtures')
-      .select('kickoff, round_id') // Select round_id as well if needed for upsert
-      .in('id', submittedFixtureIds)
-      .order('kickoff', { ascending: true })
-      .limit(1)
-      .maybeSingle(); // Get the single row with the earliest kickoff
-
-    if (kickoffError) {
-         console.error(`Locking Check Error: Could not fetch earliest kickoff for submitted fixtures:`, kickoffError);
-         return NextResponse.json({ error: 'Internal server error: Could not verify betting deadline.' }, { status: 500 });
+    if (!roundFixtureLinks || roundFixtureLinks.length === 0) {
+        console.error(`Validation Error: Submitted fixtures do not belong to any known betting round.`);
+        return NextResponse.json({ error: 'Invalid submission: Fixtures do not belong to a betting round.' }, { status: 400 });
     }
 
-    if (!earliestKickoffData?.kickoff) {
-        // Should not happen if submissions are based on valid fixtures
-        console.error(`Locking Check Error: No kickoff time found for submitted fixtures: ${submittedFixtureIds.join(', ')}.`);
-        return NextResponse.json({ error: 'Internal server error: Inconsistent fixture data.' }, { status: 500 });
-    } else {
-        // Assign roundId based on the earliest fixture found, assuming all submitted fixtures belong to the same logical betting round presented to the user
-        roundId = earliestKickoffData.round_id; 
-        if (!roundId) {
-             console.error(`Locking Check Error: Earliest submitted fixture missing round_id.`);
-             return NextResponse.json({ error: 'Internal server error: Fixture data incomplete.' }, { status: 500 });
-        }
-
-        earliestSubmittedFixtureKickoff = new Date(earliestKickoffData.kickoff);
-        const nowUtcMillis = Date.now();
-        const kickoffUtcMillis = earliestSubmittedFixtureKickoff.getTime();
-
-        console.log(`Earliest submitted fixture kickoff UTC millis: ${kickoffUtcMillis} (${earliestSubmittedFixtureKickoff.toISOString()}), Current UTC millis: ${nowUtcMillis} (${new Date(nowUtcMillis).toISOString()})`);
-
-        // Compare UTC milliseconds
-        if (nowUtcMillis >= kickoffUtcMillis) {
-          console.log(`User ${userId} submission rejected: Deadline for submitted fixtures passed.`);
-          // Keep the user-facing error message potentially generic, or refine if needed
-          return NextResponse.json({ error: 'Cannot submit bets, the betting deadline has passed.' }, { status: 403 });
-        }
-        console.log(`Betting is open for submitted fixtures (Round ${roundId}). Proceeding...`);
+    // 2. Ensure all fixtures belong to the SAME betting round
+    const uniqueBettingRoundIds = [...new Set(roundFixtureLinks.map(link => link.betting_round_id))];
+    if (uniqueBettingRoundIds.length > 1) {
+        console.error(`Validation Error: Submitted fixtures belong to multiple betting rounds: ${uniqueBettingRoundIds.join(', ')}.`);
+        return NextResponse.json({ error: 'Invalid submission: Bets must be for a single round.' }, { status: 400 });
     }
+    bettingRoundId = uniqueBettingRoundIds[0]; // We have the correct ID now!
+
+    // 3. Fetch the betting round details (status and deadline)
+    const { data: roundData, error: roundError } = await supabase
+      .from('betting_rounds')
+      .select('status, earliest_fixture_kickoff') // Use the round's earliest kickoff as the deadline
+      .eq('id', bettingRoundId)
+      .single();
+
+    if (roundError || !roundData) {
+      console.error(`Validation Error: Could not fetch betting round ${bettingRoundId}:`, roundError);
+      // This could mean the round exists in links but not in rounds table (data inconsistency)
+      return NextResponse.json({ error: 'Internal server error: Could not verify betting round details.' }, { status: 500 });
+    }
+
+    // 4. Check Round Status
+    bettingRoundStatus = roundData.status;
+    if (bettingRoundStatus !== 'open') {
+        console.log(`User ${userId} submission rejected: Betting round ${bettingRoundId} is not open (status: ${bettingRoundStatus}).`);
+        return NextResponse.json({ error: `Betting is closed for this round (Status: ${bettingRoundStatus}).` }, { status: 403 });
+    }
+
+    // 5. Check Deadline
+    if (!roundData.earliest_fixture_kickoff) {
+        console.error(`Validation Error: Betting round ${bettingRoundId} is missing earliest_fixture_kickoff.`);
+        return NextResponse.json({ error: 'Internal server error: Round deadline not configured.' }, { status: 500 });
+    }
+    bettingRoundDeadline = new Date(roundData.earliest_fixture_kickoff);
+    const nowUtcMillis = Date.now();
+    const deadlineUtcMillis = bettingRoundDeadline.getTime();
+
+    console.log(`Betting round ${bettingRoundId} deadline UTC millis: ${deadlineUtcMillis} (${bettingRoundDeadline.toISOString()}), Current UTC millis: ${nowUtcMillis} (${new Date(nowUtcMillis).toISOString()})`);
+
+    if (nowUtcMillis >= deadlineUtcMillis) {
+      console.log(`User ${userId} submission rejected: Deadline for betting round ${bettingRoundId} passed.`);
+      return NextResponse.json({ error: 'Cannot submit bets, the betting deadline has passed.' }, { status: 403 });
+    }
+
+    console.log(`Submission validated for user ${userId}, betting round ${bettingRoundId}. Proceeding...`);
 
   } catch (e) {
-      console.error('Error during locking check:', e);
+      console.error('Error during submission validation:', e);
       return NextResponse.json({ error: 'Internal server error during submission validation.' }, { status: 500 });
   }
-
-  // Check if roundId was successfully assigned before proceeding to upsert
-  if (roundId === null) {
-     console.error('Critical Error: roundId is null after locking check. Aborting upsert.');
-     return NextResponse.json({ error: 'Internal server error processing request.'}, { status: 500 });
-  }
+  // --- End Refactored Validation ---
 
   // 4. Prepare data for Upsert
   const upsertData = submissions.map(sub => ({
     user_id: userId,
     fixture_id: sub.fixture_id,
-    prediction: sub.prediction, // Ensure this matches the ENUM ('1', 'X', '2')
-    round_id: roundId, // Use the determined roundId from the earliest submitted fixture
-    submitted_at: new Date().toISOString(), // Explicitly set submission time for all upserted rows
+    prediction: sub.prediction, 
+    betting_round_id: bettingRoundId, // Use the correct column name
+    submitted_at: new Date().toISOString(),
   }));
 
   // 5. Perform Upsert using supabase client
   try {
-    console.log(`Upserting ${upsertData.length} bets for user ${userId}, round ${roundId}...`);
+    console.log(`Upserting ${upsertData.length} bets for user ${userId}, round ${bettingRoundId}...`);
     const { error: upsertError } = await supabase
       .from('user_bets')
       .upsert(upsertData, {
@@ -193,7 +210,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to save bets to database.' }, { status: 500 });
     }
 
-    console.log(`Successfully saved bets for user ${userId}, round ${roundId}.`);
+    console.log(`Successfully saved bets for user ${userId}, round ${bettingRoundId}.`);
 
     // 6. Return success response
     return NextResponse.json({ message: 'Bets submitted successfully!' }, { status: 200 });
