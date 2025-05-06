@@ -3,6 +3,7 @@ import { calculateAndStoreMatchPoints, ScoreCalculationResult } from '@/lib/scor
 import { logger } from '@/utils/logger'; // Assuming path
 import { getSupabaseServiceRoleClient } from '@/utils/supabase/service'; // Reverted path
 import { RoundCompletionDetectorService } from '@/services/roundCompletionDetectorService'; // Import class
+import { revalidatePath } from 'next/cache'; // Import revalidatePath
 
 // Defined a specific type for the results array
 interface ProcessingResult extends ScoreCalculationResult {
@@ -60,6 +61,7 @@ export async function GET(request: Request) {
     const results: ProcessingResult[] = []; // Use the new combined type
     // Re-use the service role client for scoring
     const scoringClient = serviceRoleClient; 
+    let successfullyProcessedAtLeastOneRound = false;
     for (const roundId of detectedRoundIds) {
       logger.info({ roundId }, "Processing scoring for round...");
       // Pass the client instance needed for scoring
@@ -71,6 +73,16 @@ export async function GET(request: Request) {
       } else {
          // Log the number of bets updated instead of pointsAwarded
          logger.info({ roundId, betsUpdated: scoringResult.details?.betsUpdated }, `Successfully scored round.`);
+         successfullyProcessedAtLeastOneRound = true;
+      }
+    }
+
+    if (successfullyProcessedAtLeastOneRound) {
+      try {
+        revalidatePath('/'); // Revalidate the root page
+        logger.info('[process-rounds] Cache revalidation triggered for path: /');
+      } catch (revalError) {
+        logger.error('[process-rounds] Error during cache revalidation:', revalError);
       }
     }
 
