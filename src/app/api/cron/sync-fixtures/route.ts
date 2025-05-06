@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { syncFixturesForActiveSeason } from '@/services/sync/syncFixtures';
+import { revalidatePath } from 'next/cache';
 
 export async function GET(request: Request) {
   // Recommended security: Check for Vercel Cron secret
@@ -8,6 +9,7 @@ export async function GET(request: Request) {
   console.log("[sync-fixtures] Received Authorization Header:", authHeader);
   console.log("[sync-fixtures] Expected Secret (from process.env):", process.env.CRON_SECRET);
   // --- END DEBUGGING LOGS ---
+  // TEMPORARILY COMMENTED OUT FOR LOCAL TESTING -- NOW UNCOMMENTED
   if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     console.warn('Unauthorized cron access attempt');
     return new NextResponse('Unauthorized', {
@@ -23,6 +25,12 @@ export async function GET(request: Request) {
     console.log('Scheduled sync finished:', result.message);
 
     if (result.success) {
+      try {
+        revalidatePath('/');
+        console.log('[sync-fixtures] Cache revalidation triggered for path: /');
+      } catch (revalError) {
+        console.error('[sync-fixtures] Error during cache revalidation:', revalError);
+      }
       return NextResponse.json({ success: true, message: result.message, details: result.details });
     } else {
       // Return 500 for cron job failures to indicate issues
