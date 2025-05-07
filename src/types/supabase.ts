@@ -511,6 +511,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_user_total_points: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          user_id: string
+          total_points: number
+        }[]
+      }
       handle_round_scoring: {
         Args: { p_betting_round_id: number; p_bet_updates: Json }
         Returns: undefined
