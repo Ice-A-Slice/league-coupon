@@ -311,10 +311,18 @@ export interface ILeagueDataService {
 
 // We will implement a class `LeagueDataServiceImpl` that implements `ILeagueDataService` in later subtasks. 
 
+// Define CacheEntry type
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
+
 const API_FOOTBALL_BASE_URL = 'https://v3.football.api-sports.io';
 
 export class LeagueDataServiceImpl implements ILeagueDataService {
   private apiKey: string;
+  private cache: Map<string, CacheEntry<unknown>> = new Map();
+  private readonly CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes TTL
 
   constructor() {
     // In a real application, the API key should come from a secure configuration source (e.g., environment variables)
@@ -324,13 +332,47 @@ export class LeagueDataServiceImpl implements ILeagueDataService {
     }
   }
 
+  // --- Cache Helper Methods ---
+  private getFromCache<T>(key: string): T | null {
+    const entry = this.cache.get(key);
+    if (entry && (Date.now() - entry.timestamp < this.CACHE_TTL_MS)) {
+      console.log(`Cache HIT for key: ${key}`);
+      // Important: Return a copy to prevent accidental mutation of cached object if it's mutable
+      // Assert the type after potential deep copy
+      const dataCopy = typeof entry.data === 'object' && entry.data !== null 
+                       ? JSON.parse(JSON.stringify(entry.data)) 
+                       : entry.data;
+      return dataCopy as T; // Assert that the retrieved/copied data is of type T
+    }
+    if (entry) {
+        console.log(`Cache STALE for key: ${key}`);
+        this.cache.delete(key); // Remove stale entry
+    } else {
+        console.log(`Cache MISS for key: ${key}`);
+    }
+    return null;
+  }
+
+  private setToCache<T>(key: string, data: T): void {
+    // Store a copy to prevent mutations affecting the cache if the returned object is modified
+    const dataToCache = typeof data === 'object' && data !== null ? JSON.parse(JSON.stringify(data)) : data;
+    this.cache.set(key, { data: dataToCache, timestamp: Date.now() });
+    console.log(`Cache SET for key: ${key}`);
+  }
+  // --- End Cache Helper Methods ---
+
   async getCurrentLeagueTable(
     competitionApiId: number,
     seasonYear: number,
   ): Promise<LeagueTable | null> {
+    const cacheKey = `leagueTable_${competitionApiId}_${seasonYear}`;
+    const cachedData = this.getFromCache<LeagueTable>(cacheKey);
+    if (cachedData !== null) return cachedData;
+
     const endpoint = `${API_FOOTBALL_BASE_URL}/standings?league=${competitionApiId}&season=${seasonYear}`;
 
     try {
+      console.log(`FETCHING from API: ${endpoint}`); // Log actual API calls
       const response = await fetch(endpoint, {
         method: 'GET',
         headers: {
@@ -341,13 +383,11 @@ export class LeagueDataServiceImpl implements ILeagueDataService {
 
       if (!response.ok) {
         console.error(`API Error: ${response.status} ${response.statusText} from ${endpoint}`);
-        // Log more details if available: await response.text()
         return null;
       }
 
       const data: APIFootballStandingsResponse = await response.json();
 
-      // Check for API-level errors using Array.isArray for type safety
       if (Array.isArray(data.errors) && data.errors.length > 0) {
         console.error('API returned errors:', data.errors);
         return null;
@@ -355,14 +395,11 @@ export class LeagueDataServiceImpl implements ILeagueDataService {
 
       if (!data.response || data.response.length === 0 || !data.response[0].league || !data.response[0].league.standings || data.response[0].league.standings.length === 0) {
         console.warn('No league standings data found in API response:', data);
+         // Cache the fact that no data was found (e.g., cache null or empty structure) to avoid retrying immediately
+        this.setToCache(cacheKey, null); // Or an empty LeagueTable structure if preferred
         return null;
       }
-
-      // Transformation logic from APIFootballStandingsResponse to LeagueTable will go here
-      // For now, let's return a placeholder or log the raw data
-      console.log('Raw standings data received:', JSON.stringify(data, null, 2));
       
-      // Placeholder for transformation:
       const leagueData = data.response[0].league;
       const transformedStandings: TeamStanding[] = leagueData.standings[0].map(apiEntry => ({
         rank: apiEntry.rank,
@@ -379,16 +416,17 @@ export class LeagueDataServiceImpl implements ILeagueDataService {
         description: apiEntry.description,
       }));
 
-      const leagueTable: LeagueTable = {
+      const leagueTableResult: LeagueTable = {
         competition_api_id: leagueData.id,
         season_year: leagueData.season,
         league_name: leagueData.name,
         country_name: leagueData.country,
         standings: transformedStandings,
-        last_api_update: leagueData.standings[0]?.[0]?.update, // Get update from the first standing entry if available
+        last_api_update: leagueData.standings[0]?.[0]?.update,
       };
 
-      return leagueTable;
+      this.setToCache(cacheKey, leagueTableResult); // Cache the successful result
+      return leagueTableResult;
 
     } catch (error) {
       console.error('Failed to fetch league table:', error);
@@ -400,9 +438,14 @@ export class LeagueDataServiceImpl implements ILeagueDataService {
     competitionApiId: number,
     seasonYear: number,
   ): Promise<PlayerStatistic[] | null> {
+    const cacheKey = `topScorers_${competitionApiId}_${seasonYear}`;
+    const cachedData = this.getFromCache<PlayerStatistic[]>(cacheKey);
+    if (cachedData !== null) return cachedData; // Can return empty array from cache
+
     const endpoint = `${API_FOOTBALL_BASE_URL}/players/topscorers?league=${competitionApiId}&season=${seasonYear}`;
 
     try {
+      console.log(`FETCHING from API: ${endpoint}`); // Log actual API calls
       const response = await fetch(endpoint, {
         method: 'GET',
         headers: {
@@ -418,7 +461,6 @@ export class LeagueDataServiceImpl implements ILeagueDataService {
 
       const data: APIFootballTopScorersResponse = await response.json();
 
-      // Check for API-level errors using Array.isArray for type safety
       if (Array.isArray(data.errors) && data.errors.length > 0) {
         console.error('API returned errors for Top Scorers:', data.errors);
         return null;
@@ -426,13 +468,13 @@ export class LeagueDataServiceImpl implements ILeagueDataService {
 
       if (!data.response || data.response.length === 0) {
         console.warn('No top scorers data found in API response:', data);
-        return []; // Return empty array if no scorers, rather than null
+        this.setToCache(cacheKey, []); // Cache the empty array result
+        return []; 
       }
 
-      // Transformation logic
       const transformedTopScorers: PlayerStatistic[] = data.response.map(entry => {
         const playerDetails = entry.player;
-        const playerStats = entry.statistics[0]; // Assuming one stats object per player in this context
+        const playerStats = entry.statistics[0];
 
         return {
           player_api_id: playerDetails.id,
@@ -444,10 +486,10 @@ export class LeagueDataServiceImpl implements ILeagueDataService {
           goals: playerStats.goals.total,
           assists: playerStats.goals.assists,
           matches_played: playerStats.games.appearences,
-          // Add other stats from playerStats as needed, mapping to PlayerStatistic model
         };
       });
 
+      this.setToCache(cacheKey, transformedTopScorers); // Cache the successful result
       return transformedTopScorers;
 
     } catch (error) {
