@@ -458,6 +458,53 @@ export type Database = {
           },
         ]
       }
+      user_round_dynamic_points: {
+        Row: {
+          betting_round_id: number
+          created_at: string
+          dynamic_points: number
+          id: number
+          question_1_correct: boolean
+          question_2_correct: boolean
+          question_3_correct: boolean
+          question_4_correct: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          betting_round_id: number
+          created_at?: string
+          dynamic_points?: number
+          id?: number
+          question_1_correct?: boolean
+          question_2_correct?: boolean
+          question_3_correct?: boolean
+          question_4_correct?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          betting_round_id?: number
+          created_at?: string
+          dynamic_points?: number
+          id?: number
+          question_1_correct?: boolean
+          question_2_correct?: boolean
+          question_3_correct?: boolean
+          question_4_correct?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_round_dynamic_points_betting_round_id_fkey"
+            columns: ["betting_round_id"]
+            isOneToOne: false
+            referencedRelation: "betting_rounds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_season_answers: {
         Row: {
           answered_player_id: number | null
