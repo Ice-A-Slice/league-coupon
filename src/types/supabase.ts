@@ -491,6 +491,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "user_season_answers_answered_player_id_fkey"
+            columns: ["answered_player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "user_season_answers_answered_team_id_fkey"
             columns: ["answered_team_id"]
             isOneToOne: false
