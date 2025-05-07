@@ -110,7 +110,7 @@ export async function POST(request: Request) {
   try {
     const submittedFixtureIds = [...new Set(submissions.map(sub => sub.fixture_id))];
     if (submittedFixtureIds.length === 0) {
-      return NextResponse.json({ error: 'No fixture IDs found in submission.' }, { status: 400 });
+        return NextResponse.json({ error: 'No fixture IDs found in submission.' }, { status: 400 });
     }
     // Log the specific IDs being checked
     console.log(`Validating submission for fixture IDs: ${submittedFixtureIds.join(', ')}`);
@@ -163,16 +163,16 @@ export async function POST(request: Request) {
     if (!roundData.earliest_fixture_kickoff) {
         console.error(`Validation Error: Betting round ${bettingRoundId} is missing earliest_fixture_kickoff.`);
         return NextResponse.json({ error: 'Internal server error: Round deadline not configured.' }, { status: 500 });
-    }
+        }
     bettingRoundDeadline = new Date(roundData.earliest_fixture_kickoff);
-    const nowUtcMillis = Date.now();
+        const nowUtcMillis = Date.now();
     const deadlineUtcMillis = bettingRoundDeadline.getTime();
 
     console.log(`Betting round ${bettingRoundId} deadline UTC millis: ${deadlineUtcMillis} (${bettingRoundDeadline.toISOString()}), Current UTC millis: ${nowUtcMillis} (${new Date(nowUtcMillis).toISOString()})`);
 
     if (nowUtcMillis >= deadlineUtcMillis) {
       console.log(`User ${userId} submission rejected: Deadline for betting round ${bettingRoundId} passed.`);
-      return NextResponse.json({ error: 'Cannot submit bets, the betting deadline has passed.' }, { status: 403 });
+          return NextResponse.json({ error: 'Cannot submit bets, the betting deadline has passed.' }, { status: 403 });
     }
 
     console.log(`Submission validated for user ${userId}, betting round ${bettingRoundId}. Proceeding...`);
