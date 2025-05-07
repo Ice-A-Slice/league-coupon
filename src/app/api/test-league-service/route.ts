@@ -1,5 +1,22 @@
 import { NextResponse } from 'next/server';
-import { LeagueDataServiceImpl } from '@/lib/leagueDataService'; // Adjust path if necessary
+import { 
+  LeagueDataServiceImpl, 
+  type LeagueTable, 
+  type PlayerStatistic, 
+  type TeamStanding 
+} from '@/lib/leagueDataService'; // Adjust path if necessary
+
+// Define an interface for the response structure
+interface TestServiceResponse {
+  leagueTable?: LeagueTable | null;
+  leagueTableError?: string;
+  topScorers?: PlayerStatistic[] | null;
+  topScorersError?: string;
+  teamWithBestGoalDifference?: TeamStanding | null;
+  teamWithBestGoalDifferenceError?: string;
+  lastPlaceTeam?: TeamStanding | null;
+  lastPlaceTeamError?: string;
+}
 
 export async function GET() {
   // Ensure the API key is available in the environment where this serverless function runs
@@ -19,6 +36,10 @@ export async function GET() {
   try {
     console.log(`Test API Route: Fetching data for league ${competitionApiId}, season ${seasonYear}`);
     
+    // Initialize response data object with the specific type
+    const responseData: TestServiceResponse = {};
+    let hasCriticalError = false; // To track if any primary data fetching failed critically
+
     // Fetch all data concurrently for efficiency
     const [leagueTable, topScorers, teamWithBestGD, lastPlaceTeam] = await Promise.all([
       leagueService.getCurrentLeagueTable(competitionApiId, seasonYear),
@@ -26,9 +47,6 @@ export async function GET() {
       leagueService.getTeamWithBestGoalDifference(competitionApiId, seasonYear),
       leagueService.getLastPlaceTeam(competitionApiId, seasonYear)
     ]);
-
-    let responseData: any = {};
-    let hasCriticalError = false; // To track if any primary data fetching failed critically
 
     if (leagueTable) {
       console.log('Test API Route: Successfully fetched league table.');

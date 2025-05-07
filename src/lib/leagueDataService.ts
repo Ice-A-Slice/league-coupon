@@ -347,7 +347,8 @@ export class LeagueDataServiceImpl implements ILeagueDataService {
 
       const data: APIFootballStandingsResponse = await response.json();
 
-      if (data.errors && Object.keys(data.errors).length > 0 && (data.errors as any[]).length > 0) {
+      // Check for API-level errors using Array.isArray for type safety
+      if (Array.isArray(data.errors) && data.errors.length > 0) {
         console.error('API returned errors:', data.errors);
         return null;
       }
@@ -417,7 +418,8 @@ export class LeagueDataServiceImpl implements ILeagueDataService {
 
       const data: APIFootballTopScorersResponse = await response.json();
 
-      if (data.errors && Object.keys(data.errors).length > 0 && (data.errors as any[]).length > 0) {
+      // Check for API-level errors using Array.isArray for type safety
+      if (Array.isArray(data.errors) && data.errors.length > 0) {
         console.error('API returned errors for Top Scorers:', data.errors);
         return null;
       }
