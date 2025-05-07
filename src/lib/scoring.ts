@@ -48,7 +48,7 @@ export async function calculateAndStoreMatchPoints(
   logger.info({ bettingRoundId }, `Starting score calculation.`);
   const startTime = Date.now(); // For performance monitoring
   let betsProcessed = 0;
-
+  
   try {
     // Step 1: Fetch round data (status is implicitly checked by the calling process)
     // Removed initial status check and redundant update to 'scoring'
@@ -99,7 +99,7 @@ export async function calculateAndStoreMatchPoints(
     logger.info({ bettingRoundId }, `Betting round status set to 'scoring'. Proceeding...`);
     */
     // --- End of removed block ---
-
+    
     // 2. Fetch Fixture IDs associated with the betting round
     const { data: fixtureLinks, error: linkError } = await client // Use passed-in client
       .from('betting_round_fixtures')
@@ -128,7 +128,7 @@ export async function calculateAndStoreMatchPoints(
 
     const fixtureIds = fixtureLinks.map(link => link.fixture_id);
     logger.info({ bettingRoundId, fixtureCount: fixtureIds.length }, `Found ${fixtureIds.length} fixtures.`);
-
+    
     // 3. Fetch final results for these fixtures
     const { data: fixturesData, error: fixturesError } = await client // Use passed-in client
       .from('fixtures')
@@ -209,15 +209,15 @@ export async function calculateAndStoreMatchPoints(
 
     for (const bet of userBets) {
         betsProcessed++;
-
+        
         // Skip if points already awarded (idempotency)
-        if (bet.points_awarded !== null) { 
-            continue;
+        if (bet.points_awarded !== null) {
+            continue; 
         }
 
         const fixtureResult = finishedFixtureResults.get(bet.fixture_id);
 
-        if (!fixtureResult || !fixtureResult.result) { 
+        if (!fixtureResult || !fixtureResult.result) {
             logger.warn({ bettingRoundId, betId: bet.id, fixtureId: bet.fixture_id }, `Skipping bet scoring: Missing or invalid final result for fixture.`);
             continue; 
         }
@@ -231,7 +231,7 @@ export async function calculateAndStoreMatchPoints(
             points: points
         });
     }
-
+    
     logger.info({ bettingRoundId, calculatedCount: betUpdatesForRPC.length, totalBets: betsProcessed }, `Calculated scores for bets.`);
 
     // 6. Call the RPC function to update bets and round status transactionally
@@ -247,14 +247,14 @@ export async function calculateAndStoreMatchPoints(
             logger.error({ bettingRoundId, error: rpcError }, "Error calling handle_round_scoring function.");
             // Attempt to reset status back to 'closed'? Maybe too complex, just log and return error.
             // Note: The transaction within the RPC function should have rolled back.
-            return {
-                success: false,
+        return { 
+          success: false, 
                 message: "Failed to store scores transactionally via RPC function.",
                 details: { betsProcessed: betsProcessed, betsUpdated: 0, error: rpcError } 
-            };
-        }
+        };
+      }
         logger.info({ bettingRoundId, count: betUpdatesForRPC.length }, `Successfully called handle_round_scoring function.`);
-
+      
     } else {
         // If no bets required scoring (e.g., all were already scored, or round had no bets initially)
         // We still need to ensure the round is marked as 'scored' if it reached this point.
@@ -262,19 +262,19 @@ export async function calculateAndStoreMatchPoints(
         // This case primarily handles rounds where all bets were *already* scored previously.
         logger.info({ bettingRoundId }, `No new bets required scoring. Ensuring round status is 'scored'.`);
          const { error: finalStatusError } = await client
-             .from('betting_rounds')
+      .from('betting_rounds')
              .update({ status: 'scored', scored_at: new Date().toISOString() })
              .eq('id', bettingRoundId)
              .not('status', 'eq', 'scored'); // Only update if not already scored
 
-        if (finalStatusError) {
+    if (finalStatusError) {
             logger.error({ bettingRoundId, error: finalStatusError }, "Failed to mark round as scored (no updates needed case)." );
-             return { 
-                 success: false, 
+      return { 
+        success: false, 
                  message: "No points needed storing, but failed to mark round as fully scored.", 
                  details: { betsProcessed: betsProcessed, betsUpdated: 0, error: finalStatusError } 
-             };
-         }
+      };
+    }
          logger.info({ bettingRoundId }, `Round status confirmed/updated to 'scored' (no new bet updates).`);
     }
 
@@ -299,9 +299,9 @@ export async function calculateAndStoreMatchPoints(
     // Attempt to reset status back to 'closed' if it was set to 'scoring'?
     // Consider adding this later if needed.
 
-    return { 
-        success: false, 
-        message: "An unexpected error occurred during scoring.",
+    return {
+      success: false,
+      message: "An unexpected error occurred during scoring.",
         details: { betsProcessed: betsProcessed, betsUpdated: 0, durationMs: duration, error: error instanceof Error ? error : new Error(String(error)) } 
     };
   }

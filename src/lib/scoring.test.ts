@@ -83,8 +83,8 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
   });
 
   it('should correctly score a completed round with simple predictions', async () => {
-    // Arrange
-    const bettingRoundId = 101;
+      // Arrange
+      const bettingRoundId = 101;
     const mockFixtureLinks: MockFixtureLink[] = [
       { fixture_id: 1 }, { fixture_id: 2 }, { fixture_id: 3 }, { fixture_id: 4 }, { fixture_id: 5 }
     ];
@@ -101,35 +101,35 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
       { id: 'bet3', user_id: 'user2', fixture_id: 3, prediction: '2', points_awarded: null }, // Correct
       { id: 'bet4', user_id: 'user2', fixture_id: 4, prediction: 'X', points_awarded: 0 },   // Already scored (0 points), should be skipped
       { id: 'bet5', user_id: 'user3', fixture_id: 5, prediction: '2', points_awarded: null }, // Incorrect
-    ];
+      ];
 
     // Mock database calls
     // Removed unused `tableName` parameter from mock implementation
     // Use mockImplementation directly on the initialized mockClient.from
     (mockClient.from as jest.Mock).mockImplementation((table: string) => {
       if (table === 'betting_round_fixtures') {
-        return {
-          select: jest.fn().mockReturnValue({
+            return {
+                  select: jest.fn().mockReturnValue({
             eq: jest.fn().mockResolvedValue({ data: mockFixtureLinks, error: null })
-          })
-        };
+              })
+            };
       } else if (table === 'fixtures') {
         return { select: () => ({ in: () => Promise.resolve({ data: mockFixturesData, error: null }) }) };
       } else if (table === 'user_bets') {
         return { select: () => ({ eq: () => Promise.resolve({ data: mockUserBets, error: null }) }) };
-      }
+          }
       return mockClient; // Default fallback for chaining
     });
 
     // Mock RPC call to succeed
     mockRpc.mockResolvedValue({ error: null });
-
-    // --- Act ---
+      
+      // --- Act --- 
     const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient as SupabaseClient<Database>);
 
-    // --- Assert --- 
+      // --- Assert --- 
     expect(result.success).toBe(true); // Expect overall success
-    expect(result.message).toContain("Scoring completed successfully");
+      expect(result.message).toContain("Scoring completed successfully");
     expect(result.details?.betsProcessed).toBe(5); // Processed all 5 bets
     expect(result.details?.betsUpdated).toBe(4); // Sent 4 updates (bet4 was skipped)
 
@@ -166,12 +166,12 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
     // Removed unused `tableName` parameter
     (mockClient.from as jest.Mock).mockImplementation((table: string) => {
       if (table === 'betting_round_fixtures') {
-        return {
-          select: jest.fn().mockReturnValue({
+                return {
+                    select: jest.fn().mockReturnValue({
             eq: jest.fn().mockResolvedValue({ data: null, error: mockLinkError })
-          })
-        };
-      }
+                    })
+                };
+            }
       return mockClient;
     });
 
@@ -185,7 +185,7 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
     expect(mockClient.from).toHaveBeenCalledTimes(1); // Only fixture link fetch attempted
     expect(mockClient.from).toHaveBeenCalledWith('betting_round_fixtures');
     expect(mockRpc).not.toHaveBeenCalled(); // RPC should not be called
-  });
+});
 
   it('should return early if not all fixtures are finished', async () => {
     // Arrange
@@ -201,15 +201,15 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
     // Removed unused `tableName` parameter
     (mockClient.from as jest.Mock).mockImplementation((table: string) => {
       if (table === 'betting_round_fixtures') {
-          return {
-            select: jest.fn().mockReturnValue({
+                return {
+                    select: jest.fn().mockReturnValue({
               eq: jest.fn().mockResolvedValue({ data: mockFixtureLinks, error: null })
-            })
-          };
+                })
+            };
       } else if (table === 'fixtures') {
           // Ensure the correct chaining for the fixture fetch
           return { select: () => ({ in: () => Promise.resolve({ data: mockFixturesData, error: null }) }) }; 
-      }
+            }
       return mockClient;
     });
 
@@ -225,7 +225,7 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
     // Ensure calls related to bets and RPC did NOT happen
     expect(mockClient.from).not.toHaveBeenCalledWith('user_bets'); 
     expect(mockRpc).not.toHaveBeenCalled();
-  });
+});
 
   it('should handle errors during the RPC call', async () => {
     // Arrange
@@ -239,16 +239,16 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
     // Removed unused `tableName` parameter
     (mockClient.from as jest.Mock).mockImplementation((table: string) => {
       if (table === 'betting_round_fixtures') {
-          return {
-            select: jest.fn().mockReturnValue({
+                return {
+                    select: jest.fn().mockReturnValue({
               eq: jest.fn().mockResolvedValue({ data: mockFixtureLinks, error: null })
-            })
-          };
+                    })
+                };
       } else if (table === 'fixtures') {
           return { select: () => ({ in: () => Promise.resolve({ data: mockFixturesData, error: null }) }) };
       } else if (table === 'user_bets') {
           return { select: () => ({ eq: () => Promise.resolve({ data: mockUserBets, error: null }) }) };
-      }
+            }
       return mockClient;
     });
 
@@ -267,7 +267,7 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
     expect(mockClient.from).toHaveBeenCalledWith('betting_round_fixtures');
     expect(mockClient.from).toHaveBeenCalledWith('fixtures');
     expect(mockClient.from).toHaveBeenCalledWith('user_bets');
-  });
+});
 
   it('should mark round as scored if no fixtures are linked', async () => {
     // Arrange
@@ -278,15 +278,15 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
     // Removed unused `tableName` parameter
     (mockClient.from as jest.Mock).mockImplementation((table: string) => {
       if (table === 'betting_round_fixtures') {
-        return {
-          select: jest.fn().mockReturnValue({
+                return {
+                    select: jest.fn().mockReturnValue({
             eq: jest.fn().mockResolvedValue({ data: mockFixtureLinks, error: null })
-          })
-        };
+                    })
+                };
       } else if (table === 'betting_rounds') {
         // Mock the update call for setting status to 'scored'
         return { update: () => ({ eq: () => mockUpdate() }) }; 
-      }
+            }
       return mockClient;
     });
 
@@ -302,7 +302,7 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
     expect(mockClient.from).not.toHaveBeenCalledWith('fixtures'); // Should not fetch fixtures
     expect(mockClient.from).not.toHaveBeenCalledWith('user_bets'); // Should not fetch bets
     expect(mockRpc).not.toHaveBeenCalled(); // RPC not called
-  });
+});
 
   it('should mark round as scored if no user bets are found', async () => {
     // Arrange
@@ -316,9 +316,9 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
     (mockClient.from as jest.Mock).mockImplementation((table: string) => {
         if (table === 'betting_round_fixtures') {
             return {
-              select: jest.fn().mockReturnValue({
+                select: jest.fn().mockReturnValue({
                 eq: jest.fn().mockResolvedValue({ data: mockFixtureLinks, error: null })
-              })
+                })
             };
         } else if (table === 'fixtures') {
             return { select: () => ({ in: () => Promise.resolve({ data: mockFixturesData, error: null }) }) };
