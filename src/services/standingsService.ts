@@ -56,10 +56,33 @@ export async function calculateStandings() {
     return null; 
   }
 
-  // TODO: Implement Subtask 13.2 (Sort Users by Total Points)
-  // TODO: Implement Subtask 13.3 (Assign Ranks with Tie Handling)
-  // TODO: Implement Subtask 13.4 (Package and Return Standings Data)
+  // Subtask 13.2: Sort Users by Total Points
+  // Sort in descending order of total_points.
+  // If total_points are equal, the original order is maintained (stable sort implied by typical .sort() behavior for equal elements).
+  const sortedUserPoints = [...userPoints].sort((a, b) => b.total_points - a.total_points);
+  logger.info({ userCount: sortedUserPoints.length }, 'Successfully sorted user points.');
 
-  logger.info('Standings calculation logic (sorting, ranking) not yet implemented.');
-  return userPoints; // For now, just return the aggregated points
+  // Subtask 13.3: Assign Ranks with Tie Handling
+  const rankedUsers: (UserPoints & { rank: number })[] = [];
+  if (sortedUserPoints.length > 0) {
+    let currentRank = 1;
+    rankedUsers.push({ ...sortedUserPoints[0], rank: currentRank });
+
+    for (let i = 1; i < sortedUserPoints.length; i++) {
+      // If current user's score is less than the previous user's score,
+      // they get the next rank (i + 1, accounting for 0-based index).
+      if (sortedUserPoints[i].total_points < sortedUserPoints[i - 1].total_points) {
+        currentRank = i + 1;
+      }
+      // If scores are the same, they get the same rank as the previous user (currentRank is not changed).
+      rankedUsers.push({ ...sortedUserPoints[i], rank: currentRank });
+    }
+  }
+  logger.info({ rankedUserCount: rankedUsers.length }, 'Successfully assigned ranks to users.');
+
+  // TODO: Implement Subtask 13.4 (Package and Return Standings Data)
+  // For now, the `rankedUsers` array itself is the packaged data.
+
+  logger.info('Standings calculation complete.');
+  return rankedUsers; 
 } 
