@@ -572,6 +572,10 @@ export type Database = {
           total_points: number
         }[]
       }
+      handle_dynamic_points_update: {
+        Args: { p_round_id: number; p_dynamic_point_updates: Json }
+        Returns: undefined
+      }
       handle_round_scoring: {
         Args: { p_betting_round_id: number; p_bet_updates: Json }
         Returns: undefined

@@ -1,6 +1,7 @@
 import { supabaseServerClient } from './server';
 import type { Match } from '@/components/BettingCoupon/types'; // Use the existing UI type
 import type { Database } from '@/types/supabase'; // Ensure this import is present
+import { SupabaseClient } from '@supabase/supabase-js'; // Ensure SupabaseClient is imported
 
 /**
  * Fetches fixtures for a specific round from the database.
@@ -398,32 +399,40 @@ export async function getUserSeasonPredictions(
  * Fetches user season answers for a specific season from the database.
  *
  * @param seasonId The database ID of the season.
+ * @param client A Supabase client instance to use for the query.
  * @returns A promise resolving to an array of user_season_answers rows or null on error.
  */
-export async function getUserSeasonAnswers(seasonId: number): Promise<UserSeasonAnswerRow[] | null> {
+export async function getUserSeasonAnswers(
+  seasonId: number,
+  client: SupabaseClient<Database>
+): Promise<UserSeasonAnswerRow[] | null> {
   console.log(`Query: Fetching user season answers for season ID ${seasonId}`);
 
   try {
-    // Fetch user season answers based on the season ID
-    const { data, error } = await supabaseServerClient
+    // Fetch user season answers based on the season ID using the provided client
+    const { data, error } = await client
       .from('user_season_answers')
-      .select('*')
+      .select('*') // Select all columns, as UserSeasonAnswerRow implies
       .eq('season_id', seasonId);
 
     if (error) {
-      throw new Error(`Failed to fetch user season answers for season ${seasonId}: ${error.message}`);
+      // Consider re-throwing or logging more specifically before re-throwing
+      console.error(`Error fetching user season answers for season ${seasonId}:`, error.message);
+      throw error; // Re-throw to be caught by the caller if needed, or return null directly
     }
 
-    if (!data) {
-      console.log(`Query: No user season answers found for season ID ${seasonId}.`);
-      return [];
+    // If data is explicitly null or undefined (less likely if error is null, Supabase usually returns empty array)
+    if (data == null) { 
+      console.log(`Query: No user season answers found for season ID ${seasonId} (data was null/undefined).`);
+      return []; // Return empty array consistent with finding no data
     }
-
+    
+    // data is guaranteed to be an array here if error is null, even if empty.
     console.log(`Query: Found ${data.length} user season answers for season ID ${seasonId}.`);
-    return data;
+    return data; // Return the data (which might be an empty array)
 
   } catch (error: unknown) {
-    console.error(`Error in getUserSeasonAnswers(${seasonId}):`, error instanceof Error ? error.message : error);
-    return null; // Indicate an error occurred
+    console.error(`An error occurred in getUserSeasonAnswers(${seasonId}):`, error instanceof Error ? error.message : String(error));
+    return null; // Indicate an error occurred, consistent with other query functions
   }
 }

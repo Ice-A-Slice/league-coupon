@@ -45,7 +45,7 @@ interface DynamicPointsRPCPayloadItem {
 }
 
 // Interface for the return type of processAndStoreDynamicPointsForRound
-interface ProcessDynamicPointsResult {
+export interface ProcessDynamicPointsResult {
   success: boolean;
   message: string;
   details?: {
