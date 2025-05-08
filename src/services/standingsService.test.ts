@@ -248,11 +248,16 @@ describe('getUserDynamicQuestionnairePoints Tests', () => {
       error: null
     });
     
-    const mockPointsData = [
-      { user_id: 'user1', total_points: 10 },
-      { user_id: 'user2', total_points: 5 }
+    // Test data for user_round_dynamic_points - Use correct column name
+    const mockDynamicPointsData = [
+      { user_id: 'user1', dynamic_points: 10 }, // Changed from total_points
+      { user_id: 'user2', dynamic_points: 5 },  // Changed from total_points
     ];
-    mockDynamicPointsEq.mockResolvedValueOnce({ data: mockPointsData, error: null });
+
+    mockDynamicPointsEq.mockResolvedValueOnce({ // This mocks the return of .eq()
+      data: mockDynamicPointsData,
+      error: null
+    });
     
     const result = await originalGetUserDynamicQuestionnairePoints();
     
@@ -260,6 +265,20 @@ describe('getUserDynamicQuestionnairePoints Tests', () => {
     expect(result?.size).toBe(2);
     expect(result?.get('user1')).toBe(10);
     expect(result?.get('user2')).toBe(5);
+  });
+  
+  it('should return an empty map if no dynamic points data is found for the round', async () => {
+    mockBettingRoundsSingle.mockResolvedValueOnce({
+      data: { id: 102, scored_at: new Date().toISOString() },
+      error: null
+    });
+    mockDynamicPointsEq.mockResolvedValueOnce({ data: [], error: null });
+    
+    const result = await originalGetUserDynamicQuestionnairePoints();
+    
+    expect(result).toBeInstanceOf(Map);
+    expect(result?.size).toBe(0);
+    expect(logger.warn).not.toHaveBeenCalled();
   });
   
   it('should return an empty map if no scored rounds are found', async () => {
@@ -272,22 +291,10 @@ describe('getUserDynamicQuestionnairePoints Tests', () => {
     
     expect(result).toBeInstanceOf(Map);
     expect(result?.size).toBe(0);
+    expect(logger.info).toHaveBeenCalledWith(expect.anything(), 'No betting rounds with status "scored" found. Returning empty map for dynamic points.');
   });
   
-  it('should return an empty map if a scored round is found but has no dynamic points entries', async () => {
-    mockBettingRoundsSingle.mockResolvedValueOnce({
-      data: { id: 102, scored_at: new Date().toISOString() },
-      error: null
-    });
-    mockDynamicPointsEq.mockResolvedValueOnce({ data: [], error: null });
-    
-    const result = await originalGetUserDynamicQuestionnairePoints();
-    
-    expect(result).toBeInstanceOf(Map);
-    expect(result?.size).toBe(0);
-  });
-  
-  it('should return null if fetching betting rounds fails (non-PGRST116 error)', async () => {
+  it('should return null if fetching the latest round fails', async () => {
     const dbError = new Error('DB connection error');
     mockBettingRoundsSingle.mockResolvedValueOnce({ data: null, error: dbError });
     
@@ -300,7 +307,7 @@ describe('getUserDynamicQuestionnairePoints Tests', () => {
     );
   });
   
-  it('should return null if fetching dynamic points fails', async () => {
+  it('should return null if fetching dynamic points data fails', async () => {
     const mockRoundId = 103;
     mockBettingRoundsSingle.mockResolvedValueOnce({
       data: { id: mockRoundId, scored_at: new Date().toISOString() },
@@ -320,20 +327,24 @@ describe('getUserDynamicQuestionnairePoints Tests', () => {
   });
   
   it('should skip entries with missing user_id or non-numeric total_points and log a warning', async () => {
+    const mockRoundId = 104;
     mockBettingRoundsSingle.mockResolvedValueOnce({
-      data: { id: 104, scored_at: new Date().toISOString() },
+      data: { id: mockRoundId, scored_at: new Date().toISOString() },
       error: null
     });
-    
-    const mockPointsData = [
-      { user_id: 'user1', total_points: 10 },
-      { user_id: null, total_points: 5 }, // Missing user_id
-      { user_id: 'user3', total_points: 'invalid' }, // Non-numeric total_points
-      { user_id: 'user4', total_points: 7 }
+
+    // Test data with invalid entries - Use correct column name
+    const mockInvalidDynamicPointsData = [
+      { user_id: 'user1', dynamic_points: 10 },
+      { user_id: null, dynamic_points: 5 }, // Missing user_id
+      { user_id: 'user3', dynamic_points: 'invalid' }, // Invalid points type
+      { user_id: 'user4', dynamic_points: 7 },
     ];
-    
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mockDynamicPointsEq.mockResolvedValueOnce({ data: mockPointsData as any, error: null });
+
+    mockDynamicPointsEq.mockResolvedValueOnce({
+      data: mockInvalidDynamicPointsData,
+      error: null
+    });
     
     const result = await originalGetUserDynamicQuestionnairePoints();
     
