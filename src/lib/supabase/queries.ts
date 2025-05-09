@@ -1,5 +1,7 @@
 import { supabaseServerClient } from './server';
 import type { Match } from '@/components/BettingCoupon/types'; // Use the existing UI type
+import type { Database } from '@/types/supabase'; // Ensure this import is present
+import { SupabaseClient } from '@supabase/supabase-js'; // Ensure SupabaseClient is imported
 
 /**
  * Fetches fixtures for a specific round from the database.
@@ -284,8 +286,7 @@ export async function getCurrentBettingRoundFixtures(): Promise<CurrentRoundFixt
     }
 
     if (!roundFixturesData || roundFixturesData.length === 0) {
-      console.warn(`Query: Open betting round ${openRoundId} has no associated fixtures.`);
-      // Return the round info but with an empty matches array, as the round *is* open
+      console.warn(`Query: Open betting round ${openRoundId} has no associated fixtures.`); 
       return {
         roundId: openRoundId,
         roundName: openRoundName,
@@ -293,10 +294,8 @@ export async function getCurrentBettingRoundFixtures(): Promise<CurrentRoundFixt
       };
     }
 
-    const fixtureIds = roundFixturesData.map(rf => rf.fixture_id);
-
-    // 3. Fetch details for these specific fixtures
-    const { data: fixturesData, error: fixturesError } = await supabaseServerClient
+    // 3. Fetch fixture details for the identified fixtures
+    const { data: fixtureDetails, error: fixtureDetailsError } = await supabaseServerClient
       .from('fixtures')
       .select(`
         id,
@@ -304,16 +303,21 @@ export async function getCurrentBettingRoundFixtures(): Promise<CurrentRoundFixt
         home_team:teams!fixtures_home_team_id_fkey(id, name),
         away_team:teams!fixtures_away_team_id_fkey(id, name)
       `)
-      .in('id', fixtureIds)
-      .order('kickoff', { ascending: true });
+      .in('id', roundFixturesData.map(f => f.fixture_id));
 
-    if (fixturesError) {
-      console.error(`Error fetching fixture details for round ${openRoundId}:`, fixturesError);
-      throw fixturesError;
+    if (fixtureDetailsError) {
+      console.error(`Error fetching fixture details for betting round ${openRoundId}:`, fixtureDetailsError);
+      throw fixtureDetailsError;
     }
 
-    // 4. Transform the data to match the Match[] type expected by the UI
-    const matches: Match[] = (fixturesData || []).map((fixture) => {
+    if (!fixtureDetails || fixtureDetails.length === 0) {
+      console.warn(`Query: No fixture details found for betting round ${openRoundId}. Returning null.`);
+      return null; // Indicate an error occurred
+    }
+
+    // Transform the data to match the Match[] type expected by the UI
+    const matches: Match[] = fixtureDetails.map((fixture) => {
+      // Type guards - Adjusting to handle potential array inference
       const homeTeamData = Array.isArray(fixture.home_team) ? fixture.home_team[0] : fixture.home_team;
       const awayTeamData = Array.isArray(fixture.away_team) ? fixture.away_team[0] : fixture.away_team;
 
@@ -328,13 +332,12 @@ export async function getCurrentBettingRoundFixtures(): Promise<CurrentRoundFixt
 
       return {
         id: fixture.id,
-        homeTeam: homeTeamData.name,
-        awayTeam: awayTeamData.name,
+        homeTeam: homeTeamData.name, // Access name from the resolved object
+        awayTeam: awayTeamData.name, // Access name from the resolved object
       };
     }).filter((match): match is Match => match !== null);
 
-    console.log(`Query: Successfully fetched ${matches.length} fixtures for open betting round ${openRoundId}.`);
-
+    console.log(`Successfully fetched ${matches.length} fixtures from Supabase.`);
     return {
       roundId: openRoundId,
       roundName: openRoundName,
@@ -343,6 +346,93 @@ export async function getCurrentBettingRoundFixtures(): Promise<CurrentRoundFixt
 
   } catch (error) {
     console.error('An error occurred in getCurrentBettingRoundFixtures:', error);
+    return null; // Ensure return here too
+  }
+}
+
+/**
+ * Type alias for the row structure of user_season_answers, based on supabase.ts.
+ * This makes the return type of getUserSeasonPredictions clearer.
+ */
+export type UserSeasonAnswerRow = Database['public']['Tables']['user_season_answers']['Row'];
+
+/**
+ * Fetches a user's season-long questionnaire answers for a specific season.
+ *
+ * @param userId The ID of the user.
+ * @param seasonId The ID of the season.
+ * @returns A promise resolving to an array of user_season_answers rows or null on error.
+ */
+export async function getUserSeasonPredictions(
+  userId: string,
+  seasonId: number
+): Promise<UserSeasonAnswerRow[] | null> {
+  console.log(`Query: Fetching season predictions for user ID ${userId}, season ID ${seasonId}`);
+
+  try {
+    const { data, error } = await supabaseServerClient
+      .from('user_season_answers')
+      .select('id, user_id, season_id, question_type, answered_team_id, answered_player_id, created_at, updated_at')
+      .eq('user_id', userId)
+      .eq('season_id', seasonId);
+
+    if (error) {
+      console.error(`Error fetching season predictions for user ${userId}, season ${seasonId}:`, error);
+      throw error;
+    }
+
+    if (!data || data.length === 0) {
+      console.log(`Query: No season predictions found for user ID ${userId}, season ID ${seasonId}.`);
+      return []; // Return empty array if no answers found
+    }
+
+    console.log(`Query: Successfully fetched ${data.length} season predictions for user ID ${userId}, season ID ${seasonId}.`);
+    return data;
+
+  } catch (error) {
+    console.error(`An error occurred in getUserSeasonPredictions for user ${userId}, season ${seasonId}:`, error);
     return null; // Indicate an error occurred
   }
-} 
+}
+
+/**
+ * Fetches user season answers for a specific season from the database.
+ *
+ * @param seasonId The database ID of the season.
+ * @param client A Supabase client instance to use for the query.
+ * @returns A promise resolving to an array of user_season_answers rows or null on error.
+ */
+export async function getUserSeasonAnswers(
+  seasonId: number,
+  client: SupabaseClient<Database>
+): Promise<UserSeasonAnswerRow[] | null> {
+  console.log(`Query: Fetching user season answers for season ID ${seasonId}`);
+
+  try {
+    // Fetch user season answers based on the season ID using the provided client
+    const { data, error } = await client
+      .from('user_season_answers')
+      .select('*') // Select all columns, as UserSeasonAnswerRow implies
+      .eq('season_id', seasonId);
+
+    if (error) {
+      // Consider re-throwing or logging more specifically before re-throwing
+      console.error(`Error fetching user season answers for season ${seasonId}:`, error.message);
+      throw error; // Re-throw to be caught by the caller if needed, or return null directly
+    }
+
+    // If data is explicitly null or undefined (less likely if error is null, Supabase usually returns empty array)
+    if (data == null) { 
+      console.log(`Query: No user season answers found for season ID ${seasonId} (data was null/undefined).`);
+      return []; // Return empty array consistent with finding no data
+    }
+    
+    // data is guaranteed to be an array here if error is null, even if empty.
+    console.log(`Query: Found ${data.length} user season answers for season ID ${seasonId}.`);
+    return data; // Return the data (which might be an empty array)
+
+  } catch (error: unknown) {
+    console.error(`An error occurred in getUserSeasonAnswers(${seasonId}):`, error instanceof Error ? error.message : String(error));
+    return null; // Indicate an error occurred, consistent with other query functions
+  }
+}

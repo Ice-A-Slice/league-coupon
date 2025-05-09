@@ -295,6 +295,27 @@ export type Database = {
         }
         Relationships: []
       }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          full_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          full_name?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          full_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       rounds: {
         Row: {
           created_at: string | null
@@ -458,6 +479,53 @@ export type Database = {
           },
         ]
       }
+      user_round_dynamic_points: {
+        Row: {
+          betting_round_id: number
+          created_at: string
+          dynamic_points: number
+          id: number
+          question_1_correct: boolean
+          question_2_correct: boolean
+          question_3_correct: boolean
+          question_4_correct: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          betting_round_id: number
+          created_at?: string
+          dynamic_points?: number
+          id?: number
+          question_1_correct?: boolean
+          question_2_correct?: boolean
+          question_3_correct?: boolean
+          question_4_correct?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          betting_round_id?: number
+          created_at?: string
+          dynamic_points?: number
+          id?: number
+          question_1_correct?: boolean
+          question_2_correct?: boolean
+          question_3_correct?: boolean
+          question_4_correct?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_round_dynamic_points_betting_round_id_fkey"
+            columns: ["betting_round_id"]
+            isOneToOne: false
+            referencedRelation: "betting_rounds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_season_answers: {
         Row: {
           answered_player_id: number | null
@@ -491,6 +559,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "user_season_answers_answered_player_id_fkey"
+            columns: ["answered_player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "user_season_answers_answered_team_id_fkey"
             columns: ["answered_team_id"]
             isOneToOne: false
@@ -511,6 +586,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_user_total_points: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          user_id: string
+          total_points: number
+        }[]
+      }
+      handle_dynamic_points_update: {
+        Args: { p_round_id: number; p_dynamic_point_updates: Json }
+        Returns: undefined
+      }
       handle_round_scoring: {
         Args: { p_betting_round_id: number; p_bet_updates: Json }
         Returns: undefined

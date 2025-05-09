@@ -63,10 +63,9 @@ const createMockFixture = (id: number, kickoff: string, roundId: number, roundNa
 });
 
 describe('Supabase Queries', () => {
-  // Reset mocks before each test
   beforeEach(() => {
     jest.clearAllMocks();
-    // Explicitly reset the mock implementation for chained methods if needed
+    // Re-add @ts-expect-error as this mocking pattern can be tricky with TS
     // @ts-expect-error // Type mismatch due to simplified mock
     (supabaseServerClient.from as jest.Mock).mockClear().mockReturnThis();
     // @ts-expect-error // Type mismatch due to simplified mock
@@ -196,11 +195,9 @@ describe('Supabase Queries', () => {
     beforeEach(() => {
       jest.clearAllMocks();
 
-      // Mock implementation setup - This is complex due to chaining
-      // We will mock the *final* method call in each chain within the specific test
       fromBettingRoundsMock = jest.fn();
       fromBettingRoundFixturesMock = jest.fn();
-      fromFixturesMock = jest.fn();
+      fromFixturesMock = jest.fn(); // This will now be what .in() resolves to
 
       // @ts-expect-error - Assigning mock implementation
       supabaseServerClient.from = jest.fn((tableName: string) => {
@@ -209,7 +206,7 @@ describe('Supabase Queries', () => {
             select: jest.fn(() => ({
               eq: jest.fn(() => ({
                 limit: jest.fn(() => ({
-                  single: fromBettingRoundsMock // Mock the final .single() call
+                  single: fromBettingRoundsMock
                 }))
               }))
             }))
@@ -217,17 +214,16 @@ describe('Supabase Queries', () => {
         }
         if (tableName === 'betting_round_fixtures') {
           return {
-            select: jest.fn(() => ({ // Mock .select()
-              eq: fromBettingRoundFixturesMock // Mock the final .eq() call for this chain
+            select: jest.fn(() => ({ 
+              eq: fromBettingRoundFixturesMock
             }))
           };
         }
         if (tableName === 'fixtures') {
           return {
-            select: jest.fn(() => ({ // Mock .select()
-              in: jest.fn(() => ({ // Mock .in()
-                order: fromFixturesMock // Mock the final .order() call
-              }))
+            select: jest.fn(() => ({ 
+              // .in(...) is the terminal call for this path in the actual code
+              in: fromFixturesMock 
             }))
           };
         }
@@ -376,7 +372,7 @@ describe('Supabase Queries', () => {
 
       fromBettingRoundsMock.mockResolvedValueOnce({ data: openRound, error: null });
       fromBettingRoundFixturesMock.mockResolvedValueOnce({ data: roundFixtureLinks, error: null });
-      fromFixturesMock.mockResolvedValueOnce({ data: null, error: mockError }); // Error here
+      fromFixturesMock.mockResolvedValueOnce({ data: null, error: mockError });
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
       // Act
@@ -390,7 +386,8 @@ describe('Supabase Queries', () => {
       expect(fromBettingRoundFixturesMock).toHaveBeenCalledTimes(1);
       expect(supabaseServerClient.from).toHaveBeenCalledWith('fixtures');
       expect(fromFixturesMock).toHaveBeenCalledTimes(1);
-      expect(consoleErrorSpy).toHaveBeenCalledWith('Error fetching fixture details for round 103:', mockError);
+      // Correct the expected log message
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error fetching fixture details for betting round 103:', mockError);
       expect(consoleErrorSpy).toHaveBeenCalledWith('An error occurred in getCurrentBettingRoundFixtures:', mockError);
       consoleErrorSpy.mockRestore();
     });
