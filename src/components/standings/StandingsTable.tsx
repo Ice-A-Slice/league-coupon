@@ -17,7 +17,6 @@ interface StandingEntry {
   user_id: string;
   rank: number;
   username?: string; // Assuming we'll get username eventually
-  avatar_url?: string; // Assuming optional avatar
   game_points: number;
   dynamic_points: number;
   combined_total_score: number;
@@ -58,16 +57,16 @@ const StandingsTable: React.FC<StandingsTableProps> = ({ standings, isLoading, e
   return (
     <div className="border shadow-md sm:rounded-lg my-6 overflow-hidden">
       <Table>
-        {/* <TableCaption className="py-4 text-xs text-gray-500 dark:text-gray-400">
-          League Standings - Points updated periodically.
-        </TableCaption> */}
+        <TableCaption className="py-3 px-4 text-xs text-gray-500 dark:text-gray-400 text-left">
+          1X2: Game Points, ?: Question Points
+        </TableCaption>
         <TableHeader>
           <TableRow className="bg-primary hover:bg-primary/90">
-            <TableHead className="px-6 py-3 text-primary-foreground font-semibold">Rank</TableHead>
-            <TableHead className="px-6 py-3 text-primary-foreground font-semibold">Player</TableHead>
-            <TableHead className="px-6 py-3 text-center text-primary-foreground font-semibold">Game Points</TableHead>
-            <TableHead className="px-6 py-3 text-center text-primary-foreground font-semibold">Dynamic Points</TableHead>
-            <TableHead className="px-6 py-3 text-center text-primary-foreground font-semibold">Total Score</TableHead>
+            <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold text-center">Rank</TableHead>
+            <TableHead className="px-6 py-3 text-xs text-primary-foreground font-semibold">Player</TableHead>
+            <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold text-center">1X2</TableHead>
+            <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold text-center">?</TableHead>
+            <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold text-center">Total</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -76,22 +75,19 @@ const StandingsTable: React.FC<StandingsTableProps> = ({ standings, isLoading, e
               key={entry.user_id} 
               className={`${index === 0 ? 'bg-primary/10 dark:bg-primary/20 font-medium' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'} transition-colors duration-150 ease-in-out`}
             >
-              <TableCell className="px-6 py-4 font-medium text-gray-900 dark:text-white">
+              <TableCell className="px-3 py-4 font-medium text-gray-900 dark:text-white text-center">
                 {entry.rank}
               </TableCell>
-              <TableCell className="px-6 py-4 flex items-center text-gray-800 dark:text-gray-200">
-                <div className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-600 mr-3 flex-shrink-0">
-                  {/* TODO: Add actual avatar if available */}
-                </div>
+              <TableCell className="px-6 py-4 text-gray-800 dark:text-gray-200 truncate max-w-xs">
                 {entry.username || entry.user_id} 
               </TableCell>
-              <TableCell className="px-6 py-4 text-center text-gray-700 dark:text-gray-300">
+              <TableCell className="px-3 py-4 text-center text-gray-700 dark:text-gray-300">
                 {entry.game_points}
               </TableCell>
-              <TableCell className="px-6 py-4 text-center text-gray-700 dark:text-gray-300">
+              <TableCell className="px-3 py-4 text-center text-gray-700 dark:text-gray-300">
                 {entry.dynamic_points}
               </TableCell>
-              <TableCell className="px-6 py-4 text-center font-semibold text-primary dark:text-teal-400">
+              <TableCell className="px-3 py-4 text-center font-semibold text-primary dark:text-teal-400">
                 {entry.combined_total_score}
               </TableCell>
             </TableRow>

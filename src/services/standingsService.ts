@@ -3,8 +3,9 @@ import { logger } from '@/utils/logger';
 
 // Define the structure for the aggregated points data
 export interface UserPoints {
-  user_id: string; 
-  total_points: number;
+  user_id: string;
+  total_points: number; // This is game_points from the RPC
+  full_name?: string;   // Added for profile information
 }
 
 /**
@@ -15,126 +16,154 @@ export interface UserPoints {
  *          with their total points, or null on error.
  */
 export async function aggregateUserPoints(): Promise<UserPoints[] | null> {
-  logger.info('Aggregating total points per user via RPC...');
-  // console.log('[INFO] Aggregating total points per user via RPC...');
+  logger.info('Aggregating total points per user via RPC and joining with profiles...');
   const serviceRoleClient = getSupabaseServiceRoleClient();
 
   try {
-    // Call the PostgreSQL function 'get_user_total_points' via RPC
-    const { data, error } = await serviceRoleClient.rpc('get_user_total_points');
+    // 1. Fetch game points from the RPC
+    const { data: rpcPointsData, error: rpcError } = await serviceRoleClient.rpc(
+      'get_user_total_points'
+    );
 
-    if (error) {
-      logger.error({ error }, 'Error calling get_user_total_points RPC.');
-      // console.error('[ERROR]', { error }, 'Error calling get_user_total_points RPC.');
-      throw error;
+    if (rpcError) {
+      logger.error({ error: rpcError }, 'Error calling get_user_total_points RPC.');
+      throw rpcError;
     }
-    
-    // The data from the RPC call should directly match the UserPoints[] structure
-    // if the SQL function is defined correctly (RETURNS TABLE(user_id UUID, total_points BIGINT))
-    // Supabase client should handle the mapping.
-    // Ensure UserPoints interface matches the SQL function's output columns and types.
-    const userPointsResult: UserPoints[] = (data || []).map(item => ({
-      user_id: item.user_id, // Assuming item.user_id is string (UUID comes as string)
-      total_points: Number(item.total_points ?? 0) // Ensure total_points is a number
+
+    const gamePointsMap = new Map<string, number>();
+    if (rpcPointsData) {
+      for (const entry of rpcPointsData) {
+        if (entry.user_id && typeof entry.total_points === 'number') {
+          gamePointsMap.set(entry.user_id, entry.total_points);
+        }
+      }
+    }
+    logger.debug({ count: gamePointsMap.size }, 'Fetched game points from RPC.');
+
+    // 2. Fetch all profiles
+    const { data: profilesData, error: profilesError } = await serviceRoleClient
+      .from('profiles')
+      .select('id, full_name');
+
+    if (profilesError) {
+      logger.error({ error: profilesError }, 'Error fetching profiles.');
+      throw profilesError;
+    }
+
+    if (!profilesData) {
+      logger.warn('No profiles data found.');
+      return []; // Or handle as appropriate - maybe an empty array if no profiles exist
+    }
+    logger.debug({ count: profilesData.length }, 'Fetched profiles.');
+
+    // 3. Combine profile data with game points
+    const aggregatedData: UserPoints[] = profilesData.map(profile => ({
+      user_id: profile.id,
+      full_name: profile.full_name || undefined, // Handle null full_name
+      total_points: gamePointsMap.get(profile.id) || 0, // Default to 0 game points if not in RPC data
     }));
+    
+    logger.info({ count: aggregatedData.length }, 'Successfully aggregated user points with profiles.');
+    return aggregatedData;
 
-    logger.info({ userCount: userPointsResult.length }, 'Successfully aggregated points via RPC.');
-    // console.log('[INFO]', { userCount: userPointsResult.length }, 'Successfully aggregated points via RPC.');
-    return userPointsResult;
-
-  } catch (err) {
-    logger.error({ error: err instanceof Error ? err.message : String(err) }, 'Failed to aggregate user points.');
-    // console.error('[ERROR]', { error: err instanceof Error ? err.message : String(err) }, 'Failed to aggregate user points.');
-    return null; // Indicate failure
+  } catch (error) {
+    logger.error({ error }, 'An unexpected error occurred in aggregateUserPoints.');
+    return null;
   }
 }
 
-// Define the new structure for the final standings entry
+// Define the structure for a single entry in the standings
 export interface UserStandingEntry {
   user_id: string;
+  username?: string;    // For display, maps from full_name
   game_points: number;
   dynamic_points: number;
   combined_total_score: number;
   rank: number;
 }
 
-// Updated function to calculate standings including dynamic points
-// Export this function to allow for dependency injection in tests
-export async function calculateStandingsWithDynamicPoints(
-  userPoints: UserPoints[],
-  dynamicPointsMap: Map<string, number> | null
-): Promise<UserStandingEntry[] | null> {
-  if (dynamicPointsMap === null) {
-    logger.error('Standings calculation failed because dynamic points could not be fetched.');
-    // console.error('[ERROR] Standings calculation failed because dynamic points could not be fetched.');
-    // Returning null as dynamic points are considered essential for standings
-    return null;
-  }
-  logger.info({ dynamicMapSize: dynamicPointsMap.size }, 'Successfully fetched dynamic points map.');
-  // console.log('[INFO]', { dynamicMapSize: dynamicPointsMap.size }, 'Successfully fetched dynamic points map.');
+// Function to calculate overall standings by combining game points and dynamic points
+export async function calculateStandings(): Promise<UserStandingEntry[] | null> {
+  const loggerContext = { function: 'calculateStandings' };
+  logger.info(loggerContext, 'Calculating overall standings...');
 
-  // === Merge points ===
-  const combinedUserScores = userPoints.map(user => {
-    const game_points = user.total_points; // Original game points
-    const dynamic_points = dynamicPointsMap.get(user.user_id) || 0; // Default to 0 if user not in map
-    const combined_total_score = game_points + dynamic_points;
-    return {
-      user_id: user.user_id,
-      game_points: game_points,
-      dynamic_points: dynamic_points,
-      combined_total_score: combined_total_score
-    };
-  });
-  logger.info({ userCount: combinedUserScores.length }, 'Successfully merged game and dynamic points.');
-  // console.log('[INFO]', { userCount: combinedUserScores.length }, 'Successfully merged game and dynamic points.');
-
-  // Update Sorting: Sort by Combined Total Points
-  const sortedUserScores = [...combinedUserScores].sort((a, b) => b.combined_total_score - a.combined_total_score);
-  logger.info({ userCount: sortedUserScores.length }, 'Successfully sorted users by combined score.');
-  // console.log('[INFO]', { userCount: sortedUserScores.length }, 'Successfully sorted users by combined score.');
-
-  // Update Ranking Logic: Assign Ranks based on Combined Score
-  const rankedUsers: UserStandingEntry[] = []; // Use new return type
-  if (sortedUserScores.length > 0) {
-    let currentRank = 1;
-    // Add the first user with rank 1
-    rankedUsers.push({ ...sortedUserScores[0], rank: currentRank });
-
-    for (let i = 1; i < sortedUserScores.length; i++) {
-      // Compare combined_total_score for tie handling
-      if (sortedUserScores[i].combined_total_score < sortedUserScores[i - 1].combined_total_score) {
-        currentRank = i + 1;
-      }
-      // Add user with potentially updated rank
-      rankedUsers.push({ ...sortedUserScores[i], rank: currentRank });
+  try {
+    // 1. Get aggregated game points (which now include profile data like full_name)
+    const gamePointsData = await aggregateUserPoints();
+    if (!gamePointsData) {
+      logger.error(loggerContext, 'Failed to aggregate game points (which include profile data). Cannot calculate standings.');
+      return null;
     }
-  }
-  logger.info({ rankedUserCount: rankedUsers.length }, 'Successfully assigned ranks to users based on combined score.');
-  // console.log('[INFO]', { rankedUserCount: rankedUsers.length }, 'Successfully assigned ranks to users based on combined score.');
+    logger.debug({ ...loggerContext, count: gamePointsData.length }, 'Retrieved aggregated game points with profile data.');
 
-  logger.info('Standings calculation complete.');
-  // console.log('[INFO] Standings calculation complete.');
-  return rankedUsers; // Return the new structure
-}
+    // 2. Get dynamic points for the latest scored round
+    const dynamicPointsMap = await getUserDynamicQuestionnairePoints();
+    // Note: getUserDynamicQuestionnairePoints handles its own logging for success/failure/empty states
+    // It returns null on error, or an empty Map if no data/no scored rounds.
 
-export async function calculateStandings(): Promise<UserStandingEntry[] | null> { // Updated return type
-  logger.info('Calculating standings...');
-  // console.log('[INFO] Calculating standings...');
-  const userPoints = await aggregateUserPoints(); // Gets { user_id, total_points (game) }[] | null
+    const combinedScores: Array<Omit<UserStandingEntry, 'rank'> & { preliminary_rank?: number }> = [];
+    const allUserIds = new Set<string>();
 
-  if (!userPoints) {
-    logger.error('Standings calculation failed because user game points could not be aggregated.');
-    // console.error('[ERROR] Standings calculation failed because user game points could not be aggregated.');
+    // Add all users from profiles (via gamePointsData) to ensure everyone is listed
+    gamePointsData.forEach(user => allUserIds.add(user.user_id));
+    // Add all users who might only have dynamic points (though less likely with current logic)
+    dynamicPointsMap?.forEach((_points, userId) => allUserIds.add(userId));
+
+    allUserIds.forEach(userId => {
+      const userProfileAndGamePoints = gamePointsData.find(gp => gp.user_id === userId);
+      const gameP = userProfileAndGamePoints?.total_points || 0;
+      const userFullName = userProfileAndGamePoints?.full_name;
+      const dynamicP = dynamicPointsMap?.get(userId) || 0;
+
+      combinedScores.push({
+        user_id: userId,
+        username: userFullName,          // Use full_name from profiles
+        game_points: gameP,
+        dynamic_points: dynamicP,
+        combined_total_score: gameP + dynamicP,
+      });
+    });
+    
+    logger.debug({ ...loggerContext, count: combinedScores.length }, 'Successfully combined scores for all users.');
+
+    // Sort by combined_total_score descending, then by game_points, then by user_id as a tie-breaker
+    combinedScores.sort((a, b) => {
+      if (b.combined_total_score !== a.combined_total_score) {
+        return b.combined_total_score - a.combined_total_score;
+      }
+      if (b.game_points !== a.game_points) {
+        return b.game_points - a.game_points;
+      }
+      // Fallback tie-breaker, e.g., by user_id or username if available
+      return a.user_id.localeCompare(b.user_id); 
+    });
+
+    // Assign ranks
+    const finalStandings: UserStandingEntry[] = [];
+    if (combinedScores.length > 0) {
+      finalStandings.push({ ...combinedScores[0], rank: 1 }); // First user always rank 1
+      for (let i = 1; i < combinedScores.length; i++) {
+        let rank = i + 1;
+        const currentUser = combinedScores[i];
+        const previousUserInCombined = combinedScores[i-1]; // For score comparison
+        // Correctly refer to the rank of the previously processed user in finalStandings
+        const previousUserInFinal = finalStandings[i-1]; 
+
+        if (currentUser.combined_total_score === previousUserInCombined.combined_total_score &&
+            currentUser.game_points === previousUserInCombined.game_points) {
+          rank = previousUserInFinal.rank; 
+        }
+        finalStandings.push({ ...currentUser, rank });
+      }
+    }
+
+    logger.info({ ...loggerContext, count: finalStandings.length }, 'Successfully calculated and ranked standings.');
+    return finalStandings;
+
+  } catch (error) {
+    logger.error({ ...loggerContext, error }, 'An unexpected error occurred in calculateStandings.');
     return null;
   }
-
-  // Get dynamic points
-  const dynamicPointsMap = await getUserDynamicQuestionnairePoints(); // Gets Map<string, number> | null
-  
-  // Use the extracted function for the rest of the logic
-  return calculateStandingsWithDynamicPoints(userPoints, dynamicPointsMap);
-
-// No replacement needed, this section was moved to calculateStandingsWithDynamicPoints
 }
 
 // Helper interface for the shape of data from user_round_dynamic_points
