@@ -14,10 +14,11 @@ interface UserStandingEntry {
 }
 
 async function getStandingsData(): Promise<UserStandingEntry[] | null> {
-  const loggerContext = { page: '/league/standings', function: 'getStandingsData' };
+  const loggerContext = { page: '/standings', function: 'getStandingsData' };
   try {
-    // For a server component, we can fetch directly from the API route
-    // Ensure NEXT_PUBLIC_APP_URL is set in your .env.local or equivalent
+    // REMOVED ARTIFICIAL DELAY - Suspense with loading.tsx handles this now
+    // await new Promise(resolve => setTimeout(resolve, 3000));
+
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const response = await fetch(`${appUrl}/api/standings`, {
       cache: 'no-store', // Ensure fresh data for standings

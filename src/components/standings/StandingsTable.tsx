@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import { Spinner } from '@/components/ui/spinner';
 import {
   Table,
   TableBody,
@@ -17,6 +16,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"; // Import Tooltip components
+import { StandingsTableSkeleton } from './StandingsTableSkeleton'; // Import the skeleton component
 
 // TODO: Define a more specific type for a standing entry based on API response
 interface StandingEntry {
@@ -36,12 +36,7 @@ interface StandingsTableProps {
 
 const StandingsTable: React.FC<StandingsTableProps> = ({ standings, isLoading, error }) => {
   if (isLoading) {
-    return (
-      <div className="flex justify-center items-center p-8">
-        <Spinner size={48} />
-        <span className="ml-4 text-lg text-gray-600 dark:text-gray-400">Loading standings...</span>
-      </div>
-    );
+    return <StandingsTableSkeleton />; // Render skeleton loader
   }
 
   if (error) {
