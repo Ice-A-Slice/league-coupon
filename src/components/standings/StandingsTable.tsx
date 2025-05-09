@@ -11,6 +11,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"; // Import shadcn/ui Table components
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"; // Import Tooltip components
 
 // TODO: Define a more specific type for a standing entry based on API response
 interface StandingEntry {
@@ -55,46 +61,66 @@ const StandingsTable: React.FC<StandingsTableProps> = ({ standings, isLoading, e
   }
 
   return (
-    <div className="border shadow-md sm:rounded-lg my-6 overflow-hidden">
-      <Table>
-        <TableCaption className="py-3 px-4 text-xs text-gray-500 dark:text-gray-400 text-left">
-          1X2: Game Points, ?: Question Points
-        </TableCaption>
-        <TableHeader>
-          <TableRow className="bg-primary hover:bg-primary/90">
-            <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold text-center">Rank</TableHead>
-            <TableHead className="px-6 py-3 text-xs text-primary-foreground font-semibold">Player</TableHead>
-            <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold text-center">1X2</TableHead>
-            <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold text-center">?</TableHead>
-            <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold text-center">Total</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {standings.map((entry, index) => (
-            <TableRow 
-              key={entry.user_id} 
-              className={`${index === 0 ? 'bg-primary/10 dark:bg-primary/20 font-medium' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'} transition-colors duration-150 ease-in-out`}
-            >
-              <TableCell className="px-3 py-4 font-medium text-gray-900 dark:text-white text-center">
-                {entry.rank}
-              </TableCell>
-              <TableCell className="px-6 py-4 text-gray-800 dark:text-gray-200 truncate max-w-xs">
-                {entry.username || entry.user_id} 
-              </TableCell>
-              <TableCell className="px-3 py-4 text-center text-gray-700 dark:text-gray-300">
-                {entry.game_points}
-              </TableCell>
-              <TableCell className="px-3 py-4 text-center text-gray-700 dark:text-gray-300">
-                {entry.dynamic_points}
-              </TableCell>
-              <TableCell className="px-3 py-4 text-center font-semibold text-primary dark:text-teal-400">
-                {entry.combined_total_score}
-              </TableCell>
+    <TooltipProvider>
+      <div className="border shadow-md sm:rounded-lg my-6 overflow-hidden">
+        <Table>
+          <TableCaption className="py-3 px-4 text-xs text-gray-500 dark:text-gray-400 text-left">
+            1X2: Game Points, ?: Question Points
+          </TableCaption>
+          <TableHeader>
+            <TableRow className="bg-primary hover:bg-primary/90">
+              <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold text-center">Rank</TableHead>
+              <TableHead className="px-6 py-3 text-xs text-primary-foreground font-semibold">Player</TableHead>
+              <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold text-center">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>1X2</span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Points from predicting match outcomes (Home win, Draw, Away win)</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TableHead>
+              <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold text-center">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>?</span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Points from season-long questionnaire predictions</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TableHead>
+              <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold text-center">Total</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+          </TableHeader>
+          <TableBody>
+            {standings.map((entry, index) => (
+              <TableRow 
+                key={entry.user_id} 
+                className={`${index === 0 ? 'bg-primary/10 dark:bg-primary/20 font-medium' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'} transition-colors duration-150 ease-in-out`}
+              >
+                <TableCell className="px-3 py-4 font-medium text-gray-900 dark:text-white text-center">
+                  {entry.rank}
+                </TableCell>
+                <TableCell className="px-6 py-4 text-gray-800 dark:text-gray-200 truncate max-w-xs">
+                  {entry.username || entry.user_id} 
+                </TableCell>
+                <TableCell className="px-3 py-4 text-center text-gray-700 dark:text-gray-300">
+                  {entry.game_points}
+                </TableCell>
+                <TableCell className="px-3 py-4 text-center text-gray-700 dark:text-gray-300">
+                  {entry.dynamic_points}
+                </TableCell>
+                <TableCell className="px-3 py-4 text-center font-semibold text-primary dark:text-teal-400">
+                  {entry.combined_total_score}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </TooltipProvider>
   );
 };
 
