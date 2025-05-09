@@ -1,4 +1,4 @@
-import { UserPoints } from './standingsService';
+import { UserPoints, UserStandingEntry } from './standingsService';
 import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { logger } from '@/utils/logger';
 
@@ -10,7 +10,7 @@ jest.mock('@/utils/logger');
 async function testCalculateStandings(
   mockAggregateUserPointsFn: () => Promise<UserPoints[] | null>,
   mockGetUserDynamicQuestionnairePointsFn: () => Promise<Map<string, number> | null>
-): Promise<any[] | null> {
+): Promise<UserStandingEntry[] | null> {
   const loggerContext = { function: 'calculateStandings' };
   logger.info(loggerContext, 'Calculating overall standings...');
 
@@ -29,14 +29,14 @@ async function testCalculateStandings(
     }
 
     // Process the data
-    const combinedScores: any[] = [];
+    const combinedScores: Array<Omit<UserStandingEntry, 'rank' | 'username'> & { username?: string }> = [];
     const allUserIds = new Set<string>();
 
-    gamePointsData.forEach((user: any) => allUserIds.add(user.user_id));
-    dynamicPointsMap?.forEach((_points: any, userId: string) => allUserIds.add(userId));
+    gamePointsData.forEach((user: UserPoints) => allUserIds.add(user.user_id));
+    dynamicPointsMap?.forEach((_points: number, userId: string) => allUserIds.add(userId));
 
     allUserIds.forEach((userId: string) => {
-      const userProfileAndGamePoints = gamePointsData.find((gp: any) => gp.user_id === userId);
+      const userProfileAndGamePoints = gamePointsData.find((gp: UserPoints) => gp.user_id === userId);
       const gameP = userProfileAndGamePoints?.total_points || 0;
       const userFullName = userProfileAndGamePoints?.full_name;
       const dynamicP = dynamicPointsMap?.get(userId) || 0;
@@ -51,7 +51,7 @@ async function testCalculateStandings(
     });
 
     // Sort and rank
-    combinedScores.sort((a: any, b: any) => {
+    combinedScores.sort((a: Omit<UserStandingEntry, 'rank'>, b: Omit<UserStandingEntry, 'rank'>) => {
       if (b.combined_total_score !== a.combined_total_score) {
         return b.combined_total_score - a.combined_total_score;
       }
@@ -61,9 +61,9 @@ async function testCalculateStandings(
       return a.user_id.localeCompare(b.user_id);
     });
 
-    const finalStandings: any[] = [];
+    const finalStandings: UserStandingEntry[] = [];
     if (combinedScores.length > 0) {
-      finalStandings.push({ ...combinedScores[0], rank: 1 });
+      finalStandings.push({ ...combinedScores[0], rank: 1 } as UserStandingEntry);
       for (let i = 1; i < combinedScores.length; i++) {
         let rank = i + 1;
         const currentUser = combinedScores[i];
@@ -74,7 +74,7 @@ async function testCalculateStandings(
             currentUser.game_points === previousUserInCombined.game_points) {
           rank = previousUserInFinal.rank;
         }
-        finalStandings.push({ ...currentUser, rank });
+        finalStandings.push({ ...currentUser, rank } as UserStandingEntry);
       }
     }
 
@@ -89,8 +89,8 @@ async function testCalculateStandings(
 
 describe('Standings Service', () => {
   // Mock functions for our tests
-  let mockAggregateUserPoints: jest.Mock;
-  let mockGetUserDynamicQuestionnairePoints: jest.Mock;
+  let mockAggregateUserPoints: jest.Mock<Promise<UserPoints[] | null>, []>;
+  let mockGetUserDynamicQuestionnairePoints: jest.Mock<Promise<Map<string, number> | null>, []>;
 
   beforeEach(() => {
     jest.clearAllMocks();
