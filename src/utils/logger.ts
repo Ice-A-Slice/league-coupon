@@ -11,6 +11,7 @@ const pinoOptions: pino.LoggerOptions = {
 };
 
 // Use pino-pretty only in development for readability
+/*
 if (isDevelopment) {
   pinoOptions.transport = {
     target: 'pino-pretty',
@@ -18,9 +19,11 @@ if (isDevelopment) {
       colorize: true,
       translateTime: 'SYS:standard', // Use system's standard time format
       ignore: 'pid,hostname', // Ignore less relevant fields in dev
+      sync: true, // Attempt synchronous logging for pretty-print
     },
   };
 }
+*/
 
 // Create and export the logger instance
 export const logger = pino(pinoOptions);

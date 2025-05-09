@@ -3,8 +3,9 @@ import { logger } from '@/utils/logger';
 
 // Define the structure for the aggregated points data
 export interface UserPoints {
-  user_id: string; 
-  total_points: number;
+  user_id: string;
+  total_points: number; // This is game_points from the RPC
+  full_name?: string;   // Added for profile information
 }
 
 /**
@@ -15,74 +16,246 @@ export interface UserPoints {
  *          with their total points, or null on error.
  */
 export async function aggregateUserPoints(): Promise<UserPoints[] | null> {
-  logger.info('Aggregating total points per user via RPC...');
+  logger.info('Aggregating total points per user via RPC and joining with profiles...');
   const serviceRoleClient = getSupabaseServiceRoleClient();
 
   try {
-    // Call the PostgreSQL function 'get_user_total_points' via RPC
-    const { data, error } = await serviceRoleClient.rpc('get_user_total_points');
+    // 1. Fetch game points from the RPC
+    const { data: rpcPointsData, error: rpcError } = await serviceRoleClient.rpc(
+      'get_user_total_points'
+    );
 
-    if (error) {
-      logger.error({ error }, 'Error calling get_user_total_points RPC.');
-      throw error;
+    if (rpcError) {
+      logger.error({ error: rpcError }, 'Error calling get_user_total_points RPC.');
+      throw rpcError;
     }
-    
-    // The data from the RPC call should directly match the UserPoints[] structure
-    // if the SQL function is defined correctly (RETURNS TABLE(user_id UUID, total_points BIGINT))
-    // Supabase client should handle the mapping.
-    // Ensure UserPoints interface matches the SQL function's output columns and types.
-    const userPointsResult: UserPoints[] = (data || []).map(item => ({
-      user_id: item.user_id, // Assuming item.user_id is string (UUID comes as string)
-      total_points: Number(item.total_points ?? 0) // Ensure total_points is a number
+
+    const gamePointsMap = new Map<string, number>();
+    if (rpcPointsData) {
+      for (const entry of rpcPointsData) {
+        if (entry.user_id && typeof entry.total_points === 'number') {
+          gamePointsMap.set(entry.user_id, entry.total_points);
+        }
+      }
+    }
+    logger.debug({ count: gamePointsMap.size }, 'Fetched game points from RPC.');
+
+    // 2. Fetch all profiles
+    const { data: profilesData, error: profilesError } = await serviceRoleClient
+      .from('profiles')
+      .select('id, full_name');
+
+    if (profilesError) {
+      logger.error({ error: profilesError }, 'Error fetching profiles.');
+      throw profilesError;
+    }
+
+    if (!profilesData) {
+      logger.warn('No profiles data found.');
+      return []; // Or handle as appropriate - maybe an empty array if no profiles exist
+    }
+    logger.debug({ count: profilesData.length }, 'Fetched profiles.');
+
+    // 3. Combine profile data with game points
+    const aggregatedData: UserPoints[] = profilesData.map(profile => ({
+      user_id: profile.id,
+      full_name: profile.full_name || undefined, // Handle null full_name
+      total_points: gamePointsMap.get(profile.id) || 0, // Default to 0 game points if not in RPC data
     }));
+    
+    logger.info({ count: aggregatedData.length }, 'Successfully aggregated user points with profiles.');
+    return aggregatedData;
 
-    logger.info({ userCount: userPointsResult.length }, 'Successfully aggregated points via RPC.');
-    return userPointsResult;
-
-  } catch (err) {
-    logger.error({ error: err instanceof Error ? err.message : String(err) }, 'Failed to aggregate user points.');
-    return null; // Indicate failure
+  } catch (error) {
+    logger.error({ error }, 'An unexpected error occurred in aggregateUserPoints.');
+    return null;
   }
 }
 
-// Placeholder for the main standings calculation function that will use aggregateUserPoints
-// and then implement sorting, ranking, etc.
-export async function calculateStandings() {
-  logger.info('Calculating standings...');
-  const userPoints = await aggregateUserPoints();
+// Define the structure for a single entry in the standings
+export interface UserStandingEntry {
+  user_id: string;
+  username?: string;    // For display, maps from full_name
+  game_points: number;
+  dynamic_points: number;
+  combined_total_score: number;
+  rank: number;
+}
 
-  if (!userPoints) {
-    logger.error('Standings calculation failed because user points could not be aggregated.');
-    return null; 
-  }
+// Function to calculate overall standings by combining game points and dynamic points
+export async function calculateStandings(): Promise<UserStandingEntry[] | null> {
+  const loggerContext = { function: 'calculateStandings' };
+  logger.info(loggerContext, 'Calculating overall standings...');
 
-  // Subtask 13.2: Sort Users by Total Points
-  // Sort in descending order of total_points.
-  // If total_points are equal, the original order is maintained (stable sort implied by typical .sort() behavior for equal elements).
-  const sortedUserPoints = [...userPoints].sort((a, b) => b.total_points - a.total_points);
-  logger.info({ userCount: sortedUserPoints.length }, 'Successfully sorted user points.');
-
-  // Subtask 13.3: Assign Ranks with Tie Handling
-  const rankedUsers: (UserPoints & { rank: number })[] = [];
-  if (sortedUserPoints.length > 0) {
-    let currentRank = 1;
-    rankedUsers.push({ ...sortedUserPoints[0], rank: currentRank });
-
-    for (let i = 1; i < sortedUserPoints.length; i++) {
-      // If current user's score is less than the previous user's score,
-      // they get the next rank (i + 1, accounting for 0-based index).
-      if (sortedUserPoints[i].total_points < sortedUserPoints[i - 1].total_points) {
-        currentRank = i + 1;
-      }
-      // If scores are the same, they get the same rank as the previous user (currentRank is not changed).
-      rankedUsers.push({ ...sortedUserPoints[i], rank: currentRank });
+  try {
+    // 1. Get aggregated game points (which now include profile data like full_name)
+    const gamePointsData = await aggregateUserPoints();
+    if (!gamePointsData) {
+      logger.error(loggerContext, 'Failed to aggregate game points (which include profile data). Cannot calculate standings.');
+      return null;
     }
+    logger.debug({ ...loggerContext, count: gamePointsData.length }, 'Retrieved aggregated game points with profile data.');
+
+    // 2. Get dynamic points for the latest scored round
+    const dynamicPointsMap = await getUserDynamicQuestionnairePoints();
+    // Note: getUserDynamicQuestionnairePoints handles its own logging for success/failure/empty states
+    // It returns null on error, or an empty Map if no data/no scored rounds.
+
+    const combinedScores: Array<Omit<UserStandingEntry, 'rank'> & { preliminary_rank?: number }> = [];
+    const allUserIds = new Set<string>();
+
+    // Add all users from profiles (via gamePointsData) to ensure everyone is listed
+    gamePointsData.forEach(user => allUserIds.add(user.user_id));
+    // Add all users who might only have dynamic points (though less likely with current logic)
+    dynamicPointsMap?.forEach((_points, userId) => allUserIds.add(userId));
+
+    allUserIds.forEach(userId => {
+      const userProfileAndGamePoints = gamePointsData.find(gp => gp.user_id === userId);
+      const gameP = userProfileAndGamePoints?.total_points || 0;
+      const userFullName = userProfileAndGamePoints?.full_name;
+      const dynamicP = dynamicPointsMap?.get(userId) || 0;
+
+      combinedScores.push({
+        user_id: userId,
+        username: userFullName,          // Use full_name from profiles
+        game_points: gameP,
+        dynamic_points: dynamicP,
+        combined_total_score: gameP + dynamicP,
+      });
+    });
+    
+    logger.debug({ ...loggerContext, count: combinedScores.length }, 'Successfully combined scores for all users.');
+
+    // Sort by combined_total_score descending, then by game_points, then by user_id as a tie-breaker
+    combinedScores.sort((a, b) => {
+      if (b.combined_total_score !== a.combined_total_score) {
+        return b.combined_total_score - a.combined_total_score;
+      }
+      if (b.game_points !== a.game_points) {
+        return b.game_points - a.game_points;
+      }
+      // Fallback tie-breaker, e.g., by user_id or username if available
+      return a.user_id.localeCompare(b.user_id); 
+    });
+
+    // Assign ranks
+    const finalStandings: UserStandingEntry[] = [];
+    if (combinedScores.length > 0) {
+      finalStandings.push({ ...combinedScores[0], rank: 1 }); // First user always rank 1
+      for (let i = 1; i < combinedScores.length; i++) {
+        let rank = i + 1;
+        const currentUser = combinedScores[i];
+        const previousUserInCombined = combinedScores[i-1]; // For score comparison
+        // Correctly refer to the rank of the previously processed user in finalStandings
+        const previousUserInFinal = finalStandings[i-1]; 
+
+        if (currentUser.combined_total_score === previousUserInCombined.combined_total_score &&
+            currentUser.game_points === previousUserInCombined.game_points) {
+          rank = previousUserInFinal.rank; 
+        }
+        finalStandings.push({ ...currentUser, rank });
+      }
+    }
+
+    logger.info({ ...loggerContext, count: finalStandings.length }, 'Successfully calculated and ranked standings.');
+    return finalStandings;
+
+  } catch (error) {
+    logger.error({ ...loggerContext, error }, 'An unexpected error occurred in calculateStandings.');
+    return null;
   }
-  logger.info({ rankedUserCount: rankedUsers.length }, 'Successfully assigned ranks to users.');
+}
 
-  // TODO: Implement Subtask 13.4 (Package and Return Standings Data)
-  // For now, the `rankedUsers` array itself is the packaged data.
+// Helper interface for the shape of data from user_round_dynamic_points
+interface UserRoundDynamicPointsRow {
+  user_id: string;
+  dynamic_points: number;
+}
 
-  logger.info('Standings calculation complete.');
-  return rankedUsers; 
-} 
+// --- NEW FUNCTION ---
+/**
+ * Fetches the most recent dynamic questionnaire points for all users.
+ * It identifies the latest betting round marked as 'scored', then retrieves
+ * the stored dynamic points for all users from that round.
+ *
+ * @returns {Promise<Map<string, number> | null>} A promise resolving to a Map of user_id to total_points,
+ *          an empty Map if no scored rounds are found, or null on critical error.
+ */
+export async function getUserDynamicQuestionnairePoints(): Promise<Map<string, number> | null> {
+  const loggerContext = { service: 'StandingsService', function: 'getUserDynamicQuestionnairePoints' };
+  logger.info(loggerContext, 'Attempting to fetch dynamic questionnaire points...');
+  // console.log('[INFO]', loggerContext, 'Attempting to fetch dynamic questionnaire points...');
+  const client = getSupabaseServiceRoleClient();
+
+  try {
+    // Step 1: Find the most recently scored round_id
+    logger.debug(loggerContext, "Fetching most recently scored round...");
+    // console.debug('[DEBUG]', loggerContext, "Fetching most recently scored round...");
+    const { data: roundData, error: roundError } = await client
+      .from('betting_rounds')
+      .select('id, scored_at') // Select scored_at for ordering
+      .eq('status', 'scored')
+      .order('scored_at', { ascending: false, nullsFirst: false })
+      .limit(1)
+      .single();
+
+    if (roundError) {
+      if (roundError.code === 'PGRST116') { // No rows found
+        logger.info(loggerContext, 'No betting rounds with status "scored" found. Returning empty map for dynamic points.');
+        // console.log('[INFO]', loggerContext, 'No betting rounds with status "scored" found. Returning empty map for dynamic points.');
+        return new Map<string, number>();
+      }
+      logger.error({ ...loggerContext, error: roundError }, 'Error fetching most recently scored round.');
+      // console.error('[ERROR]', { ...loggerContext, error: roundError }, 'Error fetching most recently scored round.');
+      throw roundError; 
+    }
+
+    if (!roundData || !roundData.id) {
+      // This case should ideally be caught by PGRST116, but as a safeguard:
+      logger.info(loggerContext, 'No scored betting round data found (roundData or roundData.id is null/undefined). Returning empty map.');
+      // console.log('[INFO]', loggerContext, 'No scored betting round data found (roundData or roundData.id is null/undefined). Returning empty map.');
+      return new Map<string, number>();
+    }
+
+    const mostRecentScoredRoundId = roundData.id;
+    logger.info({ ...loggerContext, roundId: mostRecentScoredRoundId, scoredAt: roundData.scored_at }, 'Found most recent scored round.');
+    // console.log('[INFO]', { ...loggerContext, roundId: mostRecentScoredRoundId, scoredAt: roundData.scored_at }, 'Found most recent scored round.');
+
+    // Step 2: Retrieve dynamic points for that round
+    logger.debug({ ...loggerContext, roundId: mostRecentScoredRoundId }, "Fetching dynamic points for round...");
+    // console.debug('[DEBUG]', { ...loggerContext, roundId: mostRecentScoredRoundId }, "Fetching dynamic points for round...");
+    const { data: dynamicPointsData, error: dynamicPointsError } = await client
+      .from('user_round_dynamic_points')
+      .select('user_id, dynamic_points')
+      .eq('betting_round_id', mostRecentScoredRoundId)
+
+    if (dynamicPointsError) {
+      logger.error({ ...loggerContext, error: dynamicPointsError, roundId: mostRecentScoredRoundId }, 'Error fetching dynamic points for round.');
+      // console.error('[ERROR]', { ...loggerContext, error: dynamicPointsError, roundId: mostRecentScoredRoundId }, 'Error fetching dynamic points for round.');
+      throw dynamicPointsError;
+    }
+
+    // Step 3: Convert to Map
+    const dynamicPointsMap = new Map<string, number>();
+    if (dynamicPointsData) {
+      for (const entry of dynamicPointsData as unknown as UserRoundDynamicPointsRow[]) { 
+        if (entry.user_id && typeof entry.dynamic_points === 'number') {
+          dynamicPointsMap.set(entry.user_id, entry.dynamic_points);
+        } else {
+          logger.warn({ ...loggerContext, entry }, "Skipping dynamic points entry with missing user_id or non-numeric dynamic_points.");
+          // console.warn('[WARN]', { ...loggerContext, entry }, "Skipping dynamic points entry with missing user_id or non-numeric dynamic_points."); // Updated message slightly
+        }
+      }
+    }
+    
+    logger.info({ ...loggerContext, count: dynamicPointsMap.size, roundId: mostRecentScoredRoundId }, 'Successfully fetched and mapped dynamic points.');
+    // console.log('[INFO]', { ...loggerContext, count: dynamicPointsMap.size, roundId: mostRecentScoredRoundId }, 'Successfully fetched and mapped dynamic points.');
+    return dynamicPointsMap;
+
+  } catch (error) {
+    logger.error({ ...loggerContext, error: error instanceof Error ? error.message : String(error) }, 'Failed to get user dynamic questionnaire points.');
+    // console.error('[ERROR]', { ...loggerContext, error: error instanceof Error ? error.message : String(error) }, 'Failed to get user dynamic questionnaire points.');
+    return null; // Indicate critical failure
+  }
+}
+// --- END NEW FUNCTION --- 

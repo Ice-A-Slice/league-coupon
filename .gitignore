@@ -64,3 +64,6 @@ tasks/
 
 # Ignore MCP configuration with potentially sensitive keys
 .cursor/mcp.json 
+
+# Supabase CLI temp files
+supabase/.temp/ 
