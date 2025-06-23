@@ -50,6 +50,30 @@ export async function GET(request: Request) {
         logger.warn({ errors: detectionErrors.map((e: Error) => e.message) }, "Errors occurred during round completion detection/marking.");
     }
 
+    // ENHANCED: Also look for any existing rounds already in 'scoring' status
+    // This covers cases where rounds were manually set to 'scoring' or previous runs failed
+    logger.info('Checking for existing rounds in scoring status...');
+    const { data: scoringRounds, error: scoringRoundsError } = await serviceRoleClient
+      .from('betting_rounds')
+      .select('id')
+      .eq('status', 'scoring');
+
+    if (scoringRoundsError) {
+      logger.error({ error: scoringRoundsError }, 'Error fetching existing scoring rounds');
+      detectionErrors.push(new Error(`Failed to fetch scoring rounds: ${scoringRoundsError.message}`));
+    } else if (scoringRounds && scoringRounds.length > 0) {
+      const existingScoringIds = scoringRounds.map(r => r.id);
+      logger.info({ existingScoringIds }, `Found ${existingScoringIds.length} existing rounds in scoring status.`);
+      
+      // Add any existing scoring rounds that weren't already detected
+      for (const existingId of existingScoringIds) {
+        if (!detectedRoundIds.includes(existingId)) {
+          detectedRoundIds.push(existingId);
+          logger.info({ roundId: existingId }, 'Added existing scoring round to processing queue.');
+        }
+      }
+    }
+
     if (detectedRoundIds.length === 0) {
       logger.info("No completed rounds found to process.");
       return NextResponse.json({ success: true, message: "No completed rounds found to process." });
