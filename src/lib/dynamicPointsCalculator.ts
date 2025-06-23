@@ -6,6 +6,7 @@ import { type ILeagueDataService } from './leagueDataService';
 // import { getCurrentSeasonId } from '@/lib/seasons'; // Need this to map seasonYear to seasonId
 import type { UserSeasonAnswerRow } from './supabase/queries'; // Keep type import if needed elsewhere, or define locally
 import { logger } from '@/utils/logger'; // Import the logger
+import { supabaseServerClient } from '@/lib/supabase/server'; // Add supabase client for ID mapping
 
 /**
  * Structure for the result of the dynamic points calculation.
@@ -19,6 +20,52 @@ export interface DynamicPointsResult {
     lastPlaceCorrect: boolean;
     // Potentially add actual winning team/player IDs here for logging/debugging
   };
+}
+
+/**
+ * Maps database team IDs to API team IDs
+ */
+async function mapTeamDbIdToApiId(dbTeamId: number): Promise<number | null> {
+  try {
+    const { data, error } = await supabaseServerClient
+      .from('teams')
+      .select('api_team_id')
+      .eq('id', dbTeamId)
+      .single();
+
+    if (error || !data) {
+      logger.warn({ dbTeamId, error: error?.message }, 'Failed to map database team ID to API team ID');
+      return null;
+    }
+
+    return data.api_team_id;
+  } catch (error) {
+    logger.error({ dbTeamId, error }, 'Error mapping database team ID to API team ID');
+    return null;
+  }
+}
+
+/**
+ * Maps database player IDs to API player IDs
+ */
+async function mapPlayerDbIdToApiId(dbPlayerId: number): Promise<number | null> {
+  try {
+    const { data, error } = await supabaseServerClient
+      .from('players')
+      .select('api_player_id')
+      .eq('id', dbPlayerId)
+      .single();
+
+    if (error || !data) {
+      logger.warn({ dbPlayerId, error: error?.message }, 'Failed to map database player ID to API player ID');
+      return null;
+    }
+
+    return data.api_player_id;
+  } catch (error) {
+    logger.error({ dbPlayerId, error }, 'Error mapping database player ID to API player ID');
+    return null;
+  }
 }
 
 /**
@@ -129,15 +176,21 @@ export class DynamicPointsCalculator {
     const winnerPrediction = findAnswer('league_winner');
     if (winnerPrediction && leagueTable.standings.length > 0) {
         const actualWinnerTeamId = leagueTable.standings[0].team_id;
+        
+        // Convert database team ID to API team ID for comparison
+        const userPredictedApiTeamId = winnerPrediction.answered_team_id ? 
+          await mapTeamDbIdToApiId(winnerPrediction.answered_team_id) : null;
+        
         logger.info({
           userId,
           question: 'league_winner',
-          userPredictedTeamId: winnerPrediction.answered_team_id,
+          userPredictedDbTeamId: winnerPrediction.answered_team_id,
+          userPredictedApiTeamId: userPredictedApiTeamId,
           actualCurrentLeaderTeamId: actualWinnerTeamId,
-          matches: winnerPrediction.answered_team_id === actualWinnerTeamId
+          matches: userPredictedApiTeamId === actualWinnerTeamId
         }, 'League winner comparison');
         
-        if (winnerPrediction.answered_team_id === actualWinnerTeamId) {
+        if (userPredictedApiTeamId === actualWinnerTeamId) {
             results.leagueWinnerCorrect = true;
         }
     }
@@ -147,15 +200,21 @@ export class DynamicPointsCalculator {
     if (topScorerPrediction && topScorers.length > 0) {
         // Assuming topScorers is sorted, first one is the top scorer
         const actualTopScorerPlayerId = topScorers[0].player_api_id; // Correct property name
+        
+        // Convert database player ID to API player ID for comparison
+        const userPredictedApiPlayerId = topScorerPrediction.answered_player_id ? 
+          await mapPlayerDbIdToApiId(topScorerPrediction.answered_player_id) : null;
+        
         logger.info({
           userId,
           question: 'top_scorer',
-          userPredictedPlayerId: topScorerPrediction.answered_player_id,
+          userPredictedDbPlayerId: topScorerPrediction.answered_player_id,
+          userPredictedApiPlayerId: userPredictedApiPlayerId,
           actualTopScorerPlayerId: actualTopScorerPlayerId,
-          matches: topScorerPrediction.answered_player_id === actualTopScorerPlayerId
+          matches: userPredictedApiPlayerId === actualTopScorerPlayerId
         }, 'Top scorer comparison');
         
-        if (topScorerPrediction.answered_player_id === actualTopScorerPlayerId) {
+        if (userPredictedApiPlayerId === actualTopScorerPlayerId) {
             results.topScorerCorrect = true;
         }
     }
@@ -163,15 +222,20 @@ export class DynamicPointsCalculator {
     // --- Compare Best Goal Difference ---
     const bestGDPrediction = findAnswer('best_goal_difference');
     if (bestGDPrediction && teamWithBestGD) {
+        // Convert database team ID to API team ID for comparison
+        const userPredictedApiTeamId = bestGDPrediction.answered_team_id ? 
+          await mapTeamDbIdToApiId(bestGDPrediction.answered_team_id) : null;
+        
         logger.info({
           userId,
           question: 'best_goal_difference',
-          userPredictedTeamId: bestGDPrediction.answered_team_id,
+          userPredictedDbTeamId: bestGDPrediction.answered_team_id,
+          userPredictedApiTeamId: userPredictedApiTeamId,
           actualBestGDTeamId: teamWithBestGD.team_id,
-          matches: bestGDPrediction.answered_team_id === teamWithBestGD.team_id
+          matches: userPredictedApiTeamId === teamWithBestGD.team_id
         }, 'Best goal difference comparison');
         
-        if (bestGDPrediction.answered_team_id === teamWithBestGD.team_id) {
+        if (userPredictedApiTeamId === teamWithBestGD.team_id) {
             results.bestGoalDifferenceCorrect = true;
         }
     }
@@ -179,15 +243,20 @@ export class DynamicPointsCalculator {
     // --- Compare Last Place Team ---
     const lastPlacePrediction = findAnswer('last_place');
     if (lastPlacePrediction && lastPlaceTeam) {
+        // Convert database team ID to API team ID for comparison
+        const userPredictedApiTeamId = lastPlacePrediction.answered_team_id ? 
+          await mapTeamDbIdToApiId(lastPlacePrediction.answered_team_id) : null;
+        
         logger.info({
           userId,
           question: 'last_place',
-          userPredictedTeamId: lastPlacePrediction.answered_team_id,
+          userPredictedDbTeamId: lastPlacePrediction.answered_team_id,
+          userPredictedApiTeamId: userPredictedApiTeamId,
           actualLastPlaceTeamId: lastPlaceTeam.team_id,
-          matches: lastPlacePrediction.answered_team_id === lastPlaceTeam.team_id
+          matches: userPredictedApiTeamId === lastPlaceTeam.team_id
         }, 'Last place comparison');
         
-        if (lastPlacePrediction.answered_team_id === lastPlaceTeam.team_id) {
+        if (userPredictedApiTeamId === lastPlaceTeam.team_id) {
             results.lastPlaceCorrect = true;
         }
     }
