@@ -64,8 +64,19 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Prepare data for Supabase Upsert
-    // TODO: Determine the correct season_id dynamically later. Hardcoding for now.
-    const seasonId = 1; // Assuming season ID 1 for Premier League 2024/2025 based on previous context
+    // Get the current season dynamically instead of hardcoding
+    const { data: currentSeason, error: seasonError } = await supabase
+        .from('seasons')
+        .select('id')
+        .eq('is_current', true)
+        .single();
+
+    if (seasonError || !currentSeason) {
+        console.error('POST /api/season-answers: Failed to fetch current season:', seasonError);
+        return NextResponse.json({ error: 'Failed to determine current season' }, { status: 500 });
+    }
+
+    const seasonId = currentSeason.id; // Use the current season ID dynamically
 
     const answersToUpsert = answersData.map(answer => ({
         user_id: user.id,
