@@ -63,6 +63,36 @@ export class DynamicPointsCalculator {
       return null;
     }
 
+    // Log the current actual standings for debugging
+    const actualCurrentWinner = leagueTable.standings.length > 0 ? leagueTable.standings[0] : null;
+    const actualTopScorer = topScorers.length > 0 ? topScorers[0] : null;
+    
+    logger.info({
+      userId,
+      actualStandings: {
+        currentLeader: actualCurrentWinner ? { 
+          teamId: actualCurrentWinner.team_id, 
+          teamName: actualCurrentWinner.team_name,
+          position: actualCurrentWinner.position 
+        } : null,
+        topScorer: actualTopScorer ? { 
+          playerId: actualTopScorer.player_api_id, 
+          playerName: actualTopScorer.player_name,
+          goals: actualTopScorer.goals 
+        } : null,
+        bestGoalDifferenceTeam: { 
+          teamId: teamWithBestGD.team_id, 
+          teamName: teamWithBestGD.team_name,
+          goalDifference: teamWithBestGD.goal_difference 
+        },
+        lastPlaceTeam: { 
+          teamId: lastPlaceTeam.team_id, 
+          teamName: lastPlaceTeam.team_name,
+          position: lastPlaceTeam.position 
+        }
+      }
+    }, 'Current actual standings for comparison');
+
     // 2. Use the provided userPredictions (userSeasonAnswers)
     // No need to fetch seasonId or call getUserSeasonPredictions here anymore.
     const userPredictions = userSeasonAnswers; 
@@ -72,7 +102,16 @@ export class DynamicPointsCalculator {
       return null;
     }
     
-    logger.info({ userId, predictionCount: userPredictions.length }, `Found user predictions to evaluate.`);
+    // Log user's predictions for debugging
+    logger.info({ 
+      userId, 
+      predictionCount: userPredictions.length,
+      userPredictions: userPredictions.map(p => ({
+        questionType: p.question_type,
+        answeredTeamId: p.answered_team_id,
+        answeredPlayerId: p.answered_player_id
+      }))
+    }, `Found user predictions to evaluate.`);
 
     // 3. Compare Predictions (existing logic is mostly fine, uses userPredictions)
     const results = {
@@ -90,6 +129,14 @@ export class DynamicPointsCalculator {
     const winnerPrediction = findAnswer('league_winner');
     if (winnerPrediction && leagueTable.standings.length > 0) {
         const actualWinnerTeamId = leagueTable.standings[0].team_id;
+        logger.info({
+          userId,
+          question: 'league_winner',
+          userPredictedTeamId: winnerPrediction.answered_team_id,
+          actualCurrentLeaderTeamId: actualWinnerTeamId,
+          matches: winnerPrediction.answered_team_id === actualWinnerTeamId
+        }, 'League winner comparison');
+        
         if (winnerPrediction.answered_team_id === actualWinnerTeamId) {
             results.leagueWinnerCorrect = true;
         }
@@ -100,6 +147,14 @@ export class DynamicPointsCalculator {
     if (topScorerPrediction && topScorers.length > 0) {
         // Assuming topScorers is sorted, first one is the top scorer
         const actualTopScorerPlayerId = topScorers[0].player_api_id; // Correct property name
+        logger.info({
+          userId,
+          question: 'top_scorer',
+          userPredictedPlayerId: topScorerPrediction.answered_player_id,
+          actualTopScorerPlayerId: actualTopScorerPlayerId,
+          matches: topScorerPrediction.answered_player_id === actualTopScorerPlayerId
+        }, 'Top scorer comparison');
+        
         if (topScorerPrediction.answered_player_id === actualTopScorerPlayerId) {
             results.topScorerCorrect = true;
         }
@@ -108,6 +163,14 @@ export class DynamicPointsCalculator {
     // --- Compare Best Goal Difference ---
     const bestGDPrediction = findAnswer('best_goal_difference');
     if (bestGDPrediction && teamWithBestGD) {
+        logger.info({
+          userId,
+          question: 'best_goal_difference',
+          userPredictedTeamId: bestGDPrediction.answered_team_id,
+          actualBestGDTeamId: teamWithBestGD.team_id,
+          matches: bestGDPrediction.answered_team_id === teamWithBestGD.team_id
+        }, 'Best goal difference comparison');
+        
         if (bestGDPrediction.answered_team_id === teamWithBestGD.team_id) {
             results.bestGoalDifferenceCorrect = true;
         }
@@ -116,6 +179,14 @@ export class DynamicPointsCalculator {
     // --- Compare Last Place Team ---
     const lastPlacePrediction = findAnswer('last_place');
     if (lastPlacePrediction && lastPlaceTeam) {
+        logger.info({
+          userId,
+          question: 'last_place',
+          userPredictedTeamId: lastPlacePrediction.answered_team_id,
+          actualLastPlaceTeamId: lastPlaceTeam.team_id,
+          matches: lastPlacePrediction.answered_team_id === lastPlaceTeam.team_id
+        }, 'Last place comparison');
+        
         if (lastPlacePrediction.answered_team_id === lastPlaceTeam.team_id) {
             results.lastPlaceCorrect = true;
         }
