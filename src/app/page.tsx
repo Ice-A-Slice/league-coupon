@@ -3,38 +3,49 @@ import React from 'react';
 // Removed unused client-side imports (useState, useRef, Suspense, client hooks, components, types)
 
 // Keep server-side imports
-import { getCurrentBettingRoundFixtures, CurrentRoundFixturesResult } from '@/lib/supabase/queries';
+import { getCurrentBettingRoundFixtures } from '@/lib/supabase/queries';
+import { createClient } from '@/utils/supabase/server';
 
 // Import the new Client Component
 import CouponClient from '@/components/client/CouponClient';
 
 // --- Server Component Definition ---
 
-export default async function Page() {
-  let currentRoundData: CurrentRoundFixturesResult | null = null;
-  let error: string | null = null;
+export default async function Index() {
+  const supabase = await createClient();
 
-  try {
-    // Fetch data on the server
-    currentRoundData = await getCurrentBettingRoundFixtures();
-  } catch (fetchError) {
-    console.error("Error fetching current round fixtures:", fetchError);
-    error = fetchError instanceof Error ? fetchError.message : 'Failed to load round data.';
-    // Set currentRoundData to null explicitly on error to avoid passing undefined
-    currentRoundData = null; 
-  }
-  
-  // If there was an error during fetch, we can optionally render an error state here
-  // or pass null to CouponClient which will handle it.
-  if (error) {
-      // You could render a specific server-side error message here if desired
-      console.error("Server-side fetch failed:", error);
-      // Fallback to rendering CouponClient which should handle null data
+  // Fetch the current season to determine the active league and season year
+  const { data: currentSeasonData, error: seasonError } = await supabase
+    .from('seasons')
+    .select(`
+      api_season_year,
+      competitions (
+        api_league_id
+      )
+    `)
+    .eq('is_current', true)
+    .single();
+
+  // Provide default/fallback values if the query fails or returns no data
+  const currentLeagueId = currentSeasonData?.competitions?.api_league_id ?? 39; // Default to Premier League
+  const currentSeasonYear = currentSeasonData?.api_season_year ?? 2024; // Default to 2024 season
+
+  if (seasonError) {
+    console.error("Error fetching current season:", seasonError.message);
+    // Decide how to handle this error - maybe fall back to defaults or show an error page
   }
 
-  // Render the Client Component, passing fetched data (or null on error) as props
-  // CouponClient now needs to handle the case where initialRoundData might be null
-  return <CouponClient initialRoundData={currentRoundData} />;
+  // Fetch data for the current betting round - this function returns the data directly or null
+  const currentRoundData = await getCurrentBettingRoundFixtures();
+
+  // Render the client component, passing down all necessary data
+  return (
+    <CouponClient 
+      initialRoundData={currentRoundData} 
+      currentLeagueId={currentLeagueId}
+      currentSeasonYear={currentSeasonYear}
+    />
+  );
 }
 
 // --- Removed Client Component Logic ---

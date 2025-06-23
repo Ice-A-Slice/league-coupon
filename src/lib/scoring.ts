@@ -385,22 +385,37 @@ export async function processAndStoreDynamicPointsForRound(
   let usersSuccessfullyUpdated = 0;
 
   try {
-    // 1. Fetch round details to get season_id and competition_id
-    const { data: roundDetails, error: roundDetailsError } = await client
-      .from('betting_rounds')
-      .select('season_id, competition_id')
-      .eq('id', roundId)
-      .single<{ season_id: number; competition_id: number }>();
+    // 1. Fetch the season_id and competition_id by traversing from the betting round to a fixture,
+    // to its round, and finally to its season.
+    const { data: roundLink, error: roundLinkError } = await client
+      .from('betting_round_fixtures')
+      .select(`
+        fixtures (
+          rounds (
+            season_id,
+            seasons (
+              competition_id
+            )
+          )
+        )
+      `)
+      .eq('betting_round_id', roundId)
+      .limit(1) // We only need one fixture to find the season link
+      .single();
 
-    if (roundDetailsError) {
-      logger.error({ roundId, error: roundDetailsError }, 'Failed to fetch round details for dynamic points processing.');
-      return { success: false, message: 'Failed to fetch round details.', details: { usersProcessed, usersUpdated: usersSuccessfullyUpdated, error: roundDetailsError } };
+    if (roundLinkError) {
+      logger.error({ roundId, error: roundLinkError }, 'Failed to fetch round-fixture link for dynamic points processing.');
+      return { success: false, message: 'Failed to fetch round-fixture link.', details: { usersProcessed, usersUpdated: usersSuccessfullyUpdated, error: roundLinkError } };
     }
-    if (!roundDetails) {
-      logger.error({ roundId }, 'Round details not found for dynamic points processing (data is null).');
-      return { success: false, message: 'Round details not found.', details: { usersProcessed, usersUpdated: usersSuccessfullyUpdated } };
+
+    // Safely access the nested data
+    const seasonId = roundLink?.fixtures?.rounds?.season_id;
+    const competitionId = roundLink?.fixtures?.rounds?.seasons?.competition_id;
+
+    if (!seasonId || !competitionId) {
+      logger.error({ roundId }, 'Could not determine seasonId or competitionId from betting round.');
+      return { success: false, message: 'Could not determine season or competition from round.', details: { usersProcessed, usersUpdated: usersSuccessfullyUpdated } };
     }
-    const { season_id: seasonId, competition_id: competitionId } = roundDetails;
 
     // 2. Fetch competition and season API identifiers
     const { data: competitionData, error: competitionError } = await client

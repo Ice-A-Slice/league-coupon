@@ -29,7 +29,9 @@ import { submitPredictions } from '@/services/submissionService';
 
 // Interface for props passed from Server Component (Page)
 interface CouponClientProps {
-  initialRoundData: CurrentRoundFixturesResult;
+  initialRoundData: CurrentRoundFixturesResult | null;
+  currentLeagueId: number;
+  currentSeasonYear: number;
 }
 
 // Initial states 
@@ -48,7 +50,11 @@ interface ErrorsState {
 }
 
 // Define the Client Component
-export default function CouponClient({ initialRoundData }: CouponClientProps) {
+export default function CouponClient({ 
+  initialRoundData,
+  currentLeagueId,
+  currentSeasonYear 
+}: CouponClientProps) {
   // Client-side hooks and state management
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -61,7 +67,10 @@ export default function CouponClient({ initialRoundData }: CouponClientProps) {
     players: playersForQuestionnaire,
     isLoading: questionnaireDataLoading,
     error: questionnaireDataError, 
-  } = useQuestionnaireData({ leagueId: 39, season: 2024 }); // Use fixed values for now
+  } = useQuestionnaireData({ 
+    leagueId: currentLeagueId, 
+    season: currentSeasonYear 
+  }); // Use dynamic values from props
 
   // Refs 
   const questionnaireRef = useRef<ImportedQuestionnaireRef>(null);
