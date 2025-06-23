@@ -18,15 +18,43 @@ jest.mock('next/headers', () => ({
 // Mock Supabase Select method
 const mockSupabaseSelect = jest.fn();
 
+// Mock Supabase query methods for chaining
+const mockSupabaseEq = jest.fn();
+const mockSupabaseSingle = jest.fn();
+
 // Mock Supabase Upsert method - this needs to return an object with select method for chaining
 const mockSupabaseUpsert = jest.fn(() => ({
   select: mockSupabaseSelect
 }));
 
-// Mock Supabase from method
-const mockFrom = jest.fn(() => ({
-  upsert: mockSupabaseUpsert,
-}));
+// Enhanced Mock Supabase from method to handle different table queries
+const mockFrom = jest.fn((tableName: string) => {
+  // Return different behavior based on table name
+  if (tableName === 'seasons') {
+    // For seasons table - support .select().eq().single() chain
+    return {
+      select: jest.fn(() => ({
+        eq: jest.fn(() => ({
+          single: mockSupabaseSingle
+        }))
+      }))
+    };
+  } else if (tableName === 'user_season_answers') {
+    // For user_season_answers table - support existing upsert behavior
+    return {
+      upsert: mockSupabaseUpsert,
+    };
+  }
+  // Default fallback
+  return {
+    upsert: mockSupabaseUpsert,
+    select: jest.fn(() => ({
+      eq: jest.fn(() => ({
+        single: mockSupabaseSingle
+      }))
+    }))
+  };
+});
 
 // Mock Supabase auth
 const mockSupabaseGetUser = jest.fn();
@@ -68,6 +96,8 @@ describe('POST /api/season-answers', () => {
     mockSupabaseGetUser.mockClear();
     mockSupabaseSelect.mockClear();
     mockSupabaseUpsert.mockClear();
+    mockSupabaseEq.mockClear();
+    mockSupabaseSingle.mockClear();
     mockFrom.mockClear();
     mockNextResponseJson.mockClear();
     (cookies as jest.Mock).mockClear();
@@ -79,6 +109,7 @@ describe('POST /api/season-answers', () => {
   it('should return 200 OK on successful submission of season answers', async () => {
     // Arrange
     const mockUserId = 'test-user-123';
+    const mockSeasonId = 7; // Current season ID
     const requestBody = [
       { question_type: 'league_winner', answered_team_id: 1, answered_player_id: null },
       { question_type: 'top_scorer', answered_team_id: null, answered_player_id: 101 },
@@ -91,6 +122,8 @@ describe('POST /api/season-answers', () => {
 
     // Mock Supabase calls
     mockSupabaseGetUser.mockResolvedValue({ data: { user: { id: mockUserId } }, error: null });
+    // Mock the current season query
+    mockSupabaseSingle.mockResolvedValue({ data: { id: mockSeasonId }, error: null });
     mockSupabaseSelect.mockResolvedValue({ data: requestBody, error: null }); // Return data from select, not upsert
 
     // Act
@@ -98,23 +131,25 @@ describe('POST /api/season-answers', () => {
 
     // Assert
     expect(mockSupabaseGetUser).toHaveBeenCalledTimes(1);
-    expect(mockFrom).toHaveBeenCalledWith('user_season_answers');
+    expect(mockFrom).toHaveBeenCalledWith('seasons'); // Should query seasons table first
+    expect(mockFrom).toHaveBeenCalledWith('user_season_answers'); // Then user_season_answers table
+    expect(mockSupabaseSingle).toHaveBeenCalledTimes(1); // For seasons query
     expect(mockSupabaseUpsert).toHaveBeenCalledTimes(1);
     expect(mockSupabaseSelect).toHaveBeenCalledTimes(1);
     
-    // Check that upsert was called with the correct arguments
+    // Check that upsert was called with the correct arguments (using dynamic season ID)
     const upsertArg = mockSupabaseUpsert.mock.calls[0][0]; // Get the first argument of the first call
     expect(upsertArg).toHaveLength(requestBody.length);
     expect(upsertArg[0]).toMatchObject({
         user_id: mockUserId,
-        season_id: expect.any(Number), // We don't need to check the exact value, just that it's a number
+        season_id: mockSeasonId, // Should use the dynamically fetched season ID
         question_type: 'league_winner',
         answered_team_id: 1,
         answered_player_id: null,
     });
     expect(upsertArg[1]).toMatchObject({
         user_id: mockUserId,
-        season_id: expect.any(Number),
+        season_id: mockSeasonId, // Should use the dynamically fetched season ID
         question_type: 'top_scorer',
         answered_team_id: null,
         answered_player_id: 101,
@@ -223,14 +258,17 @@ describe('POST /api/season-answers', () => {
     
     // Mock getUser to return a valid user
     mockSupabaseGetUser.mockResolvedValue({ data: { user: { id: 'test-user' } }, error: null });
+    // Mock the current season query (needed even for empty array to reach the validation)
+    mockSupabaseSingle.mockResolvedValue({ data: { id: 7 }, error: null });
 
     // Act
     await POST(request);
 
     // Assert
     expect(mockSupabaseGetUser).toHaveBeenCalledTimes(1);
-    expect(mockFrom).not.toHaveBeenCalled();
-    expect(mockSupabaseUpsert).not.toHaveBeenCalled();
+    expect(mockFrom).toHaveBeenCalledWith('seasons'); // Should query seasons table
+    expect(mockSupabaseSingle).toHaveBeenCalledTimes(1); // For seasons query
+    expect(mockSupabaseUpsert).not.toHaveBeenCalled(); // Should not reach upsert
     expect(mockNextResponseJson).toHaveBeenCalledTimes(1);
     expect(mockNextResponseJson).toHaveBeenCalledWith(
       { error: 'No answers provided' }, 
@@ -271,6 +309,7 @@ describe('POST /api/season-answers', () => {
   it('should return 500 Internal Server Error if there is a database error during upsert', async () => {
     // Arrange
     const mockUserId = 'test-user-123';
+    const mockSeasonId = 7;
     const requestBody = [
       { question_type: 'league_winner', answered_team_id: 1, answered_player_id: null }
     ];
@@ -282,6 +321,8 @@ describe('POST /api/season-answers', () => {
 
     // Mock Supabase calls
     mockSupabaseGetUser.mockResolvedValue({ data: { user: { id: mockUserId } }, error: null });
+    // Mock the current season query
+    mockSupabaseSingle.mockResolvedValue({ data: { id: mockSeasonId }, error: null });
     // Error should come from select, since that's what the API checks
     mockSupabaseSelect.mockResolvedValue({ 
       data: null, 
@@ -293,7 +334,9 @@ describe('POST /api/season-answers', () => {
 
     // Assert
     expect(mockSupabaseGetUser).toHaveBeenCalledTimes(1);
-    expect(mockFrom).toHaveBeenCalledWith('user_season_answers');
+    expect(mockFrom).toHaveBeenCalledWith('seasons'); // Should query seasons table first
+    expect(mockFrom).toHaveBeenCalledWith('user_season_answers'); // Then user_season_answers table
+    expect(mockSupabaseSingle).toHaveBeenCalledTimes(1); // For seasons query
     expect(mockSupabaseUpsert).toHaveBeenCalledTimes(1);
     expect(mockSupabaseSelect).toHaveBeenCalledTimes(1);
     expect(mockNextResponseJson).toHaveBeenCalledTimes(1);
@@ -307,6 +350,7 @@ describe('POST /api/season-answers', () => {
   it('should return 500 Internal Server Error if an unexpected error occurs', async () => {
     // Arrange
     const mockUserId = 'test-user-123';
+    const mockSeasonId = 7;
     const requestBody = [
       { question_type: 'league_winner', answered_team_id: 1, answered_player_id: null }
     ];
@@ -318,6 +362,8 @@ describe('POST /api/season-answers', () => {
 
     // Mock Supabase calls
     mockSupabaseGetUser.mockResolvedValue({ data: { user: { id: mockUserId } }, error: null });
+    // Mock the current season query
+    mockSupabaseSingle.mockResolvedValue({ data: { id: mockSeasonId }, error: null });
     
     // Instead of throwing from upsert, throw from select
     mockSupabaseSelect.mockImplementation(() => {
@@ -329,7 +375,9 @@ describe('POST /api/season-answers', () => {
 
     // Assert
     expect(mockSupabaseGetUser).toHaveBeenCalledTimes(1);
-    expect(mockFrom).toHaveBeenCalledWith('user_season_answers');
+    expect(mockFrom).toHaveBeenCalledWith('seasons'); // Should query seasons table first
+    expect(mockFrom).toHaveBeenCalledWith('user_season_answers'); // Then user_season_answers table
+    expect(mockSupabaseSingle).toHaveBeenCalledTimes(1); // For seasons query
     expect(mockSupabaseUpsert).toHaveBeenCalledTimes(1);
     expect(mockSupabaseSelect).toHaveBeenCalledTimes(1);
     expect(mockNextResponseJson).toHaveBeenCalledTimes(1);
@@ -343,6 +391,7 @@ describe('POST /api/season-answers', () => {
   it('should handle different question types correctly', async () => {
     // Arrange
     const mockUserId = 'test-user-123';
+    const mockSeasonId = 7;
     const requestBody = [
       { question_type: 'league_winner', answered_team_id: 1, answered_player_id: null },
       { question_type: 'last_place', answered_team_id: 2, answered_player_id: null },
@@ -357,6 +406,8 @@ describe('POST /api/season-answers', () => {
 
     // Mock Supabase calls
     mockSupabaseGetUser.mockResolvedValue({ data: { user: { id: mockUserId } }, error: null });
+    // Mock the current season query
+    mockSupabaseSingle.mockResolvedValue({ data: { id: mockSeasonId }, error: null });
     mockSupabaseSelect.mockResolvedValue({ data: requestBody, error: null });
 
     // Act
@@ -364,16 +415,20 @@ describe('POST /api/season-answers', () => {
 
     // Assert
     expect(mockSupabaseGetUser).toHaveBeenCalledTimes(1);
-    expect(mockFrom).toHaveBeenCalledWith('user_season_answers');
+    expect(mockFrom).toHaveBeenCalledWith('seasons'); // Should query seasons table first
+    expect(mockFrom).toHaveBeenCalledWith('user_season_answers'); // Then user_season_answers table
+    expect(mockSupabaseSingle).toHaveBeenCalledTimes(1); // For seasons query
     expect(mockSupabaseUpsert).toHaveBeenCalledTimes(1);
     expect(mockSupabaseSelect).toHaveBeenCalledTimes(1);
     
-    // Check that all question types were processed correctly
+    // Check that all question types were processed correctly (using dynamic season ID)
     const upsertArg = mockSupabaseUpsert.mock.calls[0][0];
     expect(upsertArg).toHaveLength(requestBody.length);
     expect(upsertArg.map(item => item.question_type)).toEqual([
       'league_winner', 'last_place', 'best_goal_difference', 'top_scorer'
     ]);
+    // Check that all use the dynamic season ID
+    expect(upsertArg.every(item => item.season_id === mockSeasonId)).toBe(true);
     
     expect(mockNextResponseJson).toHaveBeenCalledTimes(1);
     expect(mockNextResponseJson).toHaveBeenCalledWith(
