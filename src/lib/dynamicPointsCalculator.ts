@@ -73,7 +73,7 @@ export class DynamicPointsCalculator {
         currentLeader: actualCurrentWinner ? { 
           teamId: actualCurrentWinner.team_id, 
           teamName: actualCurrentWinner.team_name,
-          position: actualCurrentWinner.position 
+          rank: actualCurrentWinner.rank 
         } : null,
         topScorer: actualTopScorer ? { 
           playerId: actualTopScorer.player_api_id, 
@@ -83,12 +83,12 @@ export class DynamicPointsCalculator {
         bestGoalDifferenceTeam: { 
           teamId: teamWithBestGD.team_id, 
           teamName: teamWithBestGD.team_name,
-          goalDifference: teamWithBestGD.goal_difference 
+          goalDifference: teamWithBestGD.goals_difference 
         },
         lastPlaceTeam: { 
           teamId: lastPlaceTeam.team_id, 
           teamName: lastPlaceTeam.team_name,
-          position: lastPlaceTeam.position 
+          rank: lastPlaceTeam.rank 
         }
       }
     }, 'Current actual standings for comparison');
