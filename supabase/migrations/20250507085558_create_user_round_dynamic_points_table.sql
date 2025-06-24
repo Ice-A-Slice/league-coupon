@@ -18,7 +18,9 @@ CREATE TABLE public.user_round_dynamic_points (
     -- Foreign Key to reference Supabase authenticated users
     CONSTRAINT user_round_dynamic_points_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users (id) ON DELETE CASCADE,
     -- Foreign Key to reference your betting_rounds table
-    CONSTRAINT user_round_dynamic_points_betting_round_id_fkey FOREIGN KEY (betting_round_id) REFERENCES public.betting_rounds (id) ON DELETE CASCADE
+    CONSTRAINT user_round_dynamic_points_betting_round_id_fkey FOREIGN KEY (betting_round_id) REFERENCES public.betting_rounds (id) ON DELETE CASCADE,
+    -- Unique constraint to ensure one record per user per round (required for ON CONFLICT)
+    CONSTRAINT user_round_dynamic_points_unique_user_round UNIQUE (user_id, betting_round_id)
 );
 
 -- Add comments on table and columns for clarity
@@ -37,14 +39,13 @@ CREATE TRIGGER handle_updated_at
   EXECUTE FUNCTION extensions.moddatetime (updated_at);
 
 -- Add Indexes for performance
--- 1. Composite index for efficient lookup by user and round
-CREATE INDEX IF NOT EXISTS idx_user_round_dynamic_points_user_round
-ON public.user_round_dynamic_points (user_id, betting_round_id);
+-- Note: The unique constraint above already creates an index on (user_id, betting_round_id)
+-- so we don't need the composite index separately
 
--- 2. Index on user_id for queries filtering primarily by user
+-- Index on user_id for queries filtering primarily by user
 CREATE INDEX IF NOT EXISTS idx_user_round_dynamic_points_user
 ON public.user_round_dynamic_points (user_id);
 
--- 3. Index on betting_round_id for queries filtering primarily by round
+-- Index on betting_round_id for queries filtering primarily by round
 CREATE INDEX IF NOT EXISTS idx_user_round_dynamic_points_round
 ON public.user_round_dynamic_points (betting_round_id);

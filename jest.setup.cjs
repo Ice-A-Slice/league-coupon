@@ -7,6 +7,9 @@ process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost:54321';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'mock-anon-key';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'mock-service-role-key';
 
+// Mock environment variables required by email service
+process.env.EMAIL_TEST_MODE = 'true';
+
 // Mock next/navigation
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn() }),
