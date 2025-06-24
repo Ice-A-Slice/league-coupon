@@ -121,11 +121,10 @@ export async function getCompletedMatchResults(
         if (comprehensiveData && comprehensiveData.fixture.response.length > 0) {
           const fixtureData = comprehensiveData.fixture.response[0];
           const events = comprehensiveData.events.response;
-          const statistics = comprehensiveData.statistics.response;
           const playerStats = comprehensiveData.playerStats.response.flatMap(team => team.players);
 
           // Generate story for this match
-          const story = generateMatchStory(fixtureData, events, statistics, playerStats);
+          const story = generateMatchStory(fixtureData, events, playerStats);
 
           matchResults.push({
             id: Number(fixture.id),
@@ -164,7 +163,7 @@ export async function getCompletedMatchResults(
 
   } catch (error) {
     console.error('Error fetching completed match results:', error);
-    return [];
+    throw error; // Re-throw to allow aggregateSummaryEmailData to handle it
   }
 }
 
@@ -255,10 +254,14 @@ export async function aggregateSummaryEmailData(
 
     // Generate AI stories from match results
     const matchStories = matchResults.map(match => match.story).filter(Boolean) as MatchStory[];
-    const aiStories = generateLeagueStories(matchStories);
+    const aiStories = generateLeagueStories(matchStories, roundName);
 
-    // Extract round number from round name (e.g., "Regular Season - 15" -> 15)
-    const roundNumber = parseInt(roundName.split(' - ')[1] || '1');
+    // Extract round number from round name (e.g., "Regular Season - 15" -> 15, "Gameweek 20" -> 20)
+    const roundNumber = parseInt(
+      roundName.includes(' - ')
+        ? roundName.split(' - ')[1]
+        : roundName.replace(/\D/g, '') || '1'
+    );
 
     const summaryData: SummaryEmailData = {
       roundNumber,
@@ -292,9 +295,17 @@ export async function aggregateReminderEmailData(
     // Fetch upcoming fixtures
     const upcomingFixtures = await getUpcomingFixtures();
     
+    // Check if we have current round data
+    if (upcomingFixtures.length === 0) {
+      const currentRoundData = await getCurrentBettingRoundFixtures();
+      if (!currentRoundData) {
+        throw new Error('No current betting round found');
+      }
+    }
+    
     // Calculate deadline information
     const isUrgent = deadlineHours <= 6;
-    const timeRemaining = deadlineHours > 24 
+    const timeRemaining = deadlineHours > 24
       ? `${Math.floor(deadlineHours / 24)} days`
       : `${deadlineHours} hours`;
 

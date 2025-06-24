@@ -10,6 +10,9 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = 'mock-service-role-key';
 // Mock environment variables required by email service
 process.env.EMAIL_TEST_MODE = 'true';
 
+// Mock environment variable required by football API
+process.env.NEXT_PUBLIC_FOOTBALL_API_KEY = 'test-api-key-for-testing';
+
 // Mock next/navigation
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn() }),

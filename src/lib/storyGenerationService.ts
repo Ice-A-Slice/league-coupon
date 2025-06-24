@@ -29,46 +29,69 @@ export interface LeagueStories {
  * Analyzes match events to identify dramatic moments
  */
 export function analyzeDramaticMoments(events: ApiEvent[]): {
-  lateGoals: ApiEvent[];
-  redCards: ApiEvent[];
-  penalties: ApiEvent[];
-  comebacks: { team: string; deficit: number }[];
+  lateGoals: Array<{ player: { name: string }; team: string; minute: number }>;
+  comebacks: Array<{ team: string; from: number; to: number }>;
+  redCards: Array<{ player: { name: string }; team: string; minute: number }>;
 } {
   const lateGoals = events.filter(
     event => event.type === 'Goal' && event.time.elapsed >= 75
-  );
+  ).map(goal => ({
+    player: { name: goal.player.name },
+    team: goal.team.name,
+    minute: goal.time.elapsed + (goal.time.extra || 0)
+  }));
   
   const redCards = events.filter(
     event => event.type === 'Card' && event.detail === 'Red Card'
-  );
-  
-  const penalties = events.filter(
-    event => event.type === 'Goal' && event.detail === 'Penalty'
-  );
+  ).map(card => ({
+    player: { name: card.player.name },
+    team: card.team.name,
+    minute: card.time.elapsed + (card.time.extra || 0)
+  }));
 
   // Analyze comebacks by tracking score progression
-  const comebacks: { team: string; deficit: number }[] = [];
+  const comebacks: Array<{ team: string; from: number; to: number }> = [];
   const scoreTracker: { [teamId: number]: number } = {};
+  const teamNames: { [teamId: number]: string } = {};
   
   events
     .filter(event => event.type === 'Goal')
     .sort((a, b) => a.time.elapsed - b.time.elapsed)
     .forEach(goal => {
+      teamNames[goal.team.id] = goal.team.name;
       scoreTracker[goal.team.id] = (scoreTracker[goal.team.id] || 0) + 1;
       
       // Check if this goal creates a comeback scenario
-      const teamScore = scoreTracker[goal.team.id];
-      const opponentScore = Object.values(scoreTracker).find(score => score !== teamScore) || 0;
-      
-      if (teamScore > opponentScore && goal.time.elapsed > 60) {
-        const deficit = opponentScore - (teamScore - 1);
-        if (deficit > 0) {
-          comebacks.push({ team: goal.team.name, deficit });
+      const teamIds = Object.keys(scoreTracker).map(Number);
+      if (teamIds.length === 2) {
+        const [team1Id, team2Id] = teamIds;
+        const team1Score = scoreTracker[team1Id] || 0;
+        const team2Score = scoreTracker[team2Id] || 0;
+        
+        // Check if current team was behind before this goal and now leads/ties
+        if (goal.team.id === team1Id && goal.time.elapsed > 30) {
+          const previousScore = team1Score - 1;
+          if (previousScore < team2Score && team1Score >= team2Score) {
+            comebacks.push({ 
+              team: teamNames[team1Id], 
+              from: team2Score - previousScore, 
+              to: previousScore 
+            });
+          }
+        } else if (goal.team.id === team2Id && goal.time.elapsed > 30) {
+          const previousScore = team2Score - 1;
+          if (previousScore < team1Score && team2Score >= team1Score) {
+            comebacks.push({ 
+              team: teamNames[team2Id], 
+              from: team1Score - previousScore, 
+              to: previousScore 
+            });
+          }
         }
       }
     });
 
-  return { lateGoals, redCards, penalties, comebacks };
+  return { lateGoals, redCards, comebacks };
 }
 
 /**
@@ -124,14 +147,17 @@ export function analyzeTeamPerformance(statistics: ApiTeamStatistics[]): {
  * Identifies standout player performances
  */
 export function analyzePlayerPerformances(playerStats: ApiPlayerMatchStats[]): {
-  manOfTheMatch?: string;
-  topScorer?: { name: string; goals: number };
-  keyAssists?: { name: string; assists: number };
-  standoutRating?: { name: string; rating: number };
+  topScorer: { name: string; goals: number } | null;
+  topAssister: { name: string; assists: number } | null;
+  highestRated: { name: string; rating: number } | null;
 } {
-  let topScorer: { name: string; goals: number } | undefined;
-  let keyAssists: { name: string; assists: number } | undefined;
-  let standoutRating: { name: string; rating: number } | undefined;
+  let topScorer: { name: string; goals: number } | null = null;
+  let topAssister: { name: string; assists: number } | null = null;
+  let highestRated: { name: string; rating: number } | null = null;
+
+  if (!playerStats || playerStats.length === 0) {
+    return { topScorer, topAssister, highestRated };
+  }
 
   playerStats.forEach(playerStat => {
     const stats = playerStat.statistics[0]; // Usually first stats object
@@ -146,23 +172,21 @@ export function analyzePlayerPerformances(playerStats: ApiPlayerMatchStats[]): {
 
     // Check for assists
     if (stats.goals.assists && stats.goals.assists > 0) {
-      if (!keyAssists || stats.goals.assists > keyAssists.assists) {
-        keyAssists = { name: playerStat.player.name, assists: stats.goals.assists };
+      if (!topAssister || stats.goals.assists > topAssister.assists) {
+        topAssister = { name: playerStat.player.name, assists: stats.goals.assists };
       }
     }
 
     // Check for high ratings
     if (stats.games.rating) {
       const rating = parseFloat(stats.games.rating);
-      if (rating > 8.5) {
-        if (!standoutRating || rating > standoutRating.rating) {
-          standoutRating = { name: playerStat.player.name, rating };
-        }
+      if (!highestRated || rating > highestRated.rating) {
+        highestRated = { name: playerStat.player.name, rating };
       }
     }
   });
 
-  return { topScorer, keyAssists, standoutRating };
+  return { topScorer, topAssister, highestRated };
 }
 
 /**
@@ -171,7 +195,6 @@ export function analyzePlayerPerformances(playerStats: ApiPlayerMatchStats[]): {
 export function generateMatchStory(
   fixture: ApiFixtureResponseItem,
   events: ApiEvent[],
-  statistics: ApiTeamStatistics[],
   playerStats: ApiPlayerMatchStats[]
 ): MatchStory {
   const { home: homeTeam, away: awayTeam } = fixture.teams;
@@ -182,15 +205,17 @@ export function generateMatchStory(
   const finalAwayScore = awayScore ?? 0;
   
   const dramaticMoments = analyzeDramaticMoments(events);
-  const teamPerformance = analyzeTeamPerformance(statistics);
   const playerPerformances = analyzePlayerPerformances(playerStats);
 
   // Determine story category and importance
   let category: MatchStory['category'] = 'performance';
   let importance: MatchStory['importance'] = 'medium';
   
-  // Check for upsets (this would need league position data in real implementation)
-  if (dramaticMoments.comebacks.length > 0) {
+  // Check for special scenarios - hat-trick takes priority
+  if (playerPerformances.topScorer && playerPerformances.topScorer.goals >= 3) {
+    category = 'performance';
+    importance = 'high';
+  } else if (dramaticMoments.comebacks.length > 0) {
     category = 'drama';
     importance = 'high';
   } else if (dramaticMoments.redCards.length > 0) {
@@ -201,17 +226,17 @@ export function generateMatchStory(
     importance = 'medium';
   }
 
-  // Generate headline
+  // Generate headline - hat-trick takes priority
   let headline = `${homeTeam.name} ${finalHomeScore}-${finalAwayScore} ${awayTeam.name}`;
   
-  if (dramaticMoments.comebacks.length > 0) {
+  if (playerPerformances.topScorer && playerPerformances.topScorer.goals >= 3) {
+    headline = `Hat-trick Hero ${playerPerformances.topScorer.name} Leads ${homeTeam.name} vs ${awayTeam.name}`;
+  } else if (dramaticMoments.comebacks.length > 0) {
     const comeback = dramaticMoments.comebacks[0];
     headline = `${comeback.team} Complete Stunning Comeback Against ${homeTeam.name === comeback.team ? awayTeam.name : homeTeam.name}`;
   } else if (dramaticMoments.lateGoals.length > 0) {
     const lateGoal = dramaticMoments.lateGoals[0];
-    headline = `Late Drama as ${lateGoal.player.name} Strikes for ${lateGoal.team.name}`;
-  } else if (playerPerformances.topScorer && playerPerformances.topScorer.goals > 2) {
-    headline = `${playerPerformances.topScorer.name} Hat-trick Heroics in ${homeTeam.name} vs ${awayTeam.name}`;
+    headline = `Late Drama as ${lateGoal.player.name} Strikes for ${lateGoal.team}`;
   }
 
   // Generate content
@@ -225,10 +250,6 @@ export function generateMatchStory(
     content += `. ${playerPerformances.topScorer.name} was the star with ${playerPerformances.topScorer.goals} goal${playerPerformances.topScorer.goals > 1 ? 's' : ''}`;
   }
   
-  if (teamPerformance.possessionBattle) {
-    content += `. ${teamPerformance.possessionBattle.winner} dominated possession with ${teamPerformance.possessionBattle.percentage}%`;
-  }
-
   content += '.';
 
   return {
@@ -239,8 +260,8 @@ export function generateMatchStory(
     teams: [homeTeam.name, awayTeam.name],
     keyPlayers: [
       ...(playerPerformances.topScorer ? [playerPerformances.topScorer.name] : []),
-      ...(playerPerformances.keyAssists ? [playerPerformances.keyAssists.name] : []),
-      ...(playerPerformances.standoutRating ? [playerPerformances.standoutRating.name] : []),
+      ...(playerPerformances.topAssister ? [playerPerformances.topAssister.name] : []),
+      ...(playerPerformances.highestRated ? [playerPerformances.highestRated.name] : []),
     ],
   };
 }
@@ -248,7 +269,7 @@ export function generateMatchStory(
 /**
  * Generates league stories from multiple match results
  */
-export function generateLeagueStories(matchStories: MatchStory[]): LeagueStories {
+export function generateLeagueStories(matchStories: MatchStory[], roundName: string): LeagueStories {
   const topStories = matchStories
     .sort((a, b) => {
       const importanceOrder = { high: 3, medium: 2, low: 1 };
@@ -261,14 +282,19 @@ export function generateLeagueStories(matchStories: MatchStory[]): LeagueStories
   const dramaCount = matchStories.filter(s => s.category === 'drama').length;
   const upsetCount = matchStories.filter(s => s.category === 'upset').length;
   
-  let roundSummary = `Another thrilling round of Premier League action with ${totalMatches} matches`;
-  if (dramaCount > 0) {
-    roundSummary += `, featuring ${dramaCount} dramatic encounter${dramaCount > 1 ? 's' : ''}`;
+  let roundSummary;
+  if (totalMatches === 0) {
+    roundSummary = `${roundName} was a quiet round of Premier League action with limited drama.`;
+  } else {
+    roundSummary = `${roundName} delivered thrilling Premier League action with ${totalMatches} matches`;
+    if (dramaCount > 0) {
+      roundSummary += `, featuring ${dramaCount} dramatic encounter${dramaCount > 1 ? 's' : ''}`;
+    }
+    if (upsetCount > 0) {
+      roundSummary += ` and ${upsetCount} surprise result${upsetCount > 1 ? 's' : ''}`;
+    }
+    roundSummary += '.';
   }
-  if (upsetCount > 0) {
-    roundSummary += ` and ${upsetCount} surprise result${upsetCount > 1 ? 's' : ''}`;
-  }
-  roundSummary += '.';
 
   // Find week highlights
   const weekHighlights: LeagueStories['weekHighlights'] = {};
@@ -276,11 +302,23 @@ export function generateLeagueStories(matchStories: MatchStory[]): LeagueStories
   const upsetStory = matchStories.find(s => s.category === 'upset' && s.importance === 'high');
   if (upsetStory) {
     weekHighlights.upsetOfTheWeek = upsetStory.headline;
+  } else {
+    // Fallback: use any high importance story as upset
+    const highImportanceStory = matchStories.find(s => s.importance === 'high');
+    if (highImportanceStory) {
+      weekHighlights.upsetOfTheWeek = highImportanceStory.headline;
+    }
   }
 
   const performanceStory = matchStories.find(s => s.category === 'performance' && s.keyPlayers.length > 0);
   if (performanceStory) {
     weekHighlights.performanceOfTheWeek = `${performanceStory.keyPlayers[0]} starred in ${performanceStory.headline}`;
+  } else {
+    // Fallback: use any story with key players
+    const storyWithPlayers = matchStories.find(s => s.keyPlayers.length > 0);
+    if (storyWithPlayers) {
+      weekHighlights.performanceOfTheWeek = `${storyWithPlayers.keyPlayers[0]} starred in ${storyWithPlayers.headline}`;
+    }
   }
 
   return {
