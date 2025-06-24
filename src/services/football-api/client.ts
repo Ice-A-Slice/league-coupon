@@ -4,6 +4,9 @@ import {
   ApiTeamsResponse,
   ApiPlayersResponse,
   ApiPlayerResponseItem,
+  ApiEventsResponse,
+  ApiStatisticsResponse,
+  ApiPlayersStatsResponse,
 } from './types';
 
 const API_BASE_URL = 'https://v3.football.api-sports.io';
@@ -181,4 +184,130 @@ export async function fetchAllPlayersByLeagueAndSeason(
 // Example for fetching countries (can be expanded later)
 // export async function fetchCountries(): Promise<ApiCountriesResponse> {
 //   return fetchFromApi<ApiCountriesResponse>('/countries');
-// } 
+// }
+
+// === ENHANCED API FUNCTIONS FOR STORY GENERATION ===
+
+/**
+ * Fetches match events for a specific fixture.
+ * @param fixtureId The ID of the fixture.
+ * @param teamId Optional: Filter events by team ID.
+ * @param playerId Optional: Filter events by player ID.
+ * @param eventType Optional: Filter events by type ('Goal', 'Card', 'Subst', 'Var').
+ * @returns A promise resolving to the events data.
+ */
+export async function fetchFixtureEvents(
+  fixtureId: number,
+  options?: {
+    teamId?: number;
+    playerId?: number;
+    eventType?: 'Goal' | 'Card' | 'Subst' | 'Var';
+  }
+): Promise<ApiEventsResponse> {
+  const params = new URLSearchParams({
+    fixture: fixtureId.toString(),
+  });
+
+  if (options?.teamId) {
+    params.append('team', options.teamId.toString());
+  }
+  if (options?.playerId) {
+    params.append('player', options.playerId.toString());
+  }
+  if (options?.eventType) {
+    params.append('type', options.eventType.toLowerCase());
+  }
+
+  return fetchFromApi<ApiEventsResponse>('/fixtures/events', params);
+}
+
+/**
+ * Fetches match statistics for a specific fixture.
+ * @param fixtureId The ID of the fixture.
+ * @param teamId Optional: Filter statistics by team ID.
+ * @param statisticType Optional: Filter by specific statistic type.
+ * @param includeHalftime Optional: Include halftime statistics (available from 2024 season).
+ * @returns A promise resolving to the statistics data.
+ */
+export async function fetchFixtureStatistics(
+  fixtureId: number,
+  options?: {
+    teamId?: number;
+    statisticType?: string;
+    includeHalftime?: boolean;
+  }
+): Promise<ApiStatisticsResponse> {
+  const params = new URLSearchParams({
+    fixture: fixtureId.toString(),
+  });
+
+  if (options?.teamId) {
+    params.append('team', options.teamId.toString());
+  }
+  if (options?.statisticType) {
+    params.append('type', options.statisticType);
+  }
+  if (options?.includeHalftime) {
+    params.append('half', 'true');
+  }
+
+  return fetchFromApi<ApiStatisticsResponse>('/fixtures/statistics', params);
+}
+
+/**
+ * Fetches player statistics for a specific fixture.
+ * @param fixtureId The ID of the fixture.
+ * @param teamId Optional: Filter player statistics by team ID.
+ * @returns A promise resolving to the player statistics data.
+ */
+export async function fetchFixturePlayerStats(
+  fixtureId: number,
+  teamId?: number
+): Promise<ApiPlayersStatsResponse> {
+  const params = new URLSearchParams({
+    fixture: fixtureId.toString(),
+  });
+
+  if (teamId) {
+    params.append('team', teamId.toString());
+  }
+
+  return fetchFromApi<ApiPlayersStatsResponse>('/fixtures/players', params);
+}
+
+/**
+ * Enhanced function to fetch comprehensive match data including basic fixture info,
+ * events, statistics, and player performance for story generation.
+ * @param fixtureId The ID of the fixture.
+ * @returns A promise resolving to comprehensive match data or null on error.
+ */
+export async function fetchComprehensiveMatchData(fixtureId: number): Promise<{
+  fixture: ApiFixturesResponse;
+  events: ApiEventsResponse;
+  statistics: ApiStatisticsResponse;
+  playerStats: ApiPlayersStatsResponse;
+} | null> {
+  try {
+    console.log(`Fetching comprehensive match data for fixture ${fixtureId}...`);
+
+    // Fetch all data in parallel for better performance
+    const [fixture, events, statistics, playerStats] = await Promise.all([
+      fetchFromApi<ApiFixturesResponse>('/fixtures', new URLSearchParams({ id: fixtureId.toString() })),
+      fetchFixtureEvents(fixtureId),
+      fetchFixtureStatistics(fixtureId),
+      fetchFixturePlayerStats(fixtureId),
+    ]);
+
+    console.log(`Successfully fetched comprehensive data for fixture ${fixtureId}`);
+    return {
+      fixture,
+      events,
+      statistics,
+      playerStats,
+    };
+
+  } catch (error) {
+    console.error(`Failed to fetch comprehensive match data for fixture ${fixtureId}:`, error);
+    return null;
+  }
+} 
