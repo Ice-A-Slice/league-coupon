@@ -177,7 +177,7 @@ export async function sendEmail(options: EmailOptions): Promise<EmailResponse> {
       html: options.html,
       text: options.text,
       react: options.react,
-      reply_to: options.replyTo,
+      replyTo: options.replyTo,
       cc: options.cc,
       bcc: options.bcc,
       tags: options.tags

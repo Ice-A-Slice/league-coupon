@@ -95,7 +95,7 @@ describe('Resend Email Service', () => {
     });
 
     test('should reject missing content', () => {
-      const { text, ...optionsWithoutContent } = validOptions;
+      const { text: _text, ...optionsWithoutContent } = validOptions;
       const result = validateEmailOptions(optionsWithoutContent);
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('Email must have at least one content type: html, text, or react');
