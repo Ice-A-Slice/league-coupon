@@ -1,6 +1,24 @@
 import { fetchComprehensiveMatchData } from '@/services/football-api/client';
 import { generateMatchStory, generateLeagueStories, type MatchStory, type LeagueStories } from '@/lib/storyGenerationService';
 import { getFixturesForRound, getCurrentBettingRoundFixtures } from '@/lib/supabase/queries';
+import { 
+  type SummaryEmailData as FetchedSummaryEmailData, 
+  type UserRoundPredictions, 
+  type SummaryMatchResult,
+  EmailDataFetchingService 
+} from '@/lib/emailDataFetchingService';
+import { type UserStandingEntry } from '@/services/standingsService';
+import { 
+  type SummaryEmailProps, 
+  type MatchResult, 
+  type UserPerformance, 
+  type LeagueStanding, 
+  type AIGeneratedStory 
+} from '@/components/emails/SummaryEmail';
+import { logger } from '@/utils/logger';
+
+// Re-export types for external use
+export type { SummaryEmailProps };
 
 // Types for email data
 export interface EmailMatchResult {
@@ -383,4 +401,281 @@ export async function getCurrentActiveRound(): Promise<{ roundName: string; roun
     console.error('Error getting current active round:', error);
     return null;
   }
-} 
+}
+
+/**
+ * Service that transforms data from EmailDataFetchingService into the format
+ * expected by the SummaryEmail template component.
+ */
+export class EmailDataService {
+  private emailDataFetcher: EmailDataFetchingService;
+
+  constructor() {
+    this.emailDataFetcher = new EmailDataFetchingService();
+  }
+
+  /**
+   * Get complete SummaryEmail props for a specific user and round
+   */
+  async getSummaryEmailProps(
+    userId: string,
+    roundId?: number
+  ): Promise<SummaryEmailProps> {
+    try {
+      logger.info('EmailDataService: Fetching summary email data', { userId, roundId });
+      
+      // Fetch raw data from EmailDataFetchingService
+      const summaryData = await this.emailDataFetcher.getSummaryEmailData(roundId);
+      if (!summaryData) {
+        throw new Error(`Summary data not found for roundId: ${roundId}`);
+      }
+      
+      // Find user-specific data
+      const userPredictions = summaryData.userPredictions.find(up => up.userId === userId);
+      if (!userPredictions) {
+        throw new Error(`User predictions not found for userId: ${userId}`);
+      }
+
+      // Transform data to SummaryEmail format
+      const props: SummaryEmailProps = {
+        user: this.transformUserPerformance(userPredictions, summaryData),
+        roundNumber: summaryData.round.roundId,
+        matches: this.transformMatches(summaryData.round.matches),
+        leagueStandings: this.transformLeagueStandings(summaryData.standings),
+        aiStories: this.generatePlaceholderStories(summaryData), // Placeholder until AI integration
+        weekHighlights: this.generateWeekHighlights(summaryData),
+        appUrl: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+      };
+
+      logger.info('EmailDataService: Successfully transformed summary email data', { 
+        userId, 
+        roundId: summaryData.round.roundId,
+        matchCount: props.matches.length,
+        standingsCount: props.leagueStandings.length 
+      });
+
+      return props;
+    } catch (error) {
+      logger.error('EmailDataService: Failed to get summary email props', { 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        userId,
+        roundId 
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Transform user predictions data into UserPerformance format
+   */
+  private transformUserPerformance(
+    userPredictions: UserRoundPredictions,
+    summaryData: FetchedSummaryEmailData
+  ): UserPerformance {
+    // Find user's current position in standings
+    const userStanding = summaryData.standings.find(s => s.user_id === userPredictions.userId);
+    
+    return {
+      name: userPredictions.userName || 'Unknown User',
+      currentPosition: userStanding?.rank || 0,
+      previousPosition: undefined, // This property is not available in UserStandingEntry
+      pointsEarned: userPredictions.pointsEarned,
+      totalPoints: userStanding?.combined_total_score || 0,
+      correctPredictions: userPredictions.correctPredictions,
+      totalPredictions: userPredictions.totalPredictions,
+      bestPrediction: this.findBestPrediction(userPredictions, summaryData.round.matches)
+    };
+  }
+
+  /**
+   * Transform match data into MatchResult format
+   */
+  private transformMatches(matches: SummaryMatchResult[]): MatchResult[] {
+    return matches.map(match => ({
+      id: match.id,
+      homeTeam: {
+        name: match.homeTeam.name,
+        score: match.homeTeam.score || 0
+      },
+      awayTeam: {
+        name: match.awayTeam.name,
+        score: match.awayTeam.score || 0
+      },
+      status: match.status,
+      dramatic: this.isDramaticMatch(match) // Simple heuristic for now
+    }));
+  }
+
+  /**
+   * Transform standings data into LeagueStanding format
+   */
+  private transformLeagueStandings(standings: UserStandingEntry[]): LeagueStanding[] {
+    return standings.map(standing => ({
+      position: standing.rank,
+      teamName: standing.username || 'Unknown User', // In our context, "teams" are users
+      points: standing.combined_total_score,
+      played: 0, // Not available in UserStandingEntry
+      won: 0, // Not available in UserStandingEntry
+      drawn: 0, // Not applicable for prediction league
+      lost: 0, // Not available in UserStandingEntry
+      goalDifference: 0 // Not applicable for prediction league
+    }));
+  }
+
+  /**
+   * Generate placeholder AI stories until AI integration is complete (Task 9)
+   */
+  private generatePlaceholderStories(summaryData: FetchedSummaryEmailData): AIGeneratedStory[] {
+    const stories: AIGeneratedStory[] = [];
+    
+    // Round completion story
+    stories.push({
+      headline: `Round ${summaryData.round.roundId} Completed`,
+      content: `All ${summaryData.round.matches.length} matches in Round ${summaryData.round.roundId} have concluded. Check out the results and see how your predictions performed!`,
+      type: 'performance'
+    });
+
+    // Top performer story if we have standings
+    if (summaryData.standings.length > 0) {
+      const topPerformer = summaryData.standings[0];
+      stories.push({
+        headline: `${topPerformer.username || 'Unknown User'} Leads the Pack`,
+        content: `${topPerformer.username || 'Unknown User'} continues to dominate with ${topPerformer.combined_total_score} total points. Can anyone catch up?`,
+        type: 'title_race'
+      });
+    }
+
+    // Dramatic matches story
+    const dramaticMatches = summaryData.round.matches.filter(m => this.isDramaticMatch(m));
+    if (dramaticMatches.length > 0) {
+      stories.push({
+        headline: 'Thrilling Matches This Round',
+        content: `${dramaticMatches.length} matches provided extra excitement this round with unexpected results and close scorelines.`,
+        type: 'drama'
+      });
+    }
+
+    return stories;
+  }
+
+  /**
+   * Generate week highlights from summary data
+   */
+  private generateWeekHighlights(summaryData: FetchedSummaryEmailData) {
+    if (summaryData.standings.length === 0) return undefined;
+
+    // Find top performer of the round
+    const topRoundPerformer = summaryData.userPredictions
+      .sort((a, b) => b.pointsEarned - a.pointsEarned)[0];
+
+    // Find biggest upset (highest scoring match)
+    const biggestUpset = summaryData.round.matches
+      .sort((a, b) => ((b.homeTeam.score || 0) + (b.awayTeam.score || 0)) - ((a.homeTeam.score || 0) + (a.awayTeam.score || 0)))[0];
+
+    return {
+      topPerformer: topRoundPerformer?.userName || 'Unknown',
+      biggestUpset: biggestUpset ? 
+        `${biggestUpset.homeTeam.name} ${biggestUpset.homeTeam.score}-${biggestUpset.awayTeam.score} ${biggestUpset.awayTeam.name}` : 
+        'No upsets this round'
+    };
+  }
+
+  /**
+   * Find user's best prediction for this round
+   */
+  private findBestPrediction(userPredictions: UserRoundPredictions, matches: SummaryMatchResult[]): string | undefined {
+    // Simple heuristic: find a correct prediction for a dramatic match
+    // TODO: Enhance this logic in future iterations
+    
+    const correctPredictions = userPredictions.predictions?.filter(p => p.isCorrect) || [];
+    if (correctPredictions.length === 0) return undefined;
+
+    // Find if any correct prediction was for a dramatic match
+    const dramaticCorrectPrediction = correctPredictions.find(p => {
+      const match = matches.find(m => m.id === p.matchId);
+      return match && this.isDramaticMatch(match);
+    });
+
+    if (dramaticCorrectPrediction) {
+      const match = matches.find(m => m.id === dramaticCorrectPrediction.matchId);
+      if (match) {
+        return `${match.homeTeam.name} ${match.homeTeam.score}-${match.awayTeam.score} ${match.awayTeam.name}`;
+      }
+    }
+
+    // Otherwise, just return the first correct prediction
+    const firstCorrect = correctPredictions[0];
+    const match = matches.find(m => m.id === firstCorrect.matchId);
+    if (match) {
+      return `${match.homeTeam.name} ${match.homeTeam.score}-${match.awayTeam.score} ${match.awayTeam.name}`;
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Simple heuristic to determine if a match was dramatic
+   */
+  private isDramaticMatch(match: SummaryMatchResult): boolean {
+    if (!match.homeTeam.score || !match.awayTeam.score) return false;
+    
+    const totalGoals = match.homeTeam.score + match.awayTeam.score;
+    const goalDifference = Math.abs(match.homeTeam.score - match.awayTeam.score);
+    
+    // High-scoring match (4+ goals) OR close match (1 goal difference) with decent scoring
+    return totalGoals >= 4 || (goalDifference <= 1 && totalGoals >= 2);
+  }
+
+  /**
+   * Get summary email props for multiple users (for batch sending)
+   */
+  async getBatchSummaryEmailProps(
+    userIds: string[],
+    roundId?: number
+  ): Promise<Map<string, SummaryEmailProps>> {
+    const results = new Map<string, SummaryEmailProps>();
+    
+    // Fetch data once and reuse for all users
+    const summaryData = await this.emailDataFetcher.getSummaryEmailData(roundId);
+    if (!summaryData) {
+      logger.error('EmailDataService: Summary data not found for batch processing', { roundId });
+      return results;
+    }
+    
+    for (const userId of userIds) {
+      try {
+        const userPredictions = summaryData.userPredictions.find(up => up.userId === userId);
+        if (!userPredictions) {
+          logger.warn('EmailDataService: User predictions not found', { userId });
+          continue;
+        }
+
+        const props: SummaryEmailProps = {
+          user: this.transformUserPerformance(userPredictions, summaryData),
+          roundNumber: summaryData.round.roundId,
+          matches: this.transformMatches(summaryData.round.matches),
+          leagueStandings: this.transformLeagueStandings(summaryData.standings),
+          aiStories: this.generatePlaceholderStories(summaryData),
+          weekHighlights: this.generateWeekHighlights(summaryData),
+          appUrl: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+        };
+
+        results.set(userId, props);
+      } catch (error) {
+        logger.error('EmailDataService: Failed to transform data for user', { 
+          userId, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        });
+      }
+    }
+
+    logger.info('EmailDataService: Batch transformation completed', { 
+      requestedUsers: userIds.length, 
+      successfulUsers: results.size 
+    });
+
+    return results;
+  }
+}
+
+export const emailDataService = new EmailDataService(); 
