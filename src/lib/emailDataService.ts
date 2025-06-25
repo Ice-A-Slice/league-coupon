@@ -121,7 +121,7 @@ export async function getCompletedMatchResults(
         if (comprehensiveData && comprehensiveData.fixture.response.length > 0) {
           const fixtureData = comprehensiveData.fixture.response[0];
           const events = comprehensiveData.events.response;
-          const playerStats = comprehensiveData.playerStats.response.flatMap(team => team.players);
+          const playerStats = comprehensiveData.playerStats;
 
           // Generate story for this match
           const story = generateMatchStory(fixtureData, events, playerStats);

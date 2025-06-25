@@ -7,6 +7,7 @@ import {
   ApiEventsResponse,
   ApiStatisticsResponse,
   ApiPlayersStatsResponse,
+  ApiPlayerMatchStats,
 } from './types';
 
 const API_BASE_URL = 'https://v3.football.api-sports.io';
@@ -37,33 +38,18 @@ async function fetchFromApi<T>(endpoint: string, params?: URLSearchParams): Prom
     url.search = params.toString();
   }
 
-  console.log(`Fetching from API: ${url.toString()}`); // Optional: for debugging
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    headers: commonHeaders,
+  });
 
-  try {
-    const response = await fetch(url.toString(), {
-      method: 'GET',
-      headers: commonHeaders,
-    });
-
-    if (!response.ok) {
-      throw new Error(`API request failed with status ${response.status}: ${response.statusText}`);
-    }
-
-    const data = await response.json() as T & { errors?: unknown[] | Record<string, unknown> };
-
-    // Check for API-level errors in the response body
-    if (data.errors && (Array.isArray(data.errors) ? data.errors.length > 0 : Object.keys(data.errors).length > 0)) {
-      console.error('API returned errors:', data.errors);
-      // Throw a more specific error or handle appropriately
-      throw new Error(`API returned errors: ${JSON.stringify(data.errors)}`);
-    }
-
-    return data;
-  } catch (error) {
-    console.error(`Error fetching ${endpoint}:`, error);
-    // Re-throw the error to be handled by the caller
-    throw error;
+  if (!response.ok) {
+    throw new Error(`API request failed with status ${response.status}: ${response.statusText}`);
   }
+
+  const data = (await response.json()) as T;
+  
+  return data;
 }
 
 /**
@@ -127,7 +113,6 @@ export async function fetchAllPlayersByLeagueAndSeason(
   leagueId: number,
   season: number
 ): Promise<ApiPlayerResponseItem[] | null> {
-  console.log(`Fetching ALL players for league ${leagueId}, season ${season}...`);
   let allPlayers: ApiPlayerResponseItem[] = [];
   let currentPage = 1;
   let totalPages = 1; // Assume 1 initially
@@ -141,33 +126,25 @@ export async function fetchAllPlayersByLeagueAndSeason(
         page: currentPage.toString(),
       });
 
-      console.log(`Fetching page ${currentPage} of players...`);
       const apiResponse = await fetchFromApi<ApiPlayersResponse>('/players', params);
 
       if (!apiResponse || !apiResponse.response) {
-        console.warn(`No response data received for page ${currentPage}.`);
-        // Decide if we should continue or break
         break; 
       }
 
       allPlayers = allPlayers.concat(apiResponse.response);
       totalPages = apiResponse.paging.total; // Update total pages from the first response
 
-      console.log(`Fetched ${apiResponse.response.length} players from page ${currentPage}/${totalPages}. Total collected: ${allPlayers.length}`);
-
       currentPage++;
 
     } while (currentPage <= totalPages && currentPage < MAX_PAGES);
 
     if (currentPage >= MAX_PAGES) {
-        console.warn(`Stopped fetching players at page ${MAX_PAGES} due to safety limit.`);
     }
 
-    console.log(`Finished fetching players. Total found: ${allPlayers.length}`);
     return allPlayers;
 
-  } catch (error) {
-    console.error(`Failed to fetch all players for league ${leagueId}, season ${season}:`, error);
+  } catch (_error) {
     return null; // Indicate an error occurred during the process
   }
 }
@@ -285,12 +262,9 @@ export async function fetchComprehensiveMatchData(fixtureId: number): Promise<{
   fixture: ApiFixturesResponse;
   events: ApiEventsResponse;
   statistics: ApiStatisticsResponse;
-  playerStats: ApiPlayersStatsResponse;
+  playerStats: ApiPlayerMatchStats[];
 } | null> {
   try {
-    console.log(`Fetching comprehensive match data for fixture ${fixtureId}...`);
-
-    // Fetch all data in parallel for better performance
     const [fixture, events, statistics, playerStats] = await Promise.all([
       fetchFromApi<ApiFixturesResponse>('/fixtures', new URLSearchParams({ id: fixtureId.toString() })),
       fetchFixtureEvents(fixtureId),
@@ -298,16 +272,17 @@ export async function fetchComprehensiveMatchData(fixtureId: number): Promise<{
       fetchFixturePlayerStats(fixtureId),
     ]);
 
-    console.log(`Successfully fetched comprehensive data for fixture ${fixtureId}`);
+    // Flatten player stats from all teams
+    const allPlayerStats = playerStats?.response?.flatMap(teamStats => teamStats.players) ?? [];
+
     return {
       fixture,
       events,
       statistics,
-      playerStats,
+      playerStats: allPlayerStats,
     };
 
-  } catch (error) {
-    console.error(`Failed to fetch comprehensive match data for fixture ${fixtureId}:`, error);
+  } catch (_error) {
     return null;
   }
 } 

@@ -593,6 +593,13 @@ export type Database = {
           total_points: number
         }[]
       }
+      get_user_points_up_to_round: {
+        Args: { target_round_id: number }
+        Returns: {
+          user_id: string
+          total_points: number
+        }[]
+      }
       handle_dynamic_points_update: {
         Args: { p_round_id: number; p_dynamic_point_updates: Json }
         Returns: undefined

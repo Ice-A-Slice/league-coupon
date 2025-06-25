@@ -370,29 +370,25 @@ describe('Enhanced Football API Client', () => {
   });
 
   describe('Error handling', () => {
-    it.skip('should handle missing API key by creating a new module instance', async () => {
-      // Save original API key
+    it('should throw an error if the API key is missing', async () => {
+      // 1. Unset the environment variable
       const originalApiKey = process.env.NEXT_PUBLIC_FOOTBALL_API_KEY;
-      
+      delete process.env.NEXT_PUBLIC_FOOTBALL_API_KEY;
+
+      // 2. Reset modules to force re-evaluation of imports
+      jest.resetModules();
+
       try {
-        // Remove API key from environment
-        delete process.env.NEXT_PUBLIC_FOOTBALL_API_KEY;
+        // 3. Dynamically import the module AFTER the env var is changed
+        const { fetchFixtureEvents } = await import('../client');
         
-        // Import a fresh instance of the module to get the updated API_KEY constant  
-        await jest.isolateModules(async () => {
-          const clientModule = await import('../client');
-          const { fetchFixtureEvents } = clientModule;
-          
-          // This should throw because API_KEY will be undefined in the fresh module
-          await expect(fetchFixtureEvents(12345)).rejects.toThrow(
-            'Football API key is missing. Please set NEXT_PUBLIC_FOOTBALL_API_KEY in your environment variables.'
-          );
-        });
+        // 4. Assert that the function now throws the expected error
+        await expect(fetchFixtureEvents(12345)).rejects.toThrow(
+          'Football API key is missing. Please set NEXT_PUBLIC_FOOTBALL_API_KEY in your environment variables.'
+        );
       } finally {
-        // Always restore original API key
-        if (originalApiKey) {
-          process.env.NEXT_PUBLIC_FOOTBALL_API_KEY = originalApiKey;
-        }
+        // 5. Restore the environment variable to not affect other tests
+        process.env.NEXT_PUBLIC_FOOTBALL_API_KEY = originalApiKey;
       }
     });
   });
