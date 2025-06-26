@@ -66,20 +66,29 @@ export async function POST(request: Request) {
         const { EmailDataService } = await import('@/lib/emailDataService');
         const { supabaseServerClient } = await import('@/lib/supabase/server');
         
-        // Get user ID from email
-        const { data: userProfile } = await supabaseServerClient
-          .from('profiles')
-          .select('id')
-          .eq('email', userEmail)
-          .single();
+        // Get user ID from email (or create a test user ID if testing)
+        let userId: string;
+        
+        if (testMode) {
+          // In test mode, use a mock user ID
+          userId = 'test-user-' + Math.random().toString(36).substring(7);
+        } else {
+          const { data: userProfile } = await supabaseServerClient
+            .from('profiles')
+            .select('id')
+            .eq('email', userEmail)
+            .single();
 
-        if (!userProfile) {
-          throw new Error(`No user found with email: ${userEmail}`);
+          if (!userProfile) {
+            throw new Error(`No user found with email: ${userEmail}. Try using "testMode": true to bypass database lookup.`);
+          }
+          
+          userId = userProfile.id;
         }
 
         // Create service instance and get email props
         const emailDataService = new EmailDataService();
-        const emailProps = await emailDataService.getSummaryEmailProps(userProfile.id, roundId);
+        const emailProps = await emailDataService.getSummaryEmailProps(userId, roundId);
         
         // Send the email
         const result = await sendEmail({
@@ -123,20 +132,29 @@ export async function POST(request: Request) {
         const { ReminderEmailDataService } = await import('@/lib/reminderEmailDataService');
         const { supabaseServerClient } = await import('@/lib/supabase/server');
         
-        // Get user ID from email
-        const { data: userProfile } = await supabaseServerClient
-          .from('profiles')
-          .select('id')
-          .eq('email', userEmail)
-          .single();
+        // Get user ID from email (or create a test user ID if testing)
+        let userId: string;
+        
+        if (testMode) {
+          // In test mode, use a mock user ID
+          userId = 'test-user-' + Math.random().toString(36).substring(7);
+        } else {
+          const { data: userProfile } = await supabaseServerClient
+            .from('profiles')
+            .select('id')
+            .eq('email', userEmail)
+            .single();
 
-        if (!userProfile) {
-          throw new Error(`No user found with email: ${userEmail}`);
+          if (!userProfile) {
+            throw new Error(`No user found with email: ${userEmail}. Try using "testMode": true to bypass database lookup.`);
+          }
+          
+          userId = userProfile.id;
         }
 
         // Create service instance and get reminder data
         const reminderService = new ReminderEmailDataService();
-        const reminderData = await reminderService.getReminderEmailData(userProfile.id, roundId);
+        const reminderData = await reminderService.getReminderEmailData(userId, roundId);
         
         // Transform to email props
         const emailProps = await reminderService.transformToEmailProps(reminderData, userEmail);
