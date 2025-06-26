@@ -47,6 +47,7 @@ export async function GET(request: Request) {
     const failedOperations = results.filter(r => !r.success).length;
     const summaryEmails = results.filter(r => r.emailType === 'summary').length;
     const reminderEmails = results.filter(r => r.emailType === 'reminder').length;
+    const transparencyEmails = results.filter(r => r.emailType === 'transparency').length;
 
     const summary = {
       success: true,
@@ -57,6 +58,7 @@ export async function GET(request: Request) {
       failed_operations: failedOperations,
       summary_emails: summaryEmails,
       reminder_emails: reminderEmails,
+      transparency_emails: transparencyEmails,
       timestamp: new Date().toISOString()
     };
 
