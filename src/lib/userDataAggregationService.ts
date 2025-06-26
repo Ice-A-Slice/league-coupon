@@ -74,6 +74,37 @@ interface UserPointsUpToRound {
   total_points: number;
 }
 
+/**
+ * User prediction data for transparency email
+ */
+export interface UserPredictionData {
+  userId: string;
+  userName: string | null;
+  predictions: GamePrediction[];
+}
+
+/**
+ * Individual game prediction for transparency display
+ */
+export interface GamePrediction {
+  homeTeam: string;
+  awayTeam: string;
+  prediction: 'home' | 'draw' | 'away' | null; // Converted from 1/X/2
+}
+
+/**
+ * Transparency email data containing all users' predictions for a round
+ */
+export interface TransparencyEmailData {
+  roundId: number;
+  roundName: string;
+  users: UserPredictionData[];
+  games: {
+    homeTeam: string;
+    awayTeam: string;
+  }[];
+}
+
 // ===== CORE AGGREGATION SERVICE =====
 
 export class UserDataAggregationService {
@@ -184,6 +215,173 @@ export class UserDataAggregationService {
     } catch (error) {
       logger.error({ error }, 'Error aggregating performance data for all users');
       return [];
+    }
+  }
+
+  /**
+   * Get all users' predictions for a specific round - used for transparency emails
+   * This shows everyone's locked-in predictions when the first game kicks off
+   */
+  async getAllUsersPredictionsForRound(roundId: number): Promise<TransparencyEmailData | null> {
+    logger.info({ roundId }, 'Fetching all users predictions for transparency email');
+
+    try {
+      // Get round information
+      const { data: roundData, error: roundError } = await this.client
+        .from('betting_rounds')
+        .select('*')
+        .eq('id', roundId)
+        .single();
+
+      if (roundError || !roundData) {
+        logger.error({ roundId, error: roundError }, 'Failed to get round data');
+        return null;
+      }
+
+      // Get all fixtures for this round with team information
+      const { data: fixtures, error: fixturesError } = await this.client
+        .from('betting_round_fixtures')
+        .select(`
+          fixture_id,
+          fixtures!inner(
+            id,
+            kickoff,
+            home_team_id,
+            away_team_id,
+            home_teams:teams!fixtures_home_team_id_fkey(name),
+            away_teams:teams!fixtures_away_team_id_fkey(name)
+          )
+        `)
+        .eq('betting_round_id', roundId)
+        .order('fixtures(kickoff)', { ascending: true });
+
+      if (fixturesError || !fixtures) {
+        logger.error({ roundId, error: fixturesError }, 'Failed to get fixtures for round');
+        return null;
+      }
+
+      // Get all predictions for this round
+      const { data: predictions, error: predictionsError } = await this.client
+        .from('user_bets')
+        .select('user_id, fixture_id, prediction, submitted_at')
+        .eq('betting_round_id', roundId);
+
+      if (predictionsError) {
+        logger.error({ roundId, error: predictionsError }, 'Failed to get predictions for round');
+        return null;
+      }
+
+      // Get user data (emails and names) for all users who have predictions
+      const userIds = [...new Set(predictions?.map(p => p.user_id) || [])];
+      const userDataPromises = userIds.map(async (userId) => {
+        return await this.getUserProfile(userId);
+      });
+
+      const userDataResults = await Promise.allSettled(userDataPromises);
+      const userData = userDataResults
+        .filter((result): result is PromiseFulfilledResult<{ email: string; full_name: string | null } | null> => 
+          result.status === 'fulfilled' && result.value !== null
+        )
+        .map((result, index) => ({ userId: userIds[index], ...result.value }))
+        .filter((value): value is { userId: string; email: string; full_name: string | null } => value !== null);
+
+      // Transform fixtures data
+      const fixturesData = fixtures.map(f => ({
+        id: f.fixtures.id,
+        homeTeam: f.fixtures.home_teams?.name || 'Unknown',
+        awayTeam: f.fixtures.away_teams?.name || 'Unknown',
+        kickoffTime: f.fixtures.kickoff
+      }));
+
+      // Helper function to convert prediction codes to readable format
+      const convertPrediction = (prediction: string): 'home' | 'draw' | 'away' => {
+        switch (prediction) {
+          case '1': return 'home';
+          case 'X': return 'draw';
+          case '2': return 'away';
+          default: return 'home'; // fallback
+        }
+      };
+
+      // Group predictions by user
+      const userPredictions = new Map<string, {
+        userName: string | null;
+        userEmail: string;
+        predictions: Map<number, GamePrediction>;
+      }>();
+
+      // Initialize user data
+      userIds.forEach(userId => {
+        const user = userData.find(u => u.userId === userId);
+        
+        userPredictions.set(userId, {
+          userName: user?.full_name || null,
+          userEmail: user?.email || '',
+          predictions: new Map()
+        });
+      });
+
+      // Populate predictions
+      predictions?.forEach(prediction => {
+        const userData = userPredictions.get(prediction.user_id);
+        if (userData) {
+          const fixture = fixturesData.find(f => f.id === prediction.fixture_id);
+          if (fixture) {
+            userData.predictions.set(prediction.fixture_id, {
+              homeTeam: fixture.homeTeam,
+              awayTeam: fixture.awayTeam,
+              prediction: convertPrediction(prediction.prediction)
+            });
+          }
+        }
+      });
+
+      // Convert to final format, ensuring all users have predictions for all fixtures
+      const users: UserPredictionData[] = Array.from(userPredictions.entries()).map(([userId, userData]) => {
+        const userGamePredictions: GamePrediction[] = fixturesData.map(fixture => {
+          const existingPrediction = userData.predictions.get(fixture.id);
+          return existingPrediction || {
+            homeTeam: fixture.homeTeam,
+            awayTeam: fixture.awayTeam,
+            prediction: null // No prediction submitted
+          };
+        });
+
+        return {
+          userId,
+          userName: userData.userName,
+          predictions: userGamePredictions
+        };
+      });
+
+      // Sort users by name for consistent display
+      users.sort((a, b) => {
+        const nameA = a.userName || `Player ${a.userId}`;
+        const nameB = b.userName || `Player ${b.userId}`;
+        return nameA.localeCompare(nameB);
+      });
+
+      const transparencyData: TransparencyEmailData = {
+        roundId,
+        roundName: roundData.name,
+        users,
+        games: fixturesData.map(f => ({
+          homeTeam: f.homeTeam,
+          awayTeam: f.awayTeam
+        }))
+      };
+
+      logger.info({ 
+        roundId, 
+        userCount: users.length, 
+        fixtureCount: fixturesData.length 
+      }, 'Successfully fetched transparency email data');
+
+      return transparencyData;
+
+    } catch (error) {
+      logger.error({ roundId, error }, 'Error fetching transparency email data');
+      return null;
     }
   }
 
@@ -585,9 +783,9 @@ export async function getAllUsersPerformanceData(): Promise<UserPerformanceData[
  * Get top performers for email highlights
  */
 export async function getTopPerformers(limit: number = 5): Promise<UserPerformanceData[]> {
-  const allUsers = await getAllUsersPerformanceData();
-  return allUsers
-    .sort((a, b) => a.currentPosition - b.currentPosition)
+  const allUsersData = await getAllUsersPerformanceData();
+  return allUsersData
+    .sort((a, b) => b.totalPoints - a.totalPoints)
     .slice(0, limit);
 }
 
@@ -611,4 +809,12 @@ export async function getBiggestMovers(limit: number = 3): Promise<{
     .slice(0, limit);
 
   return { climbers, fallers };
+}
+
+/**
+ * Get transparency email data for a specific round - all users' predictions
+ */
+export async function getAllUsersPredictionsForRound(roundId: number): Promise<TransparencyEmailData | null> {
+  const service = new UserDataAggregationService();
+  return service.getAllUsersPredictionsForRound(roundId);
 } 
