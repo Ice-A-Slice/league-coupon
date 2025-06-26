@@ -253,8 +253,12 @@ describe('Resend Email Service', () => {
   });
 
   describe('getEmailServiceStatus', () => {
+    beforeEach(() => {
+      // Set EMAIL_TEST_MODE for these tests since it's deleted in the global beforeEach
+      process.env.EMAIL_TEST_MODE = 'true';
+    });
+
     test('should return status with test mode enabled', () => {
-      // EMAIL_TEST_MODE is set globally in jest.setup.cjs
       const status = getEmailServiceStatus();
       
       expect(status.configured).toBe(true);

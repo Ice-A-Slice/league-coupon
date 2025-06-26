@@ -1,17 +1,43 @@
 import { Resend } from 'resend';
 import { logger } from '@/utils/logger';
 
-// Environment variable validation
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const EMAIL_TEST_MODE = process.env.EMAIL_TEST_MODE === 'true';
+// Environment variable getters (lazy evaluation)
+const getResendApiKey = () => process.env.RESEND_API_KEY;
+const isEmailTestMode = () => process.env.EMAIL_TEST_MODE === 'true';
+const isBuildTime = () => process.env.NODE_ENV === 'production' && !process.env.RESEND_API_KEY && !process.env.EMAIL_TEST_MODE;
 
-if (!RESEND_API_KEY && !EMAIL_TEST_MODE) {
-  logger.error('Missing RESEND_API_KEY environment variable and not in test mode');
-  throw new Error('Resend API key is required when not in test mode');
-}
+// Initialize Resend client (lazy initialization)
+let resendClient: Resend | null = null;
+const getResendClient = (): Resend | null => {
+  // During build time, don't initialize the client
+  if (isBuildTime()) {
+    return null;
+  }
 
-// Initialize Resend client (only if not in test mode)
-const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
+  if (!resendClient) {
+    const apiKey = getResendApiKey();
+    if (apiKey) {
+      resendClient = new Resend(apiKey);
+    }
+  }
+  return resendClient;
+};
+
+// Validation function (called at runtime, not import time)
+const validateEnvironment = () => {
+  // Skip validation during build time
+  if (isBuildTime()) {
+    return;
+  }
+
+  const apiKey = getResendApiKey();
+  const testMode = isEmailTestMode();
+
+  if (!apiKey && !testMode) {
+    logger.error('Missing RESEND_API_KEY environment variable and not in test mode');
+    throw new Error('Resend API key is required when not in test mode');
+  }
+};
 
 // Types
 export interface EmailOptions {
@@ -116,13 +142,16 @@ function formatRecipientsForLog(recipients: string | string[]): string {
 export async function sendEmail(options: EmailOptions): Promise<EmailResponse> {
   const startTime = Date.now();
   
+  // Validate environment at runtime
+  validateEnvironment();
+  
   // Log email send attempt
   logger.info({
     action: 'email_send_start',
     to: formatRecipientsForLog(options.to),
     from: options.from,
     subject: options.subject,
-    testMode: EMAIL_TEST_MODE
+    testMode: isEmailTestMode()
   }, 'Starting email send');
 
   // Validate email options
@@ -143,7 +172,7 @@ export async function sendEmail(options: EmailOptions): Promise<EmailResponse> {
   }
 
   // Test mode - simulate sending without actual API call
-  if (EMAIL_TEST_MODE) {
+  if (isEmailTestMode()) {
     const mockId = `test_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     logger.info({
       action: 'email_send_test_mode',
@@ -160,6 +189,7 @@ export async function sendEmail(options: EmailOptions): Promise<EmailResponse> {
   }
 
   // Production mode - send actual email
+  const resend = getResendClient();
   if (!resend) {
     const errorMsg = 'Resend client not initialized';
     logger.error({ action: 'email_send_error', error: 'client_not_initialized' }, errorMsg);
@@ -261,11 +291,11 @@ export function getEmailServiceStatus(): {
   apiKeyPresent: boolean; 
 } {
   return {
-    configured: !!(RESEND_API_KEY || EMAIL_TEST_MODE),
-    testMode: EMAIL_TEST_MODE,
-    apiKeyPresent: !!RESEND_API_KEY
+    configured: !!(getResendApiKey() || isEmailTestMode()),
+    testMode: isEmailTestMode(),
+    apiKeyPresent: !!getResendApiKey()
   };
 }
 
 // Export the resend client for advanced usage (if needed)
-export { resend }; 
+export { getResendClient }; 
