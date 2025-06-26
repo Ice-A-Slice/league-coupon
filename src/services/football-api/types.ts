@@ -419,3 +419,182 @@ export interface ApiPlayersResponse {
   };
   response: ApiPlayerResponseItem[];
 }
+
+// === NEW ENHANCED API TYPES FOR STORY GENERATION ===
+
+/**
+ * Represents the time information for a match event
+ */
+export interface ApiEventTime {
+  elapsed: number; // Minutes elapsed
+  extra: number | null; // Extra time minutes
+}
+
+/**
+ * Represents the team information in an event
+ */
+export interface ApiEventTeam {
+  id: number;
+  name: string;
+  logo: string | null;
+}
+
+/**
+ * Represents the player information in an event
+ */
+export interface ApiEventPlayer {
+  id: number;
+  name: string;
+}
+
+/**
+ * Represents the assist information in a goal event
+ */
+export interface ApiEventAssist {
+  id: number | null;
+  name: string | null;
+}
+
+/**
+ * Represents a single match event (goal, card, substitution, VAR)
+ */
+export interface ApiEvent {
+  time: ApiEventTime;
+  team: ApiEventTeam;
+  player: ApiEventPlayer;
+  assist: ApiEventAssist | null;
+  type: 'Goal' | 'Card' | 'Subst' | 'Var';
+  detail: string; // e.g., "Normal Goal", "Yellow Card", "Substitution 1", etc.
+  comments: string | null;
+}
+
+/**
+ * Represents the response structure for /fixtures/events
+ */
+export interface ApiEventsResponse {
+  get: string;
+  parameters: Record<string, unknown>;
+  errors: unknown[];
+  results: number;
+  paging: {
+    current: number;
+    total: number;
+  };
+  response: ApiEvent[];
+}
+
+/**
+ * Represents a single statistic value for a team
+ */
+export interface ApiStatistic {
+  type: string; // e.g., "Shots on Goal", "Ball Possession", etc.
+  value: string | number | null; // Can be percentage, number, or null
+}
+
+/**
+ * Represents statistics for one team in a fixture
+ */
+export interface ApiTeamStatistics {
+  team: ApiEventTeam;
+  statistics: ApiStatistic[];
+}
+
+/**
+ * Represents the response structure for /fixtures/statistics
+ */
+export interface ApiStatisticsResponse {
+  get: string;
+  parameters: Record<string, unknown>;
+  errors: unknown[];
+  results: number;
+  paging: {
+    current: number;
+    total: number;
+  };
+  response: ApiTeamStatistics[];
+}
+
+/**
+ * Represents player statistics for a specific match
+ */
+export interface ApiPlayerMatchStats {
+  player: ApiPlayerDetails;
+  statistics: Array<{
+    games: {
+      minutes: number | null;
+      number: number | null;
+      position: string | null;
+      rating: string | null;
+      captain: boolean | null;
+      substitute: boolean | null;
+    };
+    offsides: number | null;
+    shots: {
+      total: number | null;
+      on: number | null;
+    };
+    goals: {
+      total: number | null;
+      conceded: number | null;
+      assists: number | null;
+      saves: number | null;
+    };
+    passes: {
+      total: number | null;
+      key: number | null;
+      accuracy: string | null;
+    };
+    tackles: {
+      total: number | null;
+      blocks: number | null;
+      interceptions: number | null;
+    };
+    duels: {
+      total: number | null;
+      won: number | null;
+    };
+    dribbles: {
+      attempts: number | null;
+      success: number | null;
+      past: number | null;
+    };
+    fouls: {
+      drawn: number | null;
+      committed: number | null;
+    };
+    cards: {
+      yellow: number | null;
+      red: number | null;
+    };
+    penalty: {
+      won: number | null;
+      commited: number | null;
+      scored: number | null;
+      missed: number | null;
+      saved: number | null;
+    };
+  }>;
+}
+
+/**
+ * Represents team-specific player statistics for a fixture
+ */
+export interface ApiTeamPlayerStats {
+  team: ApiEventTeam;
+  players: ApiPlayerMatchStats[];
+}
+
+/**
+ * Represents the response structure for /fixtures/players
+ */
+export interface ApiPlayersStatsResponse {
+  get: string;
+  parameters: Record<string, unknown>;
+  errors: unknown[];
+  results: number;
+  paging: {
+    current: number;
+    total: number;
+  };
+  response: ApiTeamPlayerStats[];
+}

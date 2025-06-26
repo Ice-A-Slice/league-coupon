@@ -4,6 +4,10 @@ import {
   ApiTeamsResponse,
   ApiPlayersResponse,
   ApiPlayerResponseItem,
+  ApiEventsResponse,
+  ApiStatisticsResponse,
+  ApiPlayersStatsResponse,
+  ApiPlayerMatchStats,
 } from './types';
 
 const API_BASE_URL = 'https://v3.football.api-sports.io';
@@ -34,33 +38,18 @@ async function fetchFromApi<T>(endpoint: string, params?: URLSearchParams): Prom
     url.search = params.toString();
   }
 
-  console.log(`Fetching from API: ${url.toString()}`); // Optional: for debugging
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    headers: commonHeaders,
+  });
 
-  try {
-    const response = await fetch(url.toString(), {
-      method: 'GET',
-      headers: commonHeaders,
-    });
-
-    if (!response.ok) {
-      throw new Error(`API request failed with status ${response.status}: ${response.statusText}`);
-    }
-
-    const data = await response.json() as T & { errors?: unknown[] | Record<string, unknown> };
-
-    // Check for API-level errors in the response body
-    if (data.errors && (Array.isArray(data.errors) ? data.errors.length > 0 : Object.keys(data.errors).length > 0)) {
-      console.error('API returned errors:', data.errors);
-      // Throw a more specific error or handle appropriately
-      throw new Error(`API returned errors: ${JSON.stringify(data.errors)}`);
-    }
-
-    return data;
-  } catch (error) {
-    console.error(`Error fetching ${endpoint}:`, error);
-    // Re-throw the error to be handled by the caller
-    throw error;
+  if (!response.ok) {
+    throw new Error(`API request failed with status ${response.status}: ${response.statusText}`);
   }
+
+  const data = (await response.json()) as T;
+  
+  return data;
 }
 
 /**
@@ -124,7 +113,6 @@ export async function fetchAllPlayersByLeagueAndSeason(
   leagueId: number,
   season: number
 ): Promise<ApiPlayerResponseItem[] | null> {
-  console.log(`Fetching ALL players for league ${leagueId}, season ${season}...`);
   let allPlayers: ApiPlayerResponseItem[] = [];
   let currentPage = 1;
   let totalPages = 1; // Assume 1 initially
@@ -138,33 +126,25 @@ export async function fetchAllPlayersByLeagueAndSeason(
         page: currentPage.toString(),
       });
 
-      console.log(`Fetching page ${currentPage} of players...`);
       const apiResponse = await fetchFromApi<ApiPlayersResponse>('/players', params);
 
       if (!apiResponse || !apiResponse.response) {
-        console.warn(`No response data received for page ${currentPage}.`);
-        // Decide if we should continue or break
         break; 
       }
 
       allPlayers = allPlayers.concat(apiResponse.response);
       totalPages = apiResponse.paging.total; // Update total pages from the first response
 
-      console.log(`Fetched ${apiResponse.response.length} players from page ${currentPage}/${totalPages}. Total collected: ${allPlayers.length}`);
-
       currentPage++;
 
     } while (currentPage <= totalPages && currentPage < MAX_PAGES);
 
     if (currentPage >= MAX_PAGES) {
-        console.warn(`Stopped fetching players at page ${MAX_PAGES} due to safety limit.`);
     }
 
-    console.log(`Finished fetching players. Total found: ${allPlayers.length}`);
     return allPlayers;
 
-  } catch (error) {
-    console.error(`Failed to fetch all players for league ${leagueId}, season ${season}:`, error);
+  } catch (_error) {
     return null; // Indicate an error occurred during the process
   }
 }
@@ -181,4 +161,128 @@ export async function fetchAllPlayersByLeagueAndSeason(
 // Example for fetching countries (can be expanded later)
 // export async function fetchCountries(): Promise<ApiCountriesResponse> {
 //   return fetchFromApi<ApiCountriesResponse>('/countries');
-// } 
+// }
+
+// === ENHANCED API FUNCTIONS FOR STORY GENERATION ===
+
+/**
+ * Fetches match events for a specific fixture.
+ * @param fixtureId The ID of the fixture.
+ * @param teamId Optional: Filter events by team ID.
+ * @param playerId Optional: Filter events by player ID.
+ * @param eventType Optional: Filter events by type ('Goal', 'Card', 'Subst', 'Var').
+ * @returns A promise resolving to the events data.
+ */
+export async function fetchFixtureEvents(
+  fixtureId: number,
+  options?: {
+    teamId?: number;
+    playerId?: number;
+    eventType?: 'Goal' | 'Card' | 'Subst' | 'Var';
+  }
+): Promise<ApiEventsResponse> {
+  const params = new URLSearchParams({
+    fixture: fixtureId.toString(),
+  });
+
+  if (options?.teamId) {
+    params.append('team', options.teamId.toString());
+  }
+  if (options?.playerId) {
+    params.append('player', options.playerId.toString());
+  }
+  if (options?.eventType) {
+    params.append('type', options.eventType.toLowerCase());
+  }
+
+  return fetchFromApi<ApiEventsResponse>('/fixtures/events', params);
+}
+
+/**
+ * Fetches match statistics for a specific fixture.
+ * @param fixtureId The ID of the fixture.
+ * @param teamId Optional: Filter statistics by team ID.
+ * @param statisticType Optional: Filter by specific statistic type.
+ * @param includeHalftime Optional: Include halftime statistics (available from 2024 season).
+ * @returns A promise resolving to the statistics data.
+ */
+export async function fetchFixtureStatistics(
+  fixtureId: number,
+  options?: {
+    teamId?: number;
+    statisticType?: string;
+    includeHalftime?: boolean;
+  }
+): Promise<ApiStatisticsResponse> {
+  const params = new URLSearchParams({
+    fixture: fixtureId.toString(),
+  });
+
+  if (options?.teamId) {
+    params.append('team', options.teamId.toString());
+  }
+  if (options?.statisticType) {
+    params.append('type', options.statisticType);
+  }
+  if (options?.includeHalftime) {
+    params.append('half', 'true');
+  }
+
+  return fetchFromApi<ApiStatisticsResponse>('/fixtures/statistics', params);
+}
+
+/**
+ * Fetches player statistics for a specific fixture.
+ * @param fixtureId The ID of the fixture.
+ * @param teamId Optional: Filter player statistics by team ID.
+ * @returns A promise resolving to the player statistics data.
+ */
+export async function fetchFixturePlayerStats(
+  fixtureId: number,
+  teamId?: number
+): Promise<ApiPlayersStatsResponse> {
+  const params = new URLSearchParams({
+    fixture: fixtureId.toString(),
+  });
+
+  if (teamId) {
+    params.append('team', teamId.toString());
+  }
+
+  return fetchFromApi<ApiPlayersStatsResponse>('/fixtures/players', params);
+}
+
+/**
+ * Enhanced function to fetch comprehensive match data including basic fixture info,
+ * events, statistics, and player performance for story generation.
+ * @param fixtureId The ID of the fixture.
+ * @returns A promise resolving to comprehensive match data or null on error.
+ */
+export async function fetchComprehensiveMatchData(fixtureId: number): Promise<{
+  fixture: ApiFixturesResponse;
+  events: ApiEventsResponse;
+  statistics: ApiStatisticsResponse;
+  playerStats: ApiPlayerMatchStats[];
+} | null> {
+  try {
+    const [fixture, events, statistics, playerStats] = await Promise.all([
+      fetchFromApi<ApiFixturesResponse>('/fixtures', new URLSearchParams({ id: fixtureId.toString() })),
+      fetchFixtureEvents(fixtureId),
+      fetchFixtureStatistics(fixtureId),
+      fetchFixturePlayerStats(fixtureId),
+    ]);
+
+    // Flatten player stats from all teams
+    const allPlayerStats = playerStats?.response?.flatMap(teamStats => teamStats.players) ?? [];
+
+    return {
+      fixture,
+      events,
+      statistics,
+      playerStats: allPlayerStats,
+    };
+
+  } catch (_error) {
+    return null;
+  }
+} 
