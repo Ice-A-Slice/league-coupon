@@ -2,6 +2,79 @@ import { NextResponse } from 'next/server';
 import { logger } from '@/utils/logger';
 
 /**
+ * GET /api/test-emails
+ * 
+ * Simple GET endpoint for testing emails via browser.
+ * Uses query parameters for configuration.
+ * 
+ * Query parameters:
+ * - type: 'summary' | 'reminder' | 'both' (default: 'both')
+ * - email: email address to send test to (default: test user)
+ * - round: specific round ID (optional)
+ * 
+ * Example: /api/test-emails?type=summary&email=test@example.com
+ */
+export async function GET(request: Request) {
+  const startTime = Date.now();
+  
+  try {
+    // Allow GET requests in any environment for easy testing
+    const url = new URL(request.url);
+    const emailType = url.searchParams.get('type') || 'both';
+    const userEmail = url.searchParams.get('email') || 'test@example.com';
+    const roundId = url.searchParams.get('round');
+    
+    // Validate email type
+    if (!['summary', 'reminder', 'both'].includes(emailType)) {
+      return NextResponse.json({ 
+        error: 'Invalid type. Must be: summary, reminder, or both',
+        usage: 'GET /api/test-emails?type=summary&email=test@example.com'
+      }, { status: 400 });
+    }
+
+    logger.info('GET email test triggered', {
+      emailType,
+      userEmail: userEmail.replace(/(.{2})(.*)(@.*)/, '$1***$3'), // Mask email for privacy
+      roundId,
+      environment: process.env.NODE_ENV,
+      testMode: process.env.EMAIL_TEST_MODE || 'false'
+    });
+
+    // Return test information instead of actually sending emails
+    const response = {
+      message: 'Email test endpoint accessed successfully',
+      parameters: {
+        emailType,
+        userEmail: userEmail.replace(/(.{2})(.*)(@.*)/, '$1***$3'),
+        roundId: roundId || 'latest',
+        testMode: process.env.EMAIL_TEST_MODE || 'false'
+      },
+      nextSteps: [
+        'This GET endpoint confirms the API is accessible',
+        'Use POST endpoint with proper authentication for actual email testing',
+        `Current test mode: ${process.env.EMAIL_TEST_MODE || 'false'}`,
+        'Set EMAIL_TEST_MODE=true to prevent sending real emails during testing'
+      ],
+      timestamp: new Date().toISOString(),
+      processingTime: `${Date.now() - startTime}ms`
+    };
+
+    return NextResponse.json(response, { status: 200 });
+
+  } catch (error) {
+    logger.error('Error in GET email test endpoint', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
+
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      message: error instanceof Error ? error.message : String(error)
+    }, { status: 500 });
+  }
+}
+
+/**
  * POST /api/test-emails
  * 
  * Manual email testing endpoint for development/staging.
