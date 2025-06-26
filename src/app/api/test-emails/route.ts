@@ -65,6 +65,7 @@ export async function POST(request: Request) {
         const { SummaryEmail } = await import('@/components/emails');
         const { EmailDataService } = await import('@/lib/emailDataService');
         const { supabaseServerClient } = await import('@/lib/supabase/server');
+        const React = await import('react');
         
         // Get user ID from email (or create a test user ID if testing)
         let userId: string;
@@ -95,7 +96,7 @@ export async function POST(request: Request) {
           to: userEmail,
           from: 'noreply@tippslottet.com',
           subject: `Week ${emailProps.roundNumber} Summary - Your Football Predictions`,
-          react: SummaryEmail(emailProps),
+          react: React.createElement(SummaryEmail, emailProps),
           tags: [
             { name: 'type', value: 'summary' },
             { name: 'source', value: 'manual-test' }
@@ -131,6 +132,7 @@ export async function POST(request: Request) {
         const { ReminderEmail } = await import('@/components/emails');
         const { ReminderEmailDataService } = await import('@/lib/reminderEmailDataService');
         const { supabaseServerClient } = await import('@/lib/supabase/server');
+        const React = await import('react');
         
         // Get user ID from email (or create a test user ID if testing)
         let userId: string;
@@ -163,8 +165,8 @@ export async function POST(request: Request) {
         const result = await sendEmail({
           to: userEmail,
           from: 'noreply@tippslottet.com',
-          subject: emailProps.subject,
-          react: ReminderEmail(emailProps),
+          subject: `${reminderData.fixtures.deadline?.isUrgent ? '🚨 Last Chance!' : '⏰ Reminder'} Round ${reminderData.roundContext.roundNumber} Predictions - ${reminderData.fixtures.deadline?.timeRemaining || 'Time Running Out'}`,
+          react: React.createElement(ReminderEmail, emailProps),
           tags: [
             { name: 'type', value: 'reminder' },
             { name: 'source', value: 'manual-test' }
@@ -179,7 +181,7 @@ export async function POST(request: Request) {
             email_preview: {
               roundNumber: reminderData.roundContext.roundNumber,
               hasSubmitted: reminderData.submissionStatus.hasSubmitted,
-              upcomingFixtures: reminderData.fixtures.upcomingFixtures.length
+              upcomingFixtures: reminderData.fixtures.fixtures.length
             }
           }
         });
