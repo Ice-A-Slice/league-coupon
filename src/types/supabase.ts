@@ -1,3 +1,4 @@
+
 export type Json =
   | string
   | number
@@ -7,6 +8,31 @@ export type Json =
   | Json[]
 
 export type Database = {
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          operationName?: string
+          query?: string
+          variables?: Json
+          extensions?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       betting_round_fixtures: {
@@ -50,6 +76,7 @@ export type Database = {
           id: number
           latest_fixture_kickoff: string | null
           name: string
+          reminder_sent_at: string | null
           scored_at: string | null
           status: Database["public"]["Enums"]["betting_round_status"]
           updated_at: string
@@ -61,6 +88,7 @@ export type Database = {
           id?: number
           latest_fixture_kickoff?: string | null
           name: string
+          reminder_sent_at?: string | null
           scored_at?: string | null
           status?: Database["public"]["Enums"]["betting_round_status"]
           updated_at?: string
@@ -72,6 +100,7 @@ export type Database = {
           id?: number
           latest_fixture_kickoff?: string | null
           name?: string
+          reminder_sent_at?: string | null
           scored_at?: string | null
           status?: Database["public"]["Enums"]["betting_round_status"]
           updated_at?: string
@@ -586,15 +615,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      get_user_total_points: {
-        Args: Record<PropertyKey, never>
+      get_user_points_up_to_round: {
+        Args: { target_round_id: number }
         Returns: {
           user_id: string
           total_points: number
         }[]
       }
-      get_user_points_up_to_round: {
-        Args: { target_round_id: number }
+      get_user_total_points: {
+        Args: Record<PropertyKey, never>
         Returns: {
           user_id: string
           total_points: number
@@ -725,6 +754,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       betting_round_status: ["open", "closed", "scoring", "scored"],
