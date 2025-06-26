@@ -63,17 +63,30 @@ export async function POST(request: Request) {
         // Import email services dynamically
         const { sendEmail } = await import('@/lib/resend');
         const { SummaryEmail } = await import('@/components/emails');
-        const { emailDataService } = await import('@/lib/emailDataService');
+        const { EmailDataService } = await import('@/lib/emailDataService');
+        const { supabaseServerClient } = await import('@/lib/supabase/server');
         
-        // Get email data (similar to what send-summary endpoint does)
-        const emailData = await emailDataService.getSummaryEmailData(userEmail, roundId);
+        // Get user ID from email
+        const { data: userProfile } = await supabaseServerClient
+          .from('profiles')
+          .select('id')
+          .eq('email', userEmail)
+          .single();
+
+        if (!userProfile) {
+          throw new Error(`No user found with email: ${userEmail}`);
+        }
+
+        // Create service instance and get email props
+        const emailDataService = new EmailDataService();
+        const emailProps = await emailDataService.getSummaryEmailProps(userProfile.id, roundId);
         
         // Send the email
         const result = await sendEmail({
           to: userEmail,
           from: 'noreply@tippslottet.com',
-          subject: emailData.subject,
-          react: SummaryEmail(emailData.props),
+          subject: `Week ${emailProps.roundNumber} Summary - Your Football Predictions`,
+          react: SummaryEmail(emailProps),
           tags: [
             { name: 'type', value: 'summary' },
             { name: 'source', value: 'manual-test' }
@@ -83,7 +96,14 @@ export async function POST(request: Request) {
         results.push({
           type: 'summary',
           success: result.success,
-          data: result
+          data: {
+            ...result,
+            email_preview: {
+              roundNumber: emailProps.roundNumber,
+              user: emailProps.user.name,
+              matchCount: emailProps.matches.length
+            }
+          }
         });
       } catch (error) {
         results.push({
@@ -100,17 +120,33 @@ export async function POST(request: Request) {
         // Import email services dynamically
         const { sendEmail } = await import('@/lib/resend');
         const { ReminderEmail } = await import('@/components/emails');
-        const { reminderEmailDataService } = await import('@/lib/reminderEmailDataService');
+        const { ReminderEmailDataService } = await import('@/lib/reminderEmailDataService');
+        const { supabaseServerClient } = await import('@/lib/supabase/server');
         
-        // Get email data (similar to what send-reminder endpoint does)
-        const emailData = await reminderEmailDataService.getReminderEmailData(userEmail, roundId);
+        // Get user ID from email
+        const { data: userProfile } = await supabaseServerClient
+          .from('profiles')
+          .select('id')
+          .eq('email', userEmail)
+          .single();
+
+        if (!userProfile) {
+          throw new Error(`No user found with email: ${userEmail}`);
+        }
+
+        // Create service instance and get reminder data
+        const reminderService = new ReminderEmailDataService();
+        const reminderData = await reminderService.getReminderEmailData(userProfile.id, roundId);
+        
+        // Transform to email props
+        const emailProps = await reminderService.transformToEmailProps(reminderData, userEmail);
         
         // Send the email
         const result = await sendEmail({
           to: userEmail,
           from: 'noreply@tippslottet.com',
-          subject: emailData.subject,
-          react: ReminderEmail(emailData.props),
+          subject: emailProps.subject,
+          react: ReminderEmail(emailProps),
           tags: [
             { name: 'type', value: 'reminder' },
             { name: 'source', value: 'manual-test' }
@@ -120,7 +156,14 @@ export async function POST(request: Request) {
         results.push({
           type: 'reminder',
           success: result.success,
-          data: result
+          data: {
+            ...result,
+            email_preview: {
+              roundNumber: reminderData.roundContext.roundNumber,
+              hasSubmitted: reminderData.submissionStatus.hasSubmitted,
+              upcomingFixtures: reminderData.fixtures.upcomingFixtures.length
+            }
+          }
         });
       } catch (error) {
         results.push({
