@@ -1,6 +1,7 @@
 // Email Templates
 export { default as SummaryEmail } from './SummaryEmail';
 export { default as ReminderEmail } from './ReminderEmail';
+export { TransparencyEmail } from './TransparencyEmail';
 
 // TypeScript Types for Summary Email
 export type {
@@ -18,4 +19,9 @@ export type {
   DeadlineInfo,
   AIMotivationalContent,
   ReminderEmailProps,
-} from './ReminderEmail'; 
+} from './ReminderEmail';
+
+// TypeScript Types for Transparency Email
+export type {
+  TransparencyEmailProps,
+} from './TransparencyEmail'; 

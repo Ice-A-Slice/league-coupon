@@ -17,6 +17,7 @@ export interface RoundTiming {
   reminderSendTime: string; // 24 hours before earliest kickoff
   isReminderDue: boolean;
   isSummaryDue: boolean;
+  isTransparencyDue: boolean;
 }
 
 /**
@@ -26,7 +27,7 @@ export interface SchedulingResult {
   success: boolean;
   message: string;
   roundId?: number;
-  emailType?: 'summary' | 'reminder';
+  emailType?: 'summary' | 'reminder' | 'transparency';
   scheduledTime?: string;
   errors?: string[];
 }
@@ -67,6 +68,10 @@ export class EmailSchedulerService {
       // Check for upcoming rounds (reminder emails)
       const reminderResults = await this.checkForReminderEmails();
       results.push(...reminderResults);
+
+      // Check for rounds that just started and need transparency emails
+      const transparencyResults = await this.checkForTransparencyEmails();
+      results.push(...transparencyResults);
 
       logger.info(`EmailScheduler: Scheduling check complete. Processed ${results.length} opportunities.`);
       return results;
@@ -288,6 +293,12 @@ export class EmailSchedulerService {
           const earliestKickoff = new Date(round.earliest_fixture_kickoff!); // Non-null assertion after filter
           const reminderSendTime = new Date(earliestKickoff.getTime() - (this.REMINDER_HOURS_BEFORE * 60 * 60 * 1000));
           
+          // Transparency email is due when the round has started (first game kicked off)
+          // Allow a small buffer (5 minutes) after kickoff to account for scheduling delays
+          const transparencyBufferMinutes = 5;
+          const transparencyDueTime = new Date(earliestKickoff.getTime() + (transparencyBufferMinutes * 60 * 1000));
+          const isTransparencyDue = now >= earliestKickoff && now <= transparencyDueTime;
+          
           return {
             roundId: round.id,
             roundName: round.name,
@@ -296,7 +307,8 @@ export class EmailSchedulerService {
             latestKickoff: round.latest_fixture_kickoff!,
             reminderSendTime: reminderSendTime.toISOString(),
             isReminderDue: now >= reminderSendTime,
-            isSummaryDue: false // Open rounds are never due for summary
+            isSummaryDue: false, // Open rounds are never due for summary
+            isTransparencyDue
           };
         });
 
@@ -480,6 +492,200 @@ export class EmailSchedulerService {
 
     } catch (error) {
       logger.error('EmailScheduler: Failed to get upcoming schedule', { error });
+      throw error;
+    }
+  }
+
+  /**
+   * Check for rounds that have just started and need transparency emails
+   */
+  async checkForTransparencyEmails(): Promise<SchedulingResult[]> {
+    logger.info('EmailScheduler: Checking for rounds that just started needing transparency emails...');
+    const results: SchedulingResult[] = [];
+
+    try {
+      // Get timing information for open rounds
+      const roundTimings = await this.getOpenRoundTimings();
+      
+      // Check each round for transparency email eligibility (round just started)
+      for (const timing of roundTimings) {
+        if (timing.isTransparencyDue) {
+          try {
+            logger.info(`EmailScheduler: Processing transparency email for started round ${timing.roundId}`, {
+              roundName: timing.roundName,
+              earliestKickoff: timing.earliestKickoff
+            });
+
+            // Check if transparency email was already sent
+            const alreadySent = await this.wasTransparencyAlreadySent(timing.roundId);
+            
+            if (alreadySent) {
+              logger.info(`EmailScheduler: Transparency email already sent for round ${timing.roundId}`);
+                             results.push({
+                 success: true,
+                 message: `Transparency email already sent for round ${timing.roundId}`,
+                 roundId: timing.roundId,
+                 emailType: 'transparency' as const,
+                 scheduledTime: timing.earliestKickoff
+               });
+              continue;
+            }
+
+            // Trigger transparency email
+            const triggerResult = await this.triggerTransparencyEmail(timing.roundId);
+            
+                         results.push({
+               success: triggerResult.success,
+               message: triggerResult.message,
+               roundId: timing.roundId,
+               emailType: 'transparency' as const,
+               scheduledTime: new Date().toISOString(),
+               errors: triggerResult.errors
+             });
+
+            if (triggerResult.success) {
+              logger.info(`EmailScheduler: Successfully triggered transparency email for round ${timing.roundId}`);
+              // Mark transparency as sent
+              await this.markTransparencyAsSent(timing.roundId);
+            } else {
+              logger.error(`EmailScheduler: Failed to trigger transparency email for round ${timing.roundId}`, {
+                errors: triggerResult.errors
+              });
+            }
+
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            logger.error(`EmailScheduler: Error processing transparency for round ${timing.roundId}`, { error: errorMessage });
+            
+                         results.push({
+               success: false,
+               message: `Failed to process transparency for round ${timing.roundId}: ${errorMessage}`,
+               roundId: timing.roundId,
+               emailType: 'transparency' as const,
+               errors: [errorMessage]
+             });
+          }
+        }
+      }
+
+      if (results.length === 0) {
+        logger.info('EmailScheduler: No rounds found that just started and need transparency emails');
+      }
+
+      return results;
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error during transparency check';
+      logger.error('EmailScheduler: Failed to check for transparency emails', { error: errorMessage });
+      
+             return [{
+         success: false,
+         message: `Transparency email check failed: ${errorMessage}`,
+         emailType: 'transparency' as const,
+         errors: [errorMessage]
+       }];
+    }
+  }
+
+  /**
+   * Trigger a transparency email for a started round
+   */
+  async triggerTransparencyEmail(roundId: number): Promise<EmailTriggerResult> {
+    logger.info(`EmailScheduler: Triggering transparency email for round ${roundId}`);
+
+    try {
+      const response = await fetch(`${this.API_BASE_URL}/api/send-transparency`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          round_id: roundId
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Transparency email API call failed: ${response.status} ${errorText}`);
+      }
+
+      const result = await response.json();
+      
+      return {
+        success: true,
+        message: `Transparency email triggered successfully for round ${roundId}`,
+        emailsSent: result.emails_sent || 0
+      };
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`EmailScheduler: Failed to trigger transparency email for round ${roundId}`, { error: errorMessage });
+      
+      return {
+        success: false,
+        message: `Failed to trigger transparency email for round ${roundId}`,
+        errors: [errorMessage]
+      };
+    }
+  }
+
+  /**
+   * Check if a transparency email was already sent for a round
+   */
+  async wasTransparencyAlreadySent(roundId: number): Promise<boolean> {
+    try {
+      const supabase = getSupabaseServiceRoleClient();
+      
+      logger.debug(`EmailScheduler: Checking transparency status for round ${roundId}`);
+      
+      const { data, error } = await supabase
+        .from('betting_rounds')
+        .select('transparency_sent_at')
+        .eq('id', roundId)
+        .single();
+
+      if (error) {
+        logger.warn(`EmailScheduler: Could not check transparency status for round ${roundId}`, { error: error.message });
+        return false; // Assume not sent if we can't check
+      }
+
+      const transparencySent = !!data?.transparency_sent_at;
+      logger.debug(`EmailScheduler: Round ${roundId} transparency status: ${transparencySent ? 'sent' : 'not sent'}`, {
+        transparency_sent_at: data?.transparency_sent_at
+      });
+
+      return transparencySent;
+
+    } catch (error) {
+      logger.warn(`EmailScheduler: Error checking transparency status for round ${roundId}`, { error });
+      return false; // Assume not sent if there's an error
+    }
+  }
+
+  /**
+   * Mark a transparency email as sent for a round
+   */
+  async markTransparencyAsSent(roundId: number): Promise<void> {
+    try {
+      const supabase = getSupabaseServiceRoleClient();
+      
+      const timestamp = new Date().toISOString();
+      logger.debug(`EmailScheduler: Marking transparency as sent for round ${roundId} at ${timestamp}`);
+      
+      const { error } = await supabase
+        .from('betting_rounds')
+        .update({ transparency_sent_at: timestamp })
+        .eq('id', roundId);
+
+      if (error) {
+        logger.error(`EmailScheduler: Failed to mark transparency as sent for round ${roundId}`, { error: error.message });
+        throw new Error(`Failed to mark transparency as sent: ${error.message}`);
+      }
+
+      logger.debug(`EmailScheduler: Successfully marked transparency as sent for round ${roundId}`);
+
+    } catch (error) {
+      logger.error(`EmailScheduler: Error marking transparency as sent for round ${roundId}`, { error });
       throw error;
     }
   }

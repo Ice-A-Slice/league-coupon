@@ -79,6 +79,7 @@ export type Database = {
           reminder_sent_at: string | null
           scored_at: string | null
           status: Database["public"]["Enums"]["betting_round_status"]
+          transparency_sent_at: string | null
           updated_at: string
         }
         Insert: {
@@ -91,6 +92,7 @@ export type Database = {
           reminder_sent_at?: string | null
           scored_at?: string | null
           status?: Database["public"]["Enums"]["betting_round_status"]
+          transparency_sent_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -103,6 +105,7 @@ export type Database = {
           reminder_sent_at?: string | null
           scored_at?: string | null
           status?: Database["public"]["Enums"]["betting_round_status"]
+          transparency_sent_at?: string | null
           updated_at?: string
         }
         Relationships: [
