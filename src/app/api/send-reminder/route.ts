@@ -1,0 +1,434 @@
+import { NextResponse } from 'next/server';
+import React from 'react';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { cookies } from 'next/headers';
+import { z } from 'zod';
+import { render } from '@react-email/render';
+import { ReminderEmail } from '@/components/emails/ReminderEmail';
+import { reminderEmailDataService } from '@/lib/reminderEmailDataService';
+import { sendEmail } from '@/lib/resend';
+import { emailMonitoringService } from '@/lib/emailMonitoringService';
+import { logger } from '@/utils/logger';
+
+/**
+ * Validation schema for reminder email request
+ */
+const reminderEmailRequestSchema = z.object({
+  user_ids: z.array(z.string().uuid()).optional(),
+  round_id: z.number().optional(),
+  test_mode: z.boolean().optional().default(false),
+  deadline_hours: z.number().min(1).max(168).optional().default(24), // 1 hour to 1 week
+  force_send: z.boolean().optional().default(false), // Send even to users who already submitted
+});
+
+type ReminderEmailRequest = z.infer<typeof reminderEmailRequestSchema>;
+
+/**
+ * POST /api/send-reminder
+ * 
+ * Send reminder emails to users about upcoming prediction deadlines.
+ * 
+ * Request body:
+ * - user_ids?: string[] - Optional array of user IDs. If not provided, sends to all active users
+ * - round_id?: number - Optional round ID. If not provided, uses current active round
+ * - test_mode?: boolean - If true, returns email preview instead of sending (default: false)
+ * - deadline_hours?: number - Hours before deadline to send reminder (default: 24, range: 1-168)
+ * 
+ * Environment variables:
+ * - EMAIL_TEST_MODE: If 'true', forces test mode regardless of request parameter
+ * 
+ * Returns:
+ * - 200: Success with email stats
+ * - 400: Invalid request parameters
+ * - 401: Unauthorized
+ * - 500: Server error
+ */
+export async function POST(request: Request) {
+  const operationId = emailMonitoringService.startOperation(
+    'reminder',
+    null,
+    0,
+    null
+  );
+
+  try {
+    // Parse and validate request body
+    const body = await request.json();
+    const validationResult = reminderEmailRequestSchema.safeParse(body);
+    
+    if (!validationResult.success) {
+      const errorMessage = 'Invalid request parameters for reminder email';
+      logger.error('ReminderEmailAPI: Validation failed', {
+        operationId,
+        errors: validationResult.error.errors,
+        requestBody: body
+      });
+
+      emailMonitoringService.recordError(operationId, 'validation', errorMessage, {
+        validationErrors: validationResult.error.errors,
+        requestBody: body
+      });
+
+      return NextResponse.json(
+        { 
+          success: false,
+          error: errorMessage,
+          details: validationResult.error.errors 
+        },
+        { status: 400 }
+      );
+    }
+
+    const payload: ReminderEmailRequest = validationResult.data;
+    
+    logger.info('ReminderEmailAPI: Processing reminder email request', {
+      operationId,
+      userIdsProvided: !!payload.user_ids,
+      userCount: payload.user_ids?.length || 'all',
+      roundId: payload.round_id || 'current',
+      testMode: payload.test_mode,
+      deadlineHours: payload.deadline_hours
+    });
+
+    // Create Supabase client for authentication
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+          set(name: string, value: string, options: CookieOptions) {
+            cookieStore.set({ name, value, ...options });
+          },
+          remove(name: string, options: CookieOptions) {
+            cookieStore.set({ name, value: '', ...options });
+          },
+        },
+      }
+    );
+
+    // Get authenticated user
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !user) {
+      const errorMessage = 'Authentication required';
+      logger.warn('ReminderEmailAPI: Authentication failed', {
+        operationId,
+        authError: authError?.message
+      });
+
+      emailMonitoringService.recordError(operationId, 'authentication', errorMessage, {
+        authError: authError?.message
+      });
+
+      return NextResponse.json(
+        { success: false, error: errorMessage },
+        { status: 401 }
+      );
+    }
+
+    // Check for test mode (environment variable overrides request parameter)
+    const isTestMode = process.env.EMAIL_TEST_MODE === 'true' || payload.test_mode;
+    
+    if (isTestMode) {
+      logger.info('ReminderEmailAPI: Running in test mode - will return email preview', {
+        operationId,
+        testModeSource: process.env.EMAIL_TEST_MODE === 'true' ? 'environment' : 'request'
+      });
+    }
+
+    // Handle test mode with realistic preview
+    if (isTestMode) {
+      try {
+        // Generate realistic test data using our service
+        const testUserId = 'test-user-id';
+        const testReminderData = await reminderEmailDataService.getReminderEmailData(
+          testUserId,
+          payload.round_id,
+          payload.deadline_hours
+        );
+        
+        const testEmailProps = await reminderEmailDataService.transformToEmailProps(
+          testReminderData,
+          'test@example.com',
+          'Test User'
+        );
+
+        const htmlContent = render(React.createElement(ReminderEmail, testEmailProps));
+        
+        const testResponse = {
+          success: true,
+          message: 'Test mode: Reminder email preview generated',
+          operation_id: operationId,
+          test_mode: true,
+          preview: htmlContent,
+          data: testEmailProps,
+          round_context: testReminderData.roundContext
+        };
+
+        emailMonitoringService.completeOperation(operationId, {
+          success: true,
+          totalSent: 1,
+          totalFailed: 0
+        });
+
+        return NextResponse.json(testResponse, { status: 200 });
+
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Test mode error';
+        logger.error('ReminderEmailAPI: Test mode failed', { operationId, error: errorMessage });
+        
+                 emailMonitoringService.recordError(operationId, 'template', errorMessage);
+        emailMonitoringService.completeOperation(operationId, {
+          success: false,
+          totalSent: 0,
+          totalFailed: 1
+        });
+
+        return NextResponse.json(
+          { success: false, error: 'Test mode failed', details: errorMessage },
+          { status: 500 }
+        );
+      }
+    }
+
+    // Production reminder email logic
+    let targetUsers: Array<{ id: string; email: string; name?: string }> = [];
+    
+    try {
+      if (payload.user_ids && payload.user_ids.length > 0) {
+        // Get specific users
+        const { data: users, error: usersError } = await supabase
+          .from('profiles')
+          .select('id, email, display_name')
+          .in('id', payload.user_ids);
+          
+        if (usersError) {
+          throw new Error(`Failed to fetch specific users: ${usersError.message}`);
+        }
+        
+        targetUsers = users?.map(user => ({
+          id: user.id,
+          email: user.email,
+          name: user.display_name
+        })) || [];
+        
+      } else {
+        // Get all active users
+        const { data: allUsers, error: allUsersError } = await supabase
+          .from('profiles')
+          .select('id, email, display_name')
+          .not('email', 'is', null);
+          
+        if (allUsersError) {
+          throw new Error(`Failed to fetch all users: ${allUsersError.message}`);
+        }
+        
+        targetUsers = allUsers?.map(user => ({
+          id: user.id,
+          email: user.email,
+          name: user.display_name
+        })) || [];
+      }
+      
+      logger.info(`ReminderEmailAPI: Targeting ${targetUsers.length} users for reminders`, {
+        operationId,
+        specificUsers: !!payload.user_ids
+      });
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch users';
+      logger.error('ReminderEmailAPI: Error fetching users', { operationId, error: errorMessage });
+      
+             emailMonitoringService.recordError(operationId, 'unknown', errorMessage);
+      emailMonitoringService.completeOperation(operationId, {
+        success: false,
+        totalSent: 0,
+        totalFailed: 1
+      });
+
+      return NextResponse.json(
+        { success: false, error: errorMessage },
+        { status: 500 }
+      );
+    }
+    
+    // Send reminder emails to each user
+    const emailResults: Array<{
+      userId: string;
+      email: string;
+      status: 'sent' | 'failed' | 'skipped';
+      emailId?: string;
+      error?: string;
+      reason?: string;
+      roundNumber?: number;
+    }> = [];
+    const batchSize = 10; // Process in batches to avoid overwhelming the service
+    
+    for (let i = 0; i < targetUsers.length; i += batchSize) {
+      const batch = targetUsers.slice(i, i + batchSize);
+      
+      const batchPromises = batch.map(async (targetUser) => {
+        try {
+          // Get personalized reminder data for this user
+          const reminderData = await reminderEmailDataService.getReminderEmailData(
+            targetUser.id,
+            payload.round_id,
+            payload.deadline_hours
+          );
+          
+          // Skip users who have already submitted (unless forced)
+          if (reminderData.submissionStatus.hasSubmitted && !payload.force_send) {
+            return {
+              userId: targetUser.id,
+              email: targetUser.email,
+              status: 'skipped' as const,
+              reason: 'Already submitted'
+            };
+          }
+          
+          // Transform to email props
+          const emailProps = await reminderEmailDataService.transformToEmailProps(
+            reminderData,
+            targetUser.email,
+            targetUser.name
+          );
+          
+          // Render email HTML
+          const htmlContent = await render(React.createElement(ReminderEmail, emailProps));
+          
+          // Send email via Resend
+          const emailResponse = await sendEmail({
+            from: process.env.RESEND_FROM_EMAIL || 'noreply@tippslottet.com',
+            to: targetUser.email,
+            subject: `⚽ ${reminderData.fixtures.deadline.isUrgent ? 'URGENT: ' : ''}Reminder: Submit your predictions for Round ${reminderData.roundContext.roundNumber}`,
+            html: htmlContent,
+            tags: [
+              { name: 'type', value: 'reminder' },
+              { name: 'round', value: reminderData.roundContext.roundNumber.toString() },
+              { name: 'urgent', value: reminderData.fixtures.deadline.isUrgent.toString() }
+            ]
+          });
+          
+          if (!emailResponse.success) {
+            throw new Error(emailResponse.error || 'Email sending failed');
+          }
+          
+          return {
+            userId: targetUser.id,
+            email: targetUser.email,
+            status: 'sent' as const,
+            emailId: emailResponse.id,
+            roundNumber: reminderData.roundContext.roundNumber
+          };
+          
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          logger.error(`ReminderEmailAPI: Failed to send reminder to user ${targetUser.id}`, { 
+            operationId, 
+            userId: targetUser.id, 
+            error: errorMessage 
+          });
+          
+          return {
+            userId: targetUser.id,
+            email: targetUser.email,
+            status: 'failed' as const,
+            error: errorMessage
+          };
+        }
+      });
+      
+      const batchResults = await Promise.allSettled(batchPromises);
+      
+      // Process batch results
+      batchResults.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          emailResults.push(result.value);
+        } else {
+          const user = batch[index];
+          emailResults.push({
+            userId: user.id,
+            email: user.email,
+            status: 'failed' as const,
+            error: result.reason
+          });
+        }
+      });
+      
+      // Add small delay between batches to avoid rate limiting
+      if (i + batchSize < targetUsers.length) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+    
+    // Calculate results summary
+    const summary = {
+      total: emailResults.length,
+      sent: emailResults.filter(r => r.status === 'sent').length,
+      failed: emailResults.filter(r => r.status === 'failed').length,
+      skipped: emailResults.filter(r => r.status === 'skipped').length
+    };
+    
+    logger.info('ReminderEmailAPI: Batch completed', { operationId, summary });
+    
+    // Complete monitoring operation
+    emailMonitoringService.completeOperation(operationId, {
+      success: true,
+      totalSent: summary.sent,
+      totalFailed: summary.failed
+    });
+
+    const response = {
+      success: true,
+      message: `Reminder emails processed: ${summary.sent} sent, ${summary.failed} failed, ${summary.skipped} skipped`,
+      operation_id: operationId,
+      round_id: payload.round_id || 'current',
+      deadline_hours: payload.deadline_hours,
+      summary,
+      results: emailResults.map(r => ({
+        userId: r.userId,
+        email: r.email,
+        status: r.status,
+        ...(r.status === 'sent' && { emailId: r.emailId }),
+        ...(r.status === 'failed' && { error: r.error }),
+        ...(r.status === 'skipped' && { reason: r.reason })
+      }))
+    };
+
+    return NextResponse.json(response, { status: 200 });
+
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    
+    logger.error('ReminderEmailAPI: Unexpected error', {
+      operationId,
+      error: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined
+    });
+
+    emailMonitoringService.recordError(operationId, 'unknown', errorMessage, {
+      stack: error instanceof Error ? error.stack : undefined
+    });
+
+    // Complete the operation as failed
+    emailMonitoringService.completeOperation(operationId, {
+      success: false,
+      totalSent: 0,
+      totalFailed: 1,
+      errors: [errorMessage]
+    });
+
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: 'Internal server error',
+        operation_id: operationId
+      },
+      { status: 500 }
+    );
+  }
+} 
