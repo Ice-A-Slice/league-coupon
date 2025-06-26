@@ -57,29 +57,33 @@ export async function POST(request: Request) {
 
     const results = [];
 
-    // Test Summary Email
+    // Test Summary Email - Using direct service calls instead of API routes
     if (emailType === 'summary' || emailType === 'both') {
       try {
-        const summaryResponse = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/send-summary`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${cronSecret}`
-          },
-          body: JSON.stringify({
-            userEmail,
-            roundId,
-            test_mode: testMode ?? true, // Default to test mode for manual testing
-            force: true // Force send even if timing isn't right
-          })
+        // Import email services dynamically
+        const { sendEmail } = await import('@/lib/resend');
+        const { SummaryEmail } = await import('@/components/emails');
+        const { emailDataService } = await import('@/lib/emailDataService');
+        
+        // Get email data (similar to what send-summary endpoint does)
+        const emailData = await emailDataService.getSummaryEmailData(userEmail, roundId);
+        
+        // Send the email
+        const result = await sendEmail({
+          to: userEmail,
+          from: 'noreply@tippslottet.com',
+          subject: emailData.subject,
+          react: SummaryEmail(emailData.props),
+          tags: [
+            { name: 'type', value: 'summary' },
+            { name: 'source', value: 'manual-test' }
+          ]
         });
 
-        const summaryData = await summaryResponse.json();
         results.push({
           type: 'summary',
-          success: summaryResponse.ok,
-          status: summaryResponse.status,
-          data: summaryData
+          success: result.success,
+          data: result
         });
       } catch (error) {
         results.push({
@@ -90,29 +94,33 @@ export async function POST(request: Request) {
       }
     }
 
-    // Test Reminder Email
+    // Test Reminder Email - Using direct service calls instead of API routes
     if (emailType === 'reminder' || emailType === 'both') {
       try {
-        const reminderResponse = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/send-reminder`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${cronSecret}`
-          },
-          body: JSON.stringify({
-            userEmail,
-            roundId,
-            test_mode: testMode ?? true, // Default to test mode for manual testing
-            force: true // Force send even if timing isn't right
-          })
+        // Import email services dynamically
+        const { sendEmail } = await import('@/lib/resend');
+        const { ReminderEmail } = await import('@/components/emails');
+        const { reminderEmailDataService } = await import('@/lib/reminderEmailDataService');
+        
+        // Get email data (similar to what send-reminder endpoint does)
+        const emailData = await reminderEmailDataService.getReminderEmailData(userEmail, roundId);
+        
+        // Send the email
+        const result = await sendEmail({
+          to: userEmail,
+          from: 'noreply@tippslottet.com',
+          subject: emailData.subject,
+          react: ReminderEmail(emailData.props),
+          tags: [
+            { name: 'type', value: 'reminder' },
+            { name: 'source', value: 'manual-test' }
+          ]
         });
 
-        const reminderData = await reminderResponse.json();
         results.push({
           type: 'reminder',
-          success: reminderResponse.ok,
-          status: reminderResponse.status,
-          data: reminderData
+          success: result.success,
+          data: result
         });
       } catch (error) {
         results.push({
