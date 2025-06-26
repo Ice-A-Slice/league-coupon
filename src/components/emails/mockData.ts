@@ -159,6 +159,61 @@ export const mockSummaryData: SummaryEmailProps = {
       type: 'performance',
     },
   ],
+  nextRoundPreview: {
+    roundNumber: 16,
+    keyFixtures: [
+      {
+        id: 101,
+        homeTeam: {
+          name: 'Liverpool',
+          form: 'WWDLW',
+        },
+        awayTeam: {
+          name: 'Manchester City',
+          form: 'WWWDW',
+        },
+        kickoffTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now
+        venue: 'Anfield',
+        importance: 'high',
+      },
+      {
+        id: 102,
+        homeTeam: {
+          name: 'Arsenal',
+          form: 'LWWWW',
+        },
+        awayTeam: {
+          name: 'Chelsea',
+          form: 'DWLWL',
+        },
+        kickoffTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000).toISOString(),
+        venue: 'Emirates Stadium',
+        importance: 'high',
+      },
+      {
+        id: 103,
+        homeTeam: {
+          name: 'Tottenham',
+          form: 'WLDWW',
+        },
+        awayTeam: {
+          name: 'Newcastle',
+          form: 'DLWWL',
+        },
+        kickoffTime: new Date(Date.now() + 8 * 24 * 60 * 60 * 1000).toISOString(),
+        venue: 'Tottenham Hotspur Stadium',
+        importance: 'medium',
+      },
+    ],
+    aiAnalysis: {
+      excitement: 'Round 16 promises to be explosive! The title race takes center stage with Liverpool hosting Manchester City at Anfield - a match that could define the season. Meanwhile, Arsenal look to maintain their momentum against a Chelsea side desperate for points.',
+      keyMatchups: [
+        'Liverpool vs Manchester City: The clash of titans at Anfield could swing the title race. Both teams are in excellent form, making this the most unpredictable fixture of the round.',
+        'Arsenal vs Chelsea: The North London powerhouse meets the inconsistent Blues. Arsenal\'s home fortress has been impenetrable, but Chelsea\'s attacking talent could cause problems.',
+      ],
+      predictions: 'Focus on home advantage this round - Liverpool and Arsenal both have fortress-like records at home. Manchester City\'s away form will be crucial, while Chelsea\'s inconsistency makes them a risky pick.',
+    },
+  },
   weekHighlights: {
     topPerformer: 'Sarah Chen (12 points)',
     biggestUpset: 'Sheffield United 3-2 Luton Town',

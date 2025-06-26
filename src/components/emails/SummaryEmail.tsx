@@ -59,12 +59,40 @@ export interface AIGeneratedStory {
   type: 'upset' | 'drama' | 'performance' | 'title_race' | 'form';
 }
 
+export interface UpcomingFixture {
+  id: number;
+  homeTeam: {
+    name: string;
+    logo?: string;
+    form?: string;
+  };
+  awayTeam: {
+    name: string;
+    logo?: string;
+    form?: string;
+  };
+  kickoffTime: string;
+  venue?: string;
+  importance?: 'low' | 'medium' | 'high';
+}
+
+export interface NextRoundPreview {
+  roundNumber: number;
+  keyFixtures: UpcomingFixture[];
+  aiAnalysis: {
+    excitement: string; // Why this round is exciting
+    keyMatchups: string[]; // Specific fixture previews
+    predictions: string; // AI prediction insights
+  };
+}
+
 export interface SummaryEmailProps {
   user: UserPerformance;
   roundNumber: number;
   matches: MatchResult[];
   leagueStandings: LeagueStanding[];
   aiStories: AIGeneratedStory[];
+  nextRoundPreview?: NextRoundPreview;
   weekHighlights?: {
     topPerformer: string;
     biggestUpset: string;
@@ -81,11 +109,12 @@ export const SummaryEmail: React.FC<SummaryEmailProps> = ({
   matches,
   leagueStandings,
   aiStories,
+  nextRoundPreview,
   weekHighlights,
   appUrl = baseUrl,
 }) => {
-  const positionChange = user.previousPosition 
-    ? user.currentPosition - user.previousPosition 
+  const positionChange = user.previousPosition
+    ? user.previousPosition - user.currentPosition  // Fixed: lower position number is better
     : 0;
 
   const getPositionChangeText = () => {
@@ -210,27 +239,61 @@ export const SummaryEmail: React.FC<SummaryEmailProps> = ({
             </Section>
           )}
 
-          {/* Call to Action */}
-          <Section style={section}>
-            <div style={ctaContainer}>
-              <Heading style={h3}>Ready for the next round?</Heading>
-              <Text style={ctaText}>
-                The next round opens soon. Make your predictions and climb the leaderboard!
-              </Text>
-              <Button style={button} href={`${appUrl}?utm_source=email&utm_medium=summary&utm_campaign=round_${String(roundNumber)}`}>
-                View League & Make Predictions
-              </Button>
-            </div>
-          </Section>
+          {/* Coming Up Next - Next Round Preview */}
+          {nextRoundPreview && (
+            <Section style={section}>
+              <Heading style={h2}>🔮 Coming Up Next: Round {String(nextRoundPreview.roundNumber)}</Heading>
+              
+              <div style={nextRoundCard}>
+                <Text style={nextRoundExcitement}>{nextRoundPreview.aiAnalysis.excitement}</Text>
+              </div>
 
-          {/* Footer */}
+              {/* Key Fixtures */}
+              <Heading style={h3}>Key Fixtures</Heading>
+              <div style={matchGrid}>
+                {nextRoundPreview.keyFixtures.map((fixture) => (
+                  <div key={fixture.id} style={fixtureCard}>
+                    <Text style={fixtureTeams}>{fixture.homeTeam.name} vs {fixture.awayTeam.name}</Text>
+                    <Text style={fixtureDetails}>
+                      {new Date(fixture.kickoffTime).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                    {fixture.importance === 'high' && (
+                      <Text style={importanceBadge}>🔥 High Importance</Text>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* AI Analysis */}
+              <div style={nextRoundCard}>
+                <Heading style={h3}>AI Breakdown</Heading>
+                {nextRoundPreview.aiAnalysis.keyMatchups.map((matchup, index) => (
+                  <Text key={index} style={aiAnalysisText}>- {matchup}</Text>
+                ))}
+                <Hr style={hr} />
+                <Text style={aiPredictionText}><strong>🔮 AI Prediction Tip:</strong> {nextRoundPreview.aiAnalysis.predictions}</Text>
+              </div>
+            </Section>
+          )}
+
+          {/* Call to Action */}
+          <Section style={ctaSection}>
+            <Heading style={h2}>Ready for the next round?</Heading>
+            <Button 
+              style={button} 
+              href={`${appUrl}?utm_source=email&utm_medium=summary&utm_campaign=round_${String(roundNumber)}`}
+              data-testid="summary-email-cta"
+            >
+              {nextRoundPreview ? 'Make Your Predictions' : 'View League & Make Predictions'}
+            </Button>
+          </Section>
+          
+          <Hr style={hr} />
           <Section style={footer}>
-            <Hr style={hr} />
             <Text style={footerText}>
-              You&apos;re receiving this because you&apos;re part of our Premier League prediction league.
+              You received this email because you are a user of the Premier League Coupon app.
               <br />
-              <a href={`${appUrl}/unsubscribe`} style={footerLink}>Unsubscribe</a> | 
-              <a href={`${appUrl}/settings`} style={footerLink}>Email Preferences</a>
+              This is an automated summary. For any issues, please contact support.
             </Text>
           </Section>
 
@@ -242,56 +305,54 @@ export const SummaryEmail: React.FC<SummaryEmailProps> = ({
 
 // Styles
 const main = {
-  backgroundColor: '#f6f9fc',
-  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Ubuntu, sans-serif',
+  backgroundColor: '#f3f4f6',
+  fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Ubuntu,sans-serif',
 };
 
 const container = {
   backgroundColor: '#ffffff',
   margin: '0 auto',
   padding: '20px 0 48px',
-  marginBottom: '64px',
+  width: '100%',
   maxWidth: '600px',
 };
 
 const header = {
-  padding: '32px 24px',
-  backgroundColor: '#1f2937',
-  borderRadius: '8px 8px 0 0',
+  padding: '0 30px',
   textAlign: 'center' as const,
+  marginBottom: '20px',
 };
 
 const h1 = {
-  color: '#ffffff',
-  fontSize: '32px',
+  color: '#1f2937',
+  fontSize: '28px',
   fontWeight: 'bold',
-  textAlign: 'center' as const,
-  margin: '0 0 8px 0',
-};
-
-const headerSubtext = {
-  color: '#d1d5db',
-  fontSize: '16px',
-  textAlign: 'center' as const,
-  margin: '0',
-};
-
-const section = {
-  padding: '24px',
+  margin: '0 0 10px 0',
 };
 
 const h2 = {
-  color: '#1f2937',
   fontSize: '24px',
   fontWeight: 'bold',
-  margin: '0 0 16px 0',
+  marginBottom: '20px',
+  color: '#1f2937',
 };
 
 const h3 = {
-  color: '#1f2937',
   fontSize: '20px',
   fontWeight: 'bold',
-  margin: '0 0 12px 0',
+  marginTop: '20px',
+  marginBottom: '10px',
+  color: '#374151',
+};
+
+const headerSubtext = {
+  fontSize: '14px',
+  color: '#6b7280',
+};
+
+const section = {
+  padding: '0 30px',
+  marginBottom: '30px',
 };
 
 const performanceCard = {
@@ -299,7 +360,6 @@ const performanceCard = {
   border: '1px solid #e5e7eb',
   borderRadius: '8px',
   padding: '20px',
-  marginBottom: '16px',
 };
 
 const performanceColumn = {
@@ -308,108 +368,146 @@ const performanceColumn = {
 };
 
 const performanceStat = {
-  textAlign: 'center' as const,
-  margin: '0 0 8px 0',
+  margin: '0 0 5px 0',
 };
 
 const performanceLabel = {
-  color: '#6b7280',
   fontSize: '14px',
+  color: '#6b7280',
 };
 
 const performanceChange = {
   fontSize: '14px',
-  fontWeight: 'bold',
-  textAlign: 'center' as const,
+  fontWeight: '500',
   margin: '0',
 };
 
 const performanceDetails = {
-  color: '#6b7280',
   fontSize: '14px',
+  color: '#6b7280',
   textAlign: 'center' as const,
-  margin: '0',
+  margin: '5px 0 0 0',
 };
 
 const bestPrediction = {
-  backgroundColor: '#fef3c7',
-  border: '1px solid #f59e0b',
-  borderRadius: '6px',
-  padding: '12px',
-  margin: '16px 0 0 0',
+  marginTop: '20px',
+  textAlign: 'center' as const,
   fontSize: '14px',
+  color: '#374151',
+  padding: '10px',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e5e7eb',
+  borderRadius: '6px',
 };
 
 const storyCard = {
-  backgroundColor: '#f0f9ff',
-  border: '1px solid #0ea5e9',
+  backgroundColor: '#ffffff',
+  border: '1px solid #e5e7eb',
   borderRadius: '8px',
   padding: '16px',
-  marginBottom: '12px',
+  marginBottom: '16px',
 };
 
 const storyHeadline = {
-  fontSize: '18px',
+  fontSize: '16px',
   fontWeight: 'bold',
-  color: '#0c4a6e',
+  color: '#1f2937',
   margin: '0 0 8px 0',
 };
 
 const storyContent = {
-  fontSize: '16px',
-  color: '#374151',
+  fontSize: '14px',
+  color: '#4b5563',
+  lineHeight: '1.6',
   margin: '0',
-  lineHeight: '1.5',
+};
+
+const aiAnalysisText = {
+  ...storyContent,
+  marginBottom: '10px',
+};
+
+const aiPredictionText = {
+  ...storyContent,
+  fontStyle: 'italic',
+  backgroundColor: '#f9fafb',
+  padding: '10px',
+  borderRadius: '6px',
+  border: '1px solid #f3f4f6',
 };
 
 const matchGrid = {
   display: 'grid',
-  gap: '12px',
+  gridTemplateColumns: '1fr 1fr',
+  gap: '10px',
 };
 
 const matchCard = {
   backgroundColor: '#ffffff',
+  borderRadius: '8px',
+  padding: '15px',
+  textAlign: 'center' as const,
+  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+  marginBottom: '10px', // For single column layout
+};
+
+const fixtureCard = {
+  ...matchCard,
   border: '1px solid #e5e7eb',
-  borderRadius: '6px',
-  padding: '16px',
 };
 
 const matchTeams = {
   display: 'flex',
-  alignItems: 'center',
   justifyContent: 'space-between',
-  marginBottom: '8px',
+  alignItems: 'center',
 };
 
 const teamName = {
-  fontSize: '16px',
-  fontWeight: '500',
+  fontSize: '14px',
+  fontWeight: '600',
+  color: '#374151',
+  margin: '0 0 5px 0',
+};
+
+const fixtureTeams = {
+  fontSize: '15px',
+  fontWeight: 'bold',
   color: '#1f2937',
+  margin: '0 0 8px 0',
+};
+
+const fixtureDetails = {
+  fontSize: '13px',
+  color: '#6b7280',
   margin: '0',
-  flex: '1',
 };
 
 const matchScore = {
-  fontSize: '20px',
+  fontSize: '16px',
   fontWeight: 'bold',
-  color: '#059669',
-  margin: '0 16px',
-  textAlign: 'center' as const,
+  color: '#1f2937',
+  margin: '0 10px',
 };
 
 const dramaticBadge = {
-  backgroundColor: '#fbbf24',
-  color: '#92400e',
+  display: 'inline-block',
+  backgroundColor: '#fef2f2',
+  color: '#dc2626',
+  padding: '2px 8px',
+  borderRadius: '12px',
   fontSize: '12px',
-  fontWeight: 'bold',
-  padding: '4px 8px',
-  borderRadius: '4px',
-  textAlign: 'center' as const,
-  margin: '0',
+  fontWeight: '500',
+  marginTop: '10px',
+};
+
+const importanceBadge = {
+  ...dramaticBadge,
+  backgroundColor: '#fffbeb',
+  color: '#d97706',
+  marginTop: '12px',
 };
 
 const tableContainer = {
-  backgroundColor: '#ffffff',
   border: '1px solid #e5e7eb',
   borderRadius: '8px',
   overflow: 'hidden',
@@ -418,103 +516,98 @@ const tableContainer = {
 const tableRow = {
   display: 'flex',
   alignItems: 'center',
-  padding: '12px 16px',
-  borderBottom: '1px solid #f3f4f6',
+  padding: '10px 15px',
+  borderBottom: '1px solid #e5e7eb',
 };
 
 const tablePosition = {
-  fontSize: '16px',
+  fontSize: '14px',
   fontWeight: 'bold',
-  color: '#1f2937',
-  width: '40px',
-  margin: '0',
+  color: '#6b7280',
+  width: '30px',
 };
 
 const tableTeam = {
-  fontSize: '16px',
+  fontSize: '14px',
+  fontWeight: '500',
   color: '#1f2937',
   flex: '1',
-  margin: '0',
 };
 
 const tablePoints = {
-  fontSize: '16px',
+  fontSize: '14px',
   fontWeight: 'bold',
-  color: '#059669',
+  color: '#1f2937',
   width: '60px',
   textAlign: 'right' as const,
-  margin: '0',
 };
 
 const tableStats = {
-  fontSize: '14px',
+  fontSize: '12px',
   color: '#6b7280',
   width: '120px',
   textAlign: 'right' as const,
-  margin: '0',
 };
 
 const highlightsCard = {
-  backgroundColor: '#fef7ff',
-  border: '1px solid #c084fc',
+  backgroundColor: '#f9fafb',
+  border: '1px solid #e5e7eb',
   borderRadius: '8px',
   padding: '16px',
 };
 
 const highlight = {
-  fontSize: '16px',
+  fontSize: '14px',
   color: '#374151',
   margin: '0 0 8px 0',
-  lineHeight: '1.5',
 };
 
-const ctaContainer = {
-  textAlign: 'center' as const,
-  padding: '24px',
+const nextRoundCard = {
   backgroundColor: '#f9fafb',
+  border: '1px solid #e5e7eb',
   borderRadius: '8px',
+  padding: '20px',
+  marginBottom: '20px',
 };
 
-const ctaText = {
-  fontSize: '16px',
-  color: '#6b7280',
-  margin: '0 0 20px 0',
-  lineHeight: '1.5',
+const nextRoundExcitement = {
+  fontSize: '15px',
+  color: '#374151',
+  lineHeight: '1.6',
+  margin: '0',
+  fontStyle: 'italic',
+};
+
+const ctaSection = {
+  textAlign: 'center' as const,
+  padding: '30px',
 };
 
 const button = {
-  backgroundColor: '#059669',
-  borderRadius: '6px',
+  backgroundColor: '#2563eb',
   color: '#ffffff',
-  fontSize: '16px',
+  padding: '14px 24px',
+  borderRadius: '8px',
   textDecoration: 'none',
-  textAlign: 'center' as const,
-  display: 'inline-block',
-  padding: '12px 24px',
   fontWeight: 'bold',
-};
-
-const footer = {
-  padding: '24px',
+  fontSize: '16px',
+  display: 'inline-block',
 };
 
 const hr = {
   borderColor: '#e5e7eb',
-  margin: '0 0 20px 0',
+  margin: '20px 0',
+};
+
+const footer = {
+  color: '#6b7280',
+  fontSize: '12px',
+  textAlign: 'center' as const,
+  marginTop: '20px',
 };
 
 const footerText = {
-  color: '#6b7280',
-  fontSize: '14px',
-  textAlign: 'center' as const,
-  margin: '0',
   lineHeight: '1.5',
-};
-
-const footerLink = {
-  color: '#059669',
-  textDecoration: 'underline',
-  margin: '0 8px',
 };
 
 export default SummaryEmail; 

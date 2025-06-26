@@ -1,4 +1,4 @@
-import { MatchAnalysisService } from '../matchAnalysisService';
+import { MatchAnalysisService, type MatchAnalysisData } from '../matchAnalysisService';
 import { generateAIContent, isAIAvailable } from '../openai';
 
 // Mock dependencies
@@ -21,23 +21,23 @@ jest.mock('../../utils/logger', () => ({
 describe('MatchAnalysisService', () => {
   let service: MatchAnalysisService;
 
-  const mockCompletedMatch: MatchData = {
+  const mockCompletedMatch: MatchAnalysisData = {
     id: 1,
     status: 'completed',
-    homeTeam: { id: 1, name: 'Manchester United', logo: '', form: 'WWLWD' },
-    awayTeam: { id: 2, name: 'Liverpool', logo: '', form: 'WWDLL' },
+    homeTeam: { name: 'Manchester United', form: 'WWLWD' },
+    awayTeam: { name: 'Liverpool', form: 'WWDLL' },
     homeScore: 2,
     awayScore: 1,
     kickoff: new Date().toISOString(),
   };
 
-  const mockUpcomingMatch: MatchData = {
+  const mockUpcomingMatch: MatchAnalysisData = {
     id: 2,
     status: 'upcoming',
-    homeTeam: { id: 3, name: 'Arsenal', logo: '', form: 'WWWWW' },
-    awayTeam: { id: 4, name: 'Chelsea', logo: '', form: 'LDWLW' },
-    homeScore: null,
-    awayScore: null,
+    homeTeam: { name: 'Arsenal', form: 'WWWWW' },
+    awayTeam: { name: 'Chelsea', form: 'LDWLW' },
+    homeScore: undefined,
+    awayScore: undefined,
     kickoff: new Date().toISOString(),
   };
 
@@ -100,13 +100,17 @@ describe('MatchAnalysisService', () => {
       });
 
       it('should handle matches with detailed stats', async () => {
-        const matchWithStats = {
+        const matchWithStats: MatchAnalysisData = {
           ...mockCompletedMatch,
-          stats: { shots: '15-8', possession: '60-40', xg: '2.1-0.9' }
+          stats: { 
+            shots: { home: 15, away: 8 }, 
+            possession: { home: 60, away: 40 },
+            shotsOnTarget: { home: 5, away: 2 }
+          }
         };
         await service.analyzeMatch(matchWithStats);
         expect(generateAIContent).toHaveBeenCalledWith(
-          expect.stringContaining('"possession":"60-40"'),
+          expect.stringContaining('"possession":{"home":60,"away":40}'),
           expect.any(Object)
         );
       });
@@ -149,10 +153,10 @@ describe('MatchAnalysisService', () => {
   });
 
   describe('Round Analysis', () => {
-    const mockRoundMatches: MatchData[] = [
+    const mockRoundMatches: MatchAnalysisData[] = [
       mockCompletedMatch,
-      { ...mockUpcomingMatch, homeTeam: { id: 5, name: 'Spurs', logo: '', form: 'LLWWD' }, awayTeam: { id: 6, name: 'Man City', logo: '', form: 'WWWWL' } },
-      { id: 3, status: 'completed', homeScore: 3, awayScore: 0, homeTeam: { id: 3, name: 'Arsenal', logo: '', form: 'WWWWW' }, awayTeam: { id: 7, name: 'Fulham', logo: '', form: 'LDLLL' }, kickoff: new Date().toISOString() },
+      { ...mockUpcomingMatch, homeTeam: { name: 'Spurs', form: 'LLWWD' }, awayTeam: { name: 'Man City', form: 'WWWWL' } },
+      { id: 3, status: 'completed', homeScore: 3, awayScore: 0, homeTeam: { name: 'Arsenal', form: 'WWWWW' }, awayTeam: { name: 'Fulham', form: 'LDLLL' }, kickoff: new Date().toISOString() },
     ];
 
     it('should analyze round trends successfully', async () => {
@@ -185,9 +189,9 @@ describe('MatchAnalysisService', () => {
   });
 
   describe('Prediction Insights', () => {
-    const mockUpcomingMatches: MatchData[] = [
+    const mockUpcomingMatches: MatchAnalysisData[] = [
         mockUpcomingMatch,
-        { id: 4, status: 'upcoming', homeTeam: { id: 1, name: 'Manchester United', logo: '', form: 'WWLWD' }, awayTeam: { id: 3, name: 'Arsenal', logo: '', form: 'WWWWW' }, homeScore: null, awayScore: null, kickoff: new Date().toISOString() },
+        { id: 4, status: 'upcoming', homeTeam: { name: 'Manchester United', form: 'WWLWD' }, awayTeam: { name: 'Arsenal', form: 'WWWWW' }, homeScore: undefined, awayScore: undefined, kickoff: new Date().toISOString() },
     ];
 
     it('should generate prediction insights for upcoming matches', async () => {
@@ -201,7 +205,7 @@ describe('MatchAnalysisService', () => {
     });
 
     it('should handle matches without form data', async () => {
-      const matchesWithoutForm = [{ ...mockUpcomingMatch, homeTeam: { id: 1, name: 'United', logo: '' }, awayTeam: { id: 3, name: 'Arsenal', logo: '' } }];
+      const matchesWithoutForm = [{ ...mockUpcomingMatch, homeTeam: { name: 'United' }, awayTeam: { name: 'Arsenal' } }];
       (generateAIContent as jest.Mock).mockResolvedValue('Basic prediction insights');
 
       const result = await service.generatePredictionInsights(matchesWithoutForm);
