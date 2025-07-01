@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, forwardRef, useImperativeHandle } from "react";
+import React, { useState, useEffect, forwardRef, useImperativeHandle } from "react";
 // import debounce from 'lodash.debounce'; // REMOVED debounce import
 import TeamSelect from "./TeamSelect";
 import PlayerSelect from "./PlayerSelect";
@@ -9,6 +9,7 @@ import SectionContainer from "@/components/layout";
 import { validatePrediction } from "@/schemas/questionnaireSchema";
 import ValidationStatusIndicator from '@/components/ui/ValidationStatusIndicator';
 import { cn } from '@/lib/utils';
+import { useLocalStorage } from '@/lib/hooks/useLocalStorage';
 // import { Combobox } from '@headlessui/react';
 // import { CheckIcon, ChevronUpDownIcon } from '@heroicons/react/20/solid';
 
@@ -40,13 +41,38 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
   onToggleVisibility,
   validationErrors
 }, ref) => {
-  // State for predictions
-  const [predictions, setPredictions] = useState<Prediction>(initialPredictions);
+  // Use localStorage for predictions with fallback to initialPredictions
+  const [predictions, setPredictions] = useLocalStorage<Prediction>(
+    'betting-predictions',
+    initialPredictions
+  );
   // Use the passed-in errors for display, default to empty object
   const errors = validationErrors || {};
   // Keep internal errors for immediate feedback from Zod validation (optional)
   const [internalErrors, setInternalErrors] = useState<{[key: string]: string}>({});
   const [isContentVisible, setIsContentVisible] = useState(true);
+  
+  // Sync with initialPredictions if they change externally (only if localStorage is empty)
+  useEffect(() => {
+    // Only override localStorage if there are actual initialPredictions and localStorage is truly empty
+    // We need to check if this is the initial load vs. a user action that cleared values
+    const hasStoredData = Object.values(predictions).some(value => value !== null);
+    const hasInitialData = Object.values(initialPredictions).some(value => value !== null);
+    
+    // Only sync on the very first render when localStorage is truly empty
+    // Don't override user actions that set values to null
+    if (hasInitialData && !hasStoredData) {
+      // Check if this is the initial render by seeing if all values are exactly the initial state
+      const isInitialState = Object.keys(predictions).every(key =>
+        predictions[key as PredictionKeys] === initialPredictions[key as PredictionKeys]
+      );
+      
+      if (isInitialState) {
+        setPredictions(initialPredictions);
+      }
+    }
+  }, [initialPredictions, predictions, setPredictions]);
+  
   // Remove state related to the direct Headless UI combobox
   // const [query, setQuery] = useState('');
   // const [selectedLeagueWinner, setSelectedLeagueWinner] = useState<Team | null>(null);

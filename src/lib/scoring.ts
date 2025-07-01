@@ -56,6 +56,19 @@ export interface ProcessDynamicPointsResult {
   };
 }
 
+// Interface for non-participant scoring result
+export interface NonParticipantScoringResult {
+  success: boolean;
+  message: string;
+  details?: {
+    nonParticipantsProcessed: number;
+    minimumParticipantScore: number | null;
+    participantCount: number;
+    nonParticipantCount: number;
+    error?: unknown;
+  };
+}
+
 /**
  * Calculates and updates points awarded for user bets within a specific betting round.
  * Assumes the round is confirmed complete and ready for scoring.
@@ -337,6 +350,21 @@ export async function calculateAndStoreMatchPoints(
     logger.info({ bettingRoundId }, "Dynamic points processing completed for the round.");
     // --- END ADDED SECTION ---
 
+    // --- NEW: Apply non-participant scoring rule ---
+    logger.info({ bettingRoundId }, "Applying non-participant scoring rule...");
+    const nonParticipantResult = await applyNonParticipantScoringRule(bettingRoundId, client);
+    if (!nonParticipantResult.success) {
+        logger.warn({ 
+            bettingRoundId, 
+            message: nonParticipantResult.message, 
+            error: nonParticipantResult.details?.error 
+        }, "Non-participant scoring rule failed, but main scoring succeeded.");
+        // Continue with success since main scoring worked
+    } else {
+        logger.info({ bettingRoundId, details: nonParticipantResult.details }, nonParticipantResult.message);
+    }
+    // --- END NEW SECTION ---
+
     // 7. Final success result (now indicates both match and dynamic points were attempted)
     const duration = Date.now() - startTime;
     logger.info({ bettingRoundId, durationMs: duration }, `Scoring completed successfully (match and dynamic).`);
@@ -550,7 +578,195 @@ export async function processAndStoreDynamicPointsForRound(
   }
 }
 
-// Helper function (can be defined here or imported)
+/**
+ * Applies the non-participant scoring rule:
+ * Users who didn't submit any bets for a round get the same points as the lowest-scoring participant.
+ * 
+ * @param bettingRoundId The ID of the betting round to apply the rule to
+ * @param client A Supabase client instance
+ * @returns Promise<NonParticipantScoringResult> Result of the operation
+ */
+export async function applyNonParticipantScoringRule(
+  bettingRoundId: BettingRoundId,
+  client: SupabaseClient<Database>
+): Promise<NonParticipantScoringResult> {
+  try {
+    // 1. Get all users who participated in this round (have at least one bet)
+    const { data: participantData, error: participantError } = await client
+      .from('user_bets')
+      .select('user_id')
+      .eq('betting_round_id', bettingRoundId);
+
+    if (participantError) {
+      logger.error({ bettingRoundId, error: participantError }, "Failed to fetch participants for non-participant scoring");
+      return { 
+        success: false, 
+        message: "Failed to fetch participants", 
+        details: { nonParticipantsProcessed: 0, minimumParticipantScore: null, participantCount: 0, nonParticipantCount: 0, error: participantError } 
+      };
+    }
+
+    // Get unique participant user IDs
+    const participantUserIds = new Set(participantData?.map(bet => bet.user_id) || []);
+    
+    if (participantUserIds.size === 0) {
+      logger.info({ bettingRoundId }, "No participants found - everyone gets 0 points by default");
+      return { 
+        success: true, 
+        message: "No participants found - no non-participant scoring needed", 
+        details: { nonParticipantsProcessed: 0, minimumParticipantScore: null, participantCount: 0, nonParticipantCount: 0 } 
+      };
+    }
+
+    // 2. Calculate the minimum score among participants
+    // Get all user points for this round by summing their individual bet points
+    const { data: userPointsData, error: userPointsError } = await client
+      .from('user_bets')
+      .select('user_id, points_awarded')
+      .eq('betting_round_id', bettingRoundId)
+      .not('points_awarded', 'is', null);
+
+    if (userPointsError) {
+      logger.error({ bettingRoundId, error: userPointsError }, "Failed to fetch user points for minimum calculation");
+      return { 
+        success: false, 
+        message: "Failed to fetch user points", 
+        details: { nonParticipantsProcessed: 0, minimumParticipantScore: null, participantCount: participantUserIds.size, nonParticipantCount: 0, error: userPointsError } 
+      };
+    }
+
+    // Sum points by user
+    const userPointTotals = new Map<string, number>();
+    (userPointsData || []).forEach(bet => {
+      const currentTotal = userPointTotals.get(bet.user_id) || 0;
+      userPointTotals.set(bet.user_id, currentTotal + (bet.points_awarded || 0));
+    });
+
+    if (userPointTotals.size === 0) {
+      logger.info({ bettingRoundId }, "No scored bets found yet - non-participant scoring skipped");
+      return { 
+        success: true, 
+        message: "No scored bets found yet - non-participant scoring skipped", 
+        details: { nonParticipantsProcessed: 0, minimumParticipantScore: null, participantCount: participantUserIds.size, nonParticipantCount: 0 } 
+      };
+    }
+
+    // Find minimum score among participants
+    const minimumScore = Math.min(...Array.from(userPointTotals.values()));
+    logger.info({ bettingRoundId, minimumScore, participantCount: userPointTotals.size }, "Found minimum participant score");
+
+    // 3. Get all users in the system
+    const { data: allUsersData, error: allUsersError } = await client
+      .from('profiles')
+      .select('id');
+
+    if (allUsersError) {
+      logger.error({ bettingRoundId, error: allUsersError }, "Failed to fetch all users for non-participant scoring");
+      return { 
+        success: false, 
+        message: "Failed to fetch all users", 
+        details: { nonParticipantsProcessed: 0, minimumParticipantScore: minimumScore, participantCount: participantUserIds.size, nonParticipantCount: 0, error: allUsersError } 
+      };
+    }
+
+    // 4. Identify non-participants
+    const allUserIds = new Set(allUsersData?.map(user => user.id) || []);
+    const nonParticipantUserIds = Array.from(allUserIds).filter(userId => !participantUserIds.has(userId));
+
+    if (nonParticipantUserIds.length === 0) {
+      logger.info({ bettingRoundId }, "All users participated - no non-participant scoring needed");
+      return { 
+        success: true, 
+        message: "All users participated - no non-participant scoring needed", 
+        details: { nonParticipantsProcessed: 0, minimumParticipantScore: minimumScore, participantCount: participantUserIds.size, nonParticipantCount: 0 } 
+      };
+    }
+
+    // 5. Create "virtual" bets for non-participants with the minimum score
+    // We'll need to get the fixtures for this round to create appropriate bet records
+    const { data: roundFixtures, error: roundFixturesError } = await client
+      .from('betting_round_fixtures')
+      .select('fixture_id')
+      .eq('betting_round_id', bettingRoundId);
+
+    if (roundFixturesError || !roundFixtures || roundFixtures.length === 0) {
+      logger.error({ bettingRoundId, error: roundFixturesError }, "Failed to fetch round fixtures for non-participant bets");
+      return { 
+        success: false, 
+        message: "Failed to fetch round fixtures", 
+        details: { nonParticipantsProcessed: 0, minimumParticipantScore: minimumScore, participantCount: participantUserIds.size, nonParticipantCount: nonParticipantUserIds.length, error: roundFixturesError } 
+      };
+    }
+
+    // For each non-participant, create bet records with points that sum to minimumScore
+    // We'll distribute the points across fixtures (giving 1 point to the first fixtures until we reach minimumScore)
+    const fixtureIds = roundFixtures.map(rf => rf.fixture_id);
+    const pointsPerFixture = Math.min(1, minimumScore); // Each bet can only give 0 or 1 point max
+    const fixturesToScore = Math.min(minimumScore, fixtureIds.length); // How many fixtures need to give 1 point
+
+    let nonParticipantsProcessed = 0;
+    
+    for (const userId of nonParticipantUserIds) {
+      // Create bet records for this non-participant
+      const betsToInsert = fixtureIds.map((fixtureId, index) => ({
+        user_id: userId,
+        fixture_id: fixtureId,
+        betting_round_id: bettingRoundId,
+        prediction: '1' as const, // Dummy prediction (doesn't matter since points are pre-set)
+        points_awarded: index < fixturesToScore ? pointsPerFixture : 0, // Give points to first N fixtures
+        submitted_at: new Date().toISOString(),
+        created_at: new Date().toISOString()
+      }));
+
+      const { error: insertError } = await client
+        .from('user_bets')
+        .insert(betsToInsert);
+
+      if (insertError) {
+        logger.error({ bettingRoundId, userId, error: insertError }, "Failed to insert non-participant bets");
+        // Continue with other users
+        continue;
+      }
+
+      nonParticipantsProcessed++;
+      logger.debug({ bettingRoundId, userId, pointsAwarded: minimumScore }, "Created non-participant bets");
+    }
+
+    logger.info({ 
+      bettingRoundId, 
+      nonParticipantsProcessed, 
+      minimumScore, 
+      participantCount: participantUserIds.size,
+      nonParticipantCount: nonParticipantUserIds.length 
+    }, "Non-participant scoring rule applied successfully");
+
+    return {
+      success: true,
+      message: `Non-participant scoring completed: ${nonParticipantsProcessed} users given ${minimumScore} points`,
+      details: { 
+        nonParticipantsProcessed, 
+        minimumParticipantScore: minimumScore, 
+        participantCount: participantUserIds.size,
+        nonParticipantCount: nonParticipantUserIds.length 
+      }
+    };
+
+  } catch (error) {
+    logger.error({ bettingRoundId, error: error instanceof Error ? error.message : String(error) }, "Unexpected error in non-participant scoring");
+    return {
+      success: false,
+      message: "Unexpected error in non-participant scoring",
+      details: { nonParticipantsProcessed: 0, minimumParticipantScore: null, participantCount: 0, nonParticipantCount: 0, error: error instanceof Error ? error : new Error(String(error)) }
+    };
+  }
+}
+
+/**
+ * Helper function to determine the result (1, X, 2) from home and away goals.
+ * @param home Home team goals (can be null if match not finished)
+ * @param away Away team goals (can be null if match not finished)  
+ * @returns Result as '1', 'X', '2', or null if cannot be determined
+ */
 function getResultFromGoals(home: number | null, away: number | null): Result {
     if (home === null || away === null) return null;
     if (home > away) return '1';

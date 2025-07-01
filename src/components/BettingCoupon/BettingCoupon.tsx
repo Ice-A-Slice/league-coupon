@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
+import React, { useEffect, forwardRef, useImperativeHandle } from 'react';
 import type { BettingCouponProps, Match, SelectionType, Selections } from './types'; // Import types
 import SectionContainer from '@/components/layout';
 import ToggleButton from '../ui/toggle-button'; // Updated import
 import { validateCoupon } from '@/schemas/bettingCouponSchema';
 import ValidationStatusIndicator from '@/components/ui/ValidationStatusIndicator'; // Added import
+import { useLocalStorage } from '@/lib/hooks/useLocalStorage';
 
 // Define the ref interface
 export interface BettingCouponRef {
@@ -21,8 +22,11 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
   onSelectionChange = () => {}, // Add default empty function
   validationErrors
 }, ref) => {
-  // State for current selections
-  const [selections, setSelections] = useState<Selections>(initialSelections);
+  // Use localStorage for selections with fallback to initialSelections
+  const [selections, setSelections] = useLocalStorage<Selections>(
+    `betting-selections-${title}`, // Use title to make key unique per round
+    initialSelections
+  );
   // Use the passed-in errors, default to empty object
   const errors = validationErrors || {};
 
@@ -96,14 +100,15 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
     onSelectionChange(newSelections, matchIdStr); 
   };
 
-  // Sync state if initialSelections prop changes externally
+  // Sync with initialSelections if they change externally (only if localStorage is empty)
   /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
-    if (initialSelections && JSON.stringify(initialSelections) !== JSON.stringify({})) {
-      // Only update if there are actual initialSelections and they differ from current
-      if (JSON.stringify(selections) !== JSON.stringify(initialSelections)) {
-        setSelections(initialSelections);
-      }
+    // Only override localStorage if there are actual initialSelections and localStorage is empty
+    const hasStoredData = Object.keys(selections).length > 0;
+    const hasInitialData = initialSelections && Object.keys(initialSelections).length > 0;
+    
+    if (hasInitialData && !hasStoredData) {
+      setSelections(initialSelections);
     }
   }, [initialSelections]);
   /* eslint-enable react-hooks/exhaustive-deps */

@@ -113,4 +113,28 @@ afterEach(() => {
 //   error: jest.fn(),
 // };
 
-// Add any global setup needed for your tests here 
+// Add any global setup needed for your tests here
+
+// Mock localStorage for testing
+const localStorageMock = {
+  getItem: jest.fn(),
+  setItem: jest.fn(),
+  removeItem: jest.fn(),
+  clear: jest.fn(),
+};
+
+// Set up localStorage mock
+Object.defineProperty(window, 'localStorage', {
+  value: localStorageMock
+});
+
+// Clear localStorage before each test
+beforeEach(() => {
+  localStorageMock.clear.mockClear();
+  localStorageMock.getItem.mockClear();
+  localStorageMock.setItem.mockClear();
+  localStorageMock.removeItem.mockClear();
+  
+  // Reset localStorage to empty state
+  localStorageMock.getItem.mockReturnValue(null);
+});

@@ -185,7 +185,7 @@ describe('Questionnaire Component with Combobox', () => {
   });
   
   it('clears selected value when clear button is clicked', async () => {
-    setupQuestionnaire({
+    const { ref } = setupQuestionnaire({
       initialPredictions: { leagueWinner: '1', lastPlace: null, bestGoalDifference: null, topScorer: null }
     });
     
@@ -193,22 +193,29 @@ describe('Questionnaire Component with Combobox', () => {
     const leagueWinnerTrigger = await screen.findByRole('combobox', { name: accessibleName });
     expect(leagueWinnerTrigger).toHaveTextContent('Arsenal');
 
-    // Revised selector: Try finding a button with aria-label="Clear"
-    // This assumes the underlying Combobox component uses this label.
-    const clearButton = await screen.findByRole('button', { name: /clear/i }); 
-    // As a fallback, if the above fails, we might try a structural selector or add a data-testid
-    // e.g., const clearButton = leagueWinnerTrigger.parentElement?.querySelector('button:not([aria-label*="Select a team"])');
-
-    expect(clearButton).toBeInTheDocument(); // Ensure it's found before clicking
+    // Find the clear button with aria-label="clear"
+    const clearButton = await screen.findByRole('button', { name: /clear/i });
+    expect(clearButton).toBeInTheDocument();
+    
+    // Click the clear button
     await userEvent.click(clearButton);
 
     expect(mockOnPredictionChange).toHaveBeenCalledWith('leagueWinner');
-    // Check placeholder text is back
-    await waitFor(() => {
-      expect(leagueWinnerTrigger).toHaveTextContent(/Select league winner.../i);
+    
+    // Verify the internal state was actually cleared by checking the ref
+    await act(async () => {
+      if (ref.current) {
+        const answers = ref.current.getAnswers();
+        // Should not include leagueWinner since it was cleared
+        expect(answers.find(a => a.question_type === 'league_winner')).toBeUndefined();
+      }
     });
-    // Use findByRole again to confirm placeholder text after async update
-    await expect(screen.findByRole('combobox', { name: accessibleName })).resolves.toHaveTextContent(/Select league winner.../i);
+    
+    // Wait for the component to update and check placeholder text is back
+    await waitFor(() => {
+      const updatedTrigger = screen.getByRole('combobox', { name: accessibleName });
+      expect(updatedTrigger).toHaveTextContent(/Select league winner.../i);
+    }, { timeout: 3000 });
   });
   
   it('validates form successfully when all fields are filled', async () => {
