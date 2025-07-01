@@ -423,3 +423,305 @@ describe('Scoring Logic - processAndStoreDynamicPointsForRound', () => {
     expect(result.message).toContain('Failed to store dynamic points transactionally via RPC');
   });
 });
+
+// Tests for non-participant scoring rule
+describe('Non-participant Scoring Rule', () => {
+  // Mock data setup
+  const mockBettingRoundId = 1;
+  const mockFixtureIds = [101, 102, 103];
+  const mockParticipants = ['user1', 'user2', 'user3'];
+  const mockAllUsers = ['user1', 'user2', 'user3', 'user4', 'user5']; // user4 and user5 are non-participants
+  
+  let mockClient: {
+    from: jest.Mock;
+  };
+
+  beforeEach(() => {
+    // Create a comprehensive mock client
+    mockClient = {
+      from: jest.fn((table: string) => {
+        const mock = {
+          select: jest.fn().mockReturnThis(),
+          eq: jest.fn().mockReturnThis(),
+          not: jest.fn().mockReturnThis(),
+          insert: jest.fn().mockReturnThis()
+        };
+
+        // Set up different responses based on table
+        if (table === 'user_bets') {
+          // Mock for getting participants
+          if (mock.select.mock.calls.length === 0) {
+            mock.select.mockImplementationOnce(() => ({
+              eq: jest.fn().mockResolvedValue({
+                data: mockParticipants.map(userId => ({ user_id: userId })),
+                error: null
+              })
+            }));
+          }
+          // Mock for getting user points
+          else {
+            mock.not.mockImplementationOnce(() => Promise.resolve({
+              data: [
+                { user_id: 'user1', points_awarded: 2 },
+                { user_id: 'user1', points_awarded: 1 },
+                { user_id: 'user2', points_awarded: 0 },
+                { user_id: 'user2', points_awarded: 0 },
+                { user_id: 'user3', points_awarded: 1 },
+                { user_id: 'user3', points_awarded: 0 }
+              ],
+              error: null
+            }));
+          }
+        } else if (table === 'profiles') {
+          mock.select.mockResolvedValue({
+            data: mockAllUsers.map(id => ({ id })),
+            error: null
+          });
+        } else if (table === 'betting_round_fixtures') {
+          mock.select.mockImplementationOnce(() => ({
+            eq: jest.fn().mockResolvedValue({
+              data: mockFixtureIds.map(id => ({ fixture_id: id })),
+              error: null
+            })
+          }));
+        }
+
+        return mock;
+      })
+    };
+  });
+
+  it('should give non-participants the minimum participant score', async () => {
+    const { applyNonParticipantScoringRule } = await import('./scoring');
+    
+    // Mock the insert operation for non-participant bets
+    const insertSpy = jest.fn().mockResolvedValue({ error: null });
+    
+    // Set up detailed mocks
+    const participantData = mockParticipants.map(userId => ({ user_id: userId }));
+    const userPointsData = [
+      { user_id: 'user1', points_awarded: 2 },
+      { user_id: 'user1', points_awarded: 1 }, // user1 total: 3
+      { user_id: 'user2', points_awarded: 0 },
+      { user_id: 'user2', points_awarded: 0 }, // user2 total: 0 (minimum)
+      { user_id: 'user3', points_awarded: 1 },
+      { user_id: 'user3', points_awarded: 0 }  // user3 total: 1
+    ];
+    const allUsersData = mockAllUsers.map(id => ({ id }));
+    const fixturesData = mockFixtureIds.map(id => ({ fixture_id: id }));
+    
+    mockClient.from = jest.fn((table: string) => {
+      if (table === 'user_bets') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({ data: participantData, error: null }))
+          }))
+        };
+      } else if (table === 'profiles') {
+        return {
+          select: jest.fn(() => Promise.resolve({ data: allUsersData, error: null }))
+        };
+      } else if (table === 'betting_round_fixtures') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({ data: fixturesData, error: null }))
+          }))
+        };
+      }
+      return {};
+    });
+
+    // Override for the second user_bets call (getting points)
+    let callCount = 0;
+    const originalFrom = mockClient.from;
+    mockClient.from = jest.fn((table: string) => {
+      if (table === 'user_bets') {
+        callCount++;
+        if (callCount === 1) {
+          // First call: get participants
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => Promise.resolve({ data: participantData, error: null }))
+            }))
+          };
+        } else if (callCount === 2) {
+          // Second call: get user points
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                not: jest.fn(() => Promise.resolve({ data: userPointsData, error: null }))
+              }))
+            }))
+          };
+        } else {
+          // Third call: insert non-participant bets
+          return {
+            insert: insertSpy
+          };
+        }
+      }
+      return originalFrom(table);
+    });
+
+    const result = await applyNonParticipantScoringRule(mockBettingRoundId, mockClient);
+    
+    expect(result.success).toBe(true);
+    expect(result.details?.minimumParticipantScore).toBe(0); // user2 had minimum of 0
+    expect(result.details?.nonParticipantsProcessed).toBe(2); // user4 and user5
+    expect(result.details?.participantCount).toBe(3);
+    expect(result.details?.nonParticipantCount).toBe(2);
+    
+    // Verify that insert was called for each non-participant
+    expect(insertSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('should handle case where no users participated', async () => {
+    const { applyNonParticipantScoringRule } = await import('./scoring');
+    
+    // Mock no participants
+    mockClient.from = jest.fn((table: string) => {
+      if (table === 'user_bets') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({ data: [], error: null }))
+          }))
+        };
+      }
+      return {};
+    });
+
+    const result = await applyNonParticipantScoringRule(mockBettingRoundId, mockClient);
+    
+    expect(result.success).toBe(true);
+    expect(result.message).toContain("No participants found");
+    expect(result.details?.participantCount).toBe(0);
+    expect(result.details?.nonParticipantsProcessed).toBe(0);
+  });
+
+  it('should handle case where all users participated', async () => {
+    const { applyNonParticipantScoringRule } = await import('./scoring');
+    
+    // Mock all users as participants
+    const allUsersAsParticipants = mockAllUsers.map(userId => ({ user_id: userId }));
+    const userPointsData = mockAllUsers.map(userId => ({ user_id: userId, points_awarded: 1 }));
+    const allUsersData = mockAllUsers.map(id => ({ id }));
+    
+    let callCount = 0;
+    mockClient.from = jest.fn((table: string) => {
+      if (table === 'user_bets') {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => Promise.resolve({ data: allUsersAsParticipants, error: null }))
+            }))
+          };
+        } else {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                not: jest.fn(() => Promise.resolve({ data: userPointsData, error: null }))
+              }))
+            }))
+          };
+        }
+      } else if (table === 'profiles') {
+        return {
+          select: jest.fn(() => Promise.resolve({ data: allUsersData, error: null }))
+        };
+      }
+      return {};
+    });
+
+    const result = await applyNonParticipantScoringRule(mockBettingRoundId, mockClient);
+    
+    expect(result.success).toBe(true);
+    expect(result.message).toContain("All users participated");
+    expect(result.details?.participantCount).toBe(mockAllUsers.length);
+    expect(result.details?.nonParticipantCount).toBe(0);
+    expect(result.details?.nonParticipantsProcessed).toBe(0);
+  });
+
+  it('should distribute points correctly across fixtures', async () => {
+    const { applyNonParticipantScoringRule } = await import('./scoring');
+    
+    // Set up scenario where minimum score is 2 points
+    const participantData = [{ user_id: 'user1' }];
+    const userPointsData = [
+      { user_id: 'user1', points_awarded: 1 },
+      { user_id: 'user1', points_awarded: 1 } // Total: 2 points
+    ];
+    const allUsersData = [{ id: 'user1' }, { id: 'user2' }]; // user2 is non-participant
+    const fixturesData = mockFixtureIds.map(id => ({ fixture_id: id })); // 3 fixtures
+    
+    const insertSpy = jest.fn().mockResolvedValue({ error: null });
+    
+    let callCount = 0;
+    mockClient.from = jest.fn((table: string) => {
+      if (table === 'user_bets') {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => Promise.resolve({ data: participantData, error: null }))
+            }))
+          };
+        } else if (callCount === 2) {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                not: jest.fn(() => Promise.resolve({ data: userPointsData, error: null }))
+              }))
+            }))
+          };
+        } else {
+          return { insert: insertSpy };
+        }
+      } else if (table === 'profiles') {
+        return {
+          select: jest.fn(() => Promise.resolve({ data: allUsersData, error: null }))
+        };
+      } else if (table === 'betting_round_fixtures') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({ data: fixturesData, error: null }))
+          }))
+        };
+      }
+      return {};
+    });
+
+    const result = await applyNonParticipantScoringRule(mockBettingRoundId, mockClient);
+    
+    expect(result.success).toBe(true);
+    expect(result.details?.minimumParticipantScore).toBe(2);
+    expect(insertSpy).toHaveBeenCalledTimes(1);
+    
+    // Verify the bet distribution: first 2 fixtures get 1 point, last gets 0
+    const insertedBets = insertSpy.mock.calls[0][0];
+    expect(insertedBets).toHaveLength(3);
+    expect(insertedBets[0].points_awarded).toBe(1); // First fixture
+    expect(insertedBets[1].points_awarded).toBe(1); // Second fixture 
+    expect(insertedBets[2].points_awarded).toBe(0); // Third fixture
+  });
+
+  it('should handle database errors gracefully', async () => {
+    const { applyNonParticipantScoringRule } = await import('./scoring');
+    
+    // Mock database error
+    mockClient.from = jest.fn(() => ({
+      select: jest.fn(() => ({
+        eq: jest.fn(() => Promise.resolve({
+          data: null,
+          error: new Error('Database connection failed')
+        }))
+      }))
+    }));
+
+    const result = await applyNonParticipantScoringRule(mockBettingRoundId, mockClient);
+    
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("Failed to fetch participants");
+    expect(result.details?.error).toBeInstanceOf(Error);
+  });
+});
