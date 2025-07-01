@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
+import React, { useEffect, forwardRef, useImperativeHandle } from 'react';
 import type { BettingCouponProps, Match, SelectionType, Selections } from './types'; // Import types
 import SectionContainer from '@/components/layout';
 import ToggleButton from '../ui/toggle-button'; // Updated import

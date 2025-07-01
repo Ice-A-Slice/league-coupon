@@ -3,7 +3,7 @@ import { useLocalStorage, useBettingFormStorage } from '../useLocalStorage';
 
 // Mock localStorage
 const mockLocalStorage = (() => {
-  let store: { [key: string]: string } = {};
+  const store: { [key: string]: string } = {};
   
   const mockObj = {
     store: store,

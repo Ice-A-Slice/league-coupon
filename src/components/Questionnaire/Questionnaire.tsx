@@ -54,12 +54,22 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
   
   // Sync with initialPredictions if they change externally (only if localStorage is empty)
   useEffect(() => {
-    // Only override localStorage if there are actual initialPredictions and localStorage is empty
+    // Only override localStorage if there are actual initialPredictions and localStorage is truly empty
+    // We need to check if this is the initial load vs. a user action that cleared values
     const hasStoredData = Object.values(predictions).some(value => value !== null);
     const hasInitialData = Object.values(initialPredictions).some(value => value !== null);
     
+    // Only sync on the very first render when localStorage is truly empty
+    // Don't override user actions that set values to null
     if (hasInitialData && !hasStoredData) {
-      setPredictions(initialPredictions);
+      // Check if this is the initial render by seeing if all values are exactly the initial state
+      const isInitialState = Object.keys(predictions).every(key =>
+        predictions[key as PredictionKeys] === initialPredictions[key as PredictionKeys]
+      );
+      
+      if (isInitialState) {
+        setPredictions(initialPredictions);
+      }
     }
   }, [initialPredictions, predictions, setPredictions]);
   
