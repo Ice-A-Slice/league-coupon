@@ -17,6 +17,7 @@ import type { CurrentRoundFixturesResult } from '@/lib/supabase/queries'; // Typ
 // Client-side specific imports
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useQuestionnaireData } from '@/features/questionnaire/hooks/useQuestionnaireData';
+import { useBettingFormStorage } from '@/lib/hooks/useLocalStorage';
 import {
   validateCouponSelections,
   validateQuestionnaireAnswers,
@@ -60,6 +61,9 @@ export default function CouponClient({
   const [submitStatus, setSubmitStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [validationErrors, setValidationErrors] = useState<ErrorsState>({});
   const { user, isLoading: authLoading } = useAuth();
+  
+  // LocalStorage management for form persistence
+  const { clearAllFormData } = useBettingFormStorage();
   
   // Questionnaire data hook
   const { 
@@ -179,6 +183,9 @@ export default function CouponClient({
         const successMessage = submissionResult.answersResult.message || submissionResult.betsResult.message || 'Coupon and answers submitted successfully!';
         toast.success(successMessage);
         setSubmitStatus({ type: 'success', message: successMessage });
+        
+        // Clear localStorage after successful submission
+        clearAllFormData();
       } else { 
         console.error('Submission response format unexpected:', submissionResult);
         toast.error('An unexpected response was received from the server.');
