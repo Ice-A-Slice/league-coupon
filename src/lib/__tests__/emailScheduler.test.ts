@@ -35,13 +35,13 @@ describe('EmailSchedulerService', () => {
     mockGetSupabaseServiceRoleClient.mockReturnValue(mockSupabaseClient as unknown as ReturnType<typeof getSupabaseServiceRoleClient>);
     
     // Mock environment variables
-    process.env.NEXT_PUBLIC_SITE_URL = 'http://localhost:3000';
+    process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3000';
     process.env.CRON_SECRET = 'test-secret';
     process.env.EMAIL_TEST_MODE = 'false';
   });
 
   afterEach(() => {
-    delete process.env.NEXT_PUBLIC_SITE_URL;
+    delete process.env.NEXT_PUBLIC_APP_URL;
     delete process.env.CRON_SECRET;
     delete process.env.EMAIL_TEST_MODE;
   });

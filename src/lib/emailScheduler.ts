@@ -51,7 +51,7 @@ export interface EmailTriggerResult {
  */
 export class EmailSchedulerService {
   private readonly REMINDER_HOURS_BEFORE = 24;
-  private readonly API_BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+  private readonly API_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
   /**
    * Main scheduling function that checks for both summary and reminder email opportunities
