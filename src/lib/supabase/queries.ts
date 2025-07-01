@@ -303,7 +303,8 @@ export async function getCurrentBettingRoundFixtures(): Promise<CurrentRoundFixt
         home_team:teams!fixtures_home_team_id_fkey(id, name),
         away_team:teams!fixtures_away_team_id_fkey(id, name)
       `)
-      .in('id', roundFixturesData.map(f => f.fixture_id));
+      .in('id', roundFixturesData.map(f => f.fixture_id))
+      .order('kickoff', { ascending: true });
 
     if (fixtureDetailsError) {
       console.error(`Error fetching fixture details for betting round ${openRoundId}:`, fixtureDetailsError);
