@@ -222,8 +222,10 @@ describe('Supabase Queries', () => {
         if (tableName === 'fixtures') {
           return {
             select: jest.fn(() => ({ 
-              // .in(...) is the terminal call for this path in the actual code
-              in: fromFixturesMock 
+              // .in(...).order(...) is the terminal chain for this path in the actual code
+              in: jest.fn(() => ({
+                order: fromFixturesMock
+              }))
             }))
           };
         }
