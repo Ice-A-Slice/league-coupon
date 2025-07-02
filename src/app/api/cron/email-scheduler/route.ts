@@ -21,15 +21,23 @@ export async function GET(request: Request) {
   const startTime = Date.now();
   logger.info('EmailScheduler: Starting cron job for email scheduling...');
 
-  // Authenticate cron job using secret
+  // Authenticate cron job using secret (support both Bearer and X-Cron-Secret headers)
   const cronSecret = process.env.CRON_SECRET;
   const authHeader = request.headers.get('authorization');
+  const cronSecretHeader = request.headers.get('x-cron-secret');
   
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  const isValidAuth = cronSecret && (
+    authHeader === `Bearer ${cronSecret}` || 
+    cronSecretHeader === cronSecret
+  );
+  
+  if (!isValidAuth) {
     logger.error('EmailScheduler: Unauthorized attempt to run email scheduling cron job', {
       hasSecret: !!cronSecret,
       hasAuth: !!authHeader,
-      authMatches: authHeader === `Bearer ${cronSecret}`
+      hasCronHeader: !!cronSecretHeader,
+      authMatches: authHeader === `Bearer ${cronSecret}`,
+      cronHeaderMatches: cronSecretHeader === cronSecret
     });
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
