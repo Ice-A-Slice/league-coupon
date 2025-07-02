@@ -13,6 +13,11 @@ export function MobileBottomNav() {
           Tabell
         </span>
       </Link>
+      <Link href="/answers" passHref>
+        <span className="text-sm font-medium text-muted-foreground hover:text-primary cursor-pointer p-2">
+          Svar
+        </span>
+      </Link>
     </nav>
   );
 } 

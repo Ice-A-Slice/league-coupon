@@ -753,4 +753,8 @@ export class LeagueDataServiceImpl implements ILeagueDataService {
       return [];
     }
   }
-} 
+}
+
+// Export a singleton instance as the default export
+const LeagueDataService = new LeagueDataServiceImpl();
+export default LeagueDataService; 
