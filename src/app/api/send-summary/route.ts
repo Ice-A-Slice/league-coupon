@@ -144,19 +144,31 @@ export async function POST(request: Request) {
     let targetUserIds = payload.user_ids || [];
     
     if (targetUserIds.length === 0) {
-      // Get all users if none specified
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id');
-      
-      if (!profiles) {
+      // Get only users who have actively participated in betting
+      const { data: activeBettors, error: bettorsError } = await supabase
+        .from('user_bets')
+        .select('user_id');
+        
+      if (bettorsError) {
         return NextResponse.json(
-          { error: 'Failed to fetch user profiles' },
+          { error: 'Failed to fetch active bettors' },
           { status: 500 }
         );
       }
       
-      targetUserIds = profiles.map(p => p.id);
+      targetUserIds = [...new Set(activeBettors?.map(bet => bet.user_id) || [])];
+      
+      if (targetUserIds.length === 0) {
+        return NextResponse.json(
+          { 
+            success: true, 
+            message: 'No active bettors found, no summary emails to send',
+            test_mode: false,
+            timestamp: new Date().toISOString()
+          },
+          { status: 200 }
+        );
+      }
     }
 
     if (isTestMode) {

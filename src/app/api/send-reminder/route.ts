@@ -222,38 +222,72 @@ export async function POST(request: Request) {
     
     try {
       if (payload.user_ids && payload.user_ids.length > 0) {
-        // Get specific users
-        const { data: users, error: usersError } = await supabase
-          .from('profiles')
-          .select('id, email, display_name')
-          .in('id', payload.user_ids);
-          
-        if (usersError) {
-          throw new Error(`Failed to fetch specific users: ${usersError.message}`);
+        // Get specific users - emails from auth.users, names from profiles
+        const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
+        if (authError) {
+          throw new Error(`Failed to fetch users from auth: ${authError.message}`);
         }
         
-        targetUsers = users?.map(user => ({
+        // Filter to requested users and get their profile info
+        const requestedUsers = authUsers.users.filter(user => 
+          payload.user_ids!.includes(user.id) && user.email
+        );
+        
+        // Get profile names for these users
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', requestedUsers.map(u => u.id));
+        
+        const profileMap = new Map(profiles?.map(p => [p.id, p.full_name]) || []);
+        
+        targetUsers = requestedUsers.map(user => ({
           id: user.id,
-          email: user.email,
-          name: user.display_name
-        })) || [];
+          email: user.email!,
+          name: profileMap.get(user.id) || undefined
+        }));
         
       } else {
-        // Get all active users
-        const { data: allUsers, error: allUsersError } = await supabase
-          .from('profiles')
-          .select('id, email, display_name')
-          .not('email', 'is', null);
+        // Get only users who have actively participated in betting
+        const { data: activeBettors, error: bettorsError } = await supabase
+          .from('user_bets')
+          .select('user_id');
           
-        if (allUsersError) {
-          throw new Error(`Failed to fetch all users: ${allUsersError.message}`);
+        if (bettorsError) {
+          throw new Error(`Failed to fetch active bettors: ${bettorsError.message}`);
         }
         
-        targetUsers = allUsers?.map(user => ({
-          id: user.id,
-          email: user.email,
-          name: user.display_name
-        })) || [];
+        const activeBettorIds = [...new Set(activeBettors?.map(bet => bet.user_id) || [])];
+        
+        if (activeBettorIds.length === 0) {
+          logger.info('No active bettors found, skipping reminder emails');
+          targetUsers = [];
+        } else {
+          // Get auth users (for emails) filtered to active bettors only
+          const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
+          if (authError) {
+            throw new Error(`Failed to fetch users from auth: ${authError.message}`);
+          }
+          
+          // Filter to active bettors with emails
+          const relevantUsers = authUsers.users.filter(user => 
+            user.email && activeBettorIds.includes(user.id)
+          );
+          
+          // Get profile names for relevant users
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, full_name')
+            .in('id', relevantUsers.map(u => u.id));
+          
+          const profileMap = new Map(profiles?.map(p => [p.id, p.full_name]) || []);
+          
+          targetUsers = relevantUsers.map(user => ({
+            id: user.id,
+            email: user.email!,
+            name: profileMap.get(user.id) || undefined
+          }));
+        }
       }
       
       logger.info(`ReminderEmailAPI: Targeting ${targetUsers.length} users for reminders`, {
