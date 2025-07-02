@@ -90,45 +90,67 @@ export async function POST(request: Request) {
       deadlineHours: payload.deadline_hours
     });
 
-    // Create Supabase client for authentication
-    const cookieStore = await cookies();
+    // Authentication: Support both server-to-server (cron) and user session authentication
+    const authHeader = request.headers.get('authorization');
+    const cronSecret = process.env.CRON_SECRET;
+    const isServerCall = authHeader === `Bearer ${cronSecret}`;
+
+    if (!isServerCall) {
+      // For non-server calls, require user authentication
+      const cookieStore = await cookies();
+      const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        {
+          cookies: {
+            get(name: string) {
+              return cookieStore.get(name)?.value;
+            },
+            set(name: string, value: string, options: CookieOptions) {
+              cookieStore.set({ name, value, ...options });
+            },
+            remove(name: string, options: CookieOptions) {
+              cookieStore.set({ name, value: '', ...options });
+            },
+          },
+        }
+      );
+
+      // Get authenticated user
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !user) {
+        const errorMessage = 'Authentication required';
+        logger.warn('ReminderEmailAPI: Authentication failed', {
+          operationId,
+          authError: authError?.message || 'Auth session missing!'
+        });
+
+        emailMonitoringService.recordError(operationId, 'authentication', errorMessage, {
+          authError: authError?.message || 'Auth session missing!'
+        });
+
+        return NextResponse.json(
+          { success: false, error: errorMessage },
+          { status: 401 }
+        );
+      }
+    } else {
+      logger.info('ReminderEmailAPI: Server-to-server authentication successful', { operationId });
+    }
+
+    // Create Supabase client for data operations (using service role key for both cases)
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
       {
         cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-          set(name: string, value: string, options: CookieOptions) {
-            cookieStore.set({ name, value, ...options });
-          },
-          remove(name: string, options: CookieOptions) {
-            cookieStore.set({ name, value: '', ...options });
-          },
+          get: () => undefined,
+          set: () => {},
+          remove: () => {},
         },
       }
     );
-
-    // Get authenticated user
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
-      const errorMessage = 'Authentication required';
-      logger.warn('ReminderEmailAPI: Authentication failed', {
-        operationId,
-        authError: authError?.message
-      });
-
-      emailMonitoringService.recordError(operationId, 'authentication', errorMessage, {
-        authError: authError?.message
-      });
-
-      return NextResponse.json(
-        { success: false, error: errorMessage },
-        { status: 401 }
-      );
-    }
 
     // Check for test mode (environment variable overrides request parameter)
     const isTestMode = process.env.EMAIL_TEST_MODE === 'true' || payload.test_mode;

@@ -41,49 +41,58 @@ type SendSummaryPayload = z.infer<typeof sendSummarySchema>;
  * @returns {Promise<NextResponse>} A promise that resolves to a Next.js response object.
  */
 export async function POST(request: Request) {
-  // Get cookie store for Supabase client
-  const cookieStore = await cookies();
+  // Authentication: Support both server-to-server (cron) and user session authentication
+  const authHeader = request.headers.get('authorization');
+  const cronSecret = process.env.CRON_SECRET;
+  const isServerCall = authHeader === `Bearer ${cronSecret}`;
 
-  // Define cookie methods for Supabase client
-  const cookieMethods = {
-    get(name: string) {
-      return cookieStore.get(name)?.value;
-    },
-    set(name: string, value: string, options: CookieOptions) {
-      try {
-        cookieStore.set({ name, value, ...options });
-      } catch (error) {
-        console.error("Error setting cookie in Route Handler:", error);
-      }
-    },
-    remove(name: string, options: CookieOptions) {
-      try {
-        cookieStore.set({ name, value: '', ...options });
-      } catch (error) {
-        console.error("Error removing cookie in Route Handler:", error);
-      }
-    },
-  };
+  let userId: string | null = null;
 
-  // Create Supabase client
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: cookieMethods,
+  if (!isServerCall) {
+    // For non-server calls, require user authentication
+    const cookieStore = await cookies();
+    const cookieMethods = {
+      get(name: string) {
+        return cookieStore.get(name)?.value;
+      },
+      set(name: string, value: string, options: CookieOptions) {
+        try {
+          cookieStore.set({ name, value, ...options });
+        } catch (error) {
+          console.error("Error setting cookie in Route Handler:", error);
+        }
+      },
+      remove(name: string, options: CookieOptions) {
+        try {
+          cookieStore.set({ name, value: '', ...options });
+        } catch (error) {
+          console.error("Error removing cookie in Route Handler:", error);
+        }
+      },
+    };
+
+    // Create Supabase client
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: cookieMethods,
+      }
+    );
+
+    // Check user authentication
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      console.error('Error getting user or no user found:', userError);
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-  );
 
-  // 1. Check Authentication
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    console.error('Error getting user or no user found:', userError);
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    userId = user.id;
+    console.log(`User ${userId} attempting to send summary emails.`);
+  } else {
+    console.log('Server-to-server authentication successful for summary emails');
   }
-
-  const userId = user.id;
-  console.log(`User ${userId} attempting to send summary emails.`);
 
   // 2. Parse and Validate Request Body
   let payload: SendSummaryPayload;
@@ -195,7 +204,7 @@ export async function POST(request: Request) {
       'summary',
       payload.round_id || null,
       targetUserIds.length,
-      user?.id || null
+      userId
     );
     
     let summaryResponse: object;

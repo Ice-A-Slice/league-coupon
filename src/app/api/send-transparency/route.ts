@@ -28,6 +28,45 @@ export async function POST(request: Request) {
   let operationId: string | null = null;
 
   try {
+    // Authentication: Support both server-to-server (cron) and user session authentication
+    const authHeader = request.headers.get('authorization');
+    const cronSecret = process.env.CRON_SECRET;
+    const isServerCall = authHeader === `Bearer ${cronSecret}`;
+
+    if (!isServerCall) {
+      // For non-server calls, require user authentication
+      const cookieStore = await cookies();
+      const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            get(name: string) {
+              return cookieStore.get(name)?.value;
+            },
+            set(name: string, value: string, options: CookieOptions) {
+              cookieStore.set({ name, value, ...options });
+            },
+            remove(name: string, options: CookieOptions) {
+              cookieStore.set({ name, value: '', ...options });
+            },
+          },
+        }
+      );
+
+      // Check user authentication
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        logger.error('Transparency API: Authentication failed', { error: userError });
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+
+      logger.info(`User ${user.id} attempting to send transparency emails`);
+    } else {
+      logger.info('Server-to-server authentication successful for transparency emails');
+    }
+
     // Parse and validate request body
     const body = await request.json();
     const validatedData = transparencyEmailRequestSchema.parse(body);
@@ -35,22 +74,15 @@ export async function POST(request: Request) {
 
     logger.info(`Processing transparency email for round ${round_id}`);
 
-    // Create Supabase client
-    const cookieStore = await cookies();
+    // Create Supabase client for data operations (using service role for both cases)
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
       {
         cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-          set(name: string, value: string, options: CookieOptions) {
-            cookieStore.set({ name, value, ...options });
-          },
-          remove(name: string, options: CookieOptions) {
-            cookieStore.set({ name, value: '', ...options });
-          },
+          get: () => undefined,
+          set: () => {},
+          remove: () => {},
         },
       }
     );
