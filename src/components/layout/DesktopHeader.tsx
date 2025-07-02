@@ -18,6 +18,11 @@ export function DesktopHeader() {
               Tabell
             </span>
           </Link>
+          <Link href="/answers" passHref>
+            <span className="text-sm font-medium text-muted-foreground hover:text-primary cursor-pointer">
+              Svar
+            </span>
+          </Link>
         </div>
       </nav>
     </header>
