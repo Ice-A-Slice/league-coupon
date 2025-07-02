@@ -501,6 +501,18 @@ export async function processAndStoreDynamicPointsForRound(
     const payloadForRPC: DynamicPointsRPCPayloadItem[] = []; // Specify a more precise type later if possible
 
     // 5. Iterate, Calculate, and Prepare RPC payload
+    // Track aggregate statistics for multiple correct answers detection
+    const aggregateStats = {
+        usersWithMultipleAnswerPoints: 0,
+        totalTieScenarios: 0,
+        questionTypeStats: {
+            topScorer: { usersWithTies: 0, totalTieInstances: 0 },
+            goalDifference: { usersWithTies: 0, totalTieInstances: 0 },
+            leagueWinner: { usersWithTies: 0, totalTieInstances: 0 },
+            lastPlace: { usersWithTies: 0, totalTieInstances: 0 }
+        }
+    };
+
     for (const userId of uniqueUserIds) {
         usersProcessed++;
         logger.debug({ roundId, userId }, 'Calculating dynamic points for user.');
@@ -521,6 +533,88 @@ export async function processAndStoreDynamicPointsForRound(
         );
 
         if (dynamicPointsResult) {
+            // Enhanced logging to track which specific answers triggered points and multiple correct answers
+            const pointsBreakdown = {
+                leagueWinner: dynamicPointsResult.details.leagueWinnerCorrect ? 3 : 0,
+                topScorer: dynamicPointsResult.details.topScorerCorrect ? 3 : 0,
+                bestGoalDifference: dynamicPointsResult.details.bestGoalDifferenceCorrect ? 3 : 0,
+                lastPlace: dynamicPointsResult.details.lastPlaceCorrect ? 3 : 0,
+            };
+            
+            // Track which questions earned points
+            const questionsEarningPoints = [];
+            if (dynamicPointsResult.details.leagueWinnerCorrect) questionsEarningPoints.push('league_winner');
+            if (dynamicPointsResult.details.topScorerCorrect) questionsEarningPoints.push('top_scorer'); 
+            if (dynamicPointsResult.details.bestGoalDifferenceCorrect) questionsEarningPoints.push('best_goal_difference');
+            if (dynamicPointsResult.details.lastPlaceCorrect) questionsEarningPoints.push('last_place');
+
+            // Enhanced: Extract multiple correct answers information from comparison details
+            const multipleAnswersDetected = {
+                topScorer: (dynamicPointsResult.details.comparisonDetails?.topScorer?.allValidAnswers?.length || 0) > 1,
+                goalDifference: (dynamicPointsResult.details.comparisonDetails?.bestGoalDifference?.allValidAnswers?.length || 0) > 1,
+                leagueWinner: (dynamicPointsResult.details.comparisonDetails?.leagueWinner?.allValidAnswers?.length || 0) > 1,
+                lastPlace: (dynamicPointsResult.details.comparisonDetails?.lastPlace?.allValidAnswers?.length || 0) > 1
+            };
+
+            // Track which specific answers triggered points
+            const triggeredAnswers: Record<string, number[]> = {};
+            if (dynamicPointsResult.details.comparisonDetails?.leagueWinner?.isMatch) {
+                triggeredAnswers.leagueWinner = dynamicPointsResult.details.comparisonDetails.leagueWinner.allValidAnswers;
+            }
+            if (dynamicPointsResult.details.comparisonDetails?.topScorer?.isMatch) {
+                triggeredAnswers.topScorer = dynamicPointsResult.details.comparisonDetails.topScorer.allValidAnswers;
+            }
+            if (dynamicPointsResult.details.comparisonDetails?.bestGoalDifference?.isMatch) {
+                triggeredAnswers.bestGoalDifference = dynamicPointsResult.details.comparisonDetails.bestGoalDifference.allValidAnswers;
+            }
+            if (dynamicPointsResult.details.comparisonDetails?.lastPlace?.isMatch) {
+                triggeredAnswers.lastPlace = dynamicPointsResult.details.comparisonDetails.lastPlace.allValidAnswers;
+            }
+
+            // Log detailed scoring information for this user
+            logger.info({ 
+                roundId, 
+                userId, 
+                totalPoints: dynamicPointsResult.totalPoints,
+                pointsBreakdown,
+                questionsEarningPoints,
+                questionCount: questionsEarningPoints.length,
+                // Enhanced: Track multiple correct answers detection
+                multipleAnswersDetected,
+                // Track which specific answers triggered points  
+                triggeredAnswers,
+                // Count total tied scenarios detected
+                totalTieScenarios: Object.values(multipleAnswersDetected).filter(Boolean).length
+            }, `Dynamic points calculated - earned ${dynamicPointsResult.totalPoints} points from ${questionsEarningPoints.length} questions${Object.values(multipleAnswersDetected).some(Boolean) ? ' (multiple answers detected)' : ''}`);
+
+            // Track aggregate statistics
+            const userHadTieScenarios = Object.values(multipleAnswersDetected).some(Boolean);
+            if (userHadTieScenarios) {
+                aggregateStats.usersWithMultipleAnswerPoints++;
+            }
+            
+            // Track by question type
+            if (multipleAnswersDetected.topScorer) {
+                aggregateStats.questionTypeStats.topScorer.usersWithTies++;
+                aggregateStats.questionTypeStats.topScorer.totalTieInstances++;
+                aggregateStats.totalTieScenarios++;
+            }
+            if (multipleAnswersDetected.goalDifference) {
+                aggregateStats.questionTypeStats.goalDifference.usersWithTies++;
+                aggregateStats.questionTypeStats.goalDifference.totalTieInstances++;
+                aggregateStats.totalTieScenarios++;
+            }
+            if (multipleAnswersDetected.leagueWinner) {
+                aggregateStats.questionTypeStats.leagueWinner.usersWithTies++;
+                aggregateStats.questionTypeStats.leagueWinner.totalTieInstances++;
+                aggregateStats.totalTieScenarios++;
+            }
+            if (multipleAnswersDetected.lastPlace) {
+                aggregateStats.questionTypeStats.lastPlace.usersWithTies++;
+                aggregateStats.questionTypeStats.lastPlace.totalTieInstances++;
+                aggregateStats.totalTieScenarios++;
+            }
+
             payloadForRPC.push({
                 user_id: userId,
                 total_points: dynamicPointsResult.totalPoints,
@@ -557,7 +651,20 @@ export async function processAndStoreDynamicPointsForRound(
     }
 
     const duration = Date.now() - overallStartTime;
-    logger.info({ roundId, durationMs: duration, usersProcessed, usersUpdated: usersSuccessfullyUpdated }, 'Dynamic points processing completed.');
+    
+    // Enhanced: Log aggregate multiple correct answers statistics for the round
+    logger.info({ 
+        roundId, 
+        durationMs: duration, 
+        usersProcessed, 
+        usersUpdated: usersSuccessfullyUpdated,
+        // Multiple answers aggregate stats
+        multipleAnswersStats: {
+            ...aggregateStats,
+            percentageUsersWithTies: usersProcessed > 0 ? Math.round((aggregateStats.usersWithMultipleAnswerPoints / usersProcessed) * 100) : 0
+        }
+    }, `Dynamic points processing completed${aggregateStats.totalTieScenarios > 0 ? ` - detected ${aggregateStats.totalTieScenarios} tie scenarios across ${aggregateStats.usersWithMultipleAnswerPoints} users` : ''}.`);
+    
     return {
         success: true,
         message: 'Dynamic points processing completed.',
