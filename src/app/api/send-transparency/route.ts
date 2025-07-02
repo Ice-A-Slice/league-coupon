@@ -138,15 +138,11 @@ export async function POST(request: Request) {
     const emailResults = [];
     for (const user of targetUsers) {
       try {
-        // Get user profile for email address
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('email, display_name')
-          .eq('id', user.userId)
-          .single();
-
-        if (profileError || !profile?.email) {
-          logger.error(`Failed to get email for user ${user.userId}:`, profileError);
+        // Get user email from auth.users and name from profiles
+        const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(user.userId);
+        
+        if (authError || !authUser.user?.email) {
+          logger.error(`Failed to get email for user ${user.userId}:`, authError);
           emailResults.push({
             userId: user.userId,
             success: false,
@@ -154,6 +150,13 @@ export async function POST(request: Request) {
           });
           continue;
         }
+
+        // Get display name from profiles (optional)
+        const { data: _profile } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.userId)
+          .single();
 
         // Generate email HTML
         const emailHtml = await render(
@@ -165,7 +168,7 @@ export async function POST(request: Request) {
         // Send email
         const emailResponse = await sendEmail({
           from: process.env.RESEND_FROM_EMAIL || 'noreply@tippslottet.com',
-          to: [profile.email],
+          to: [authUser.user.email],
           subject: `Round ${transparencyData.roundName} - All Predictions Revealed`,
           html: emailHtml,
           tags: [
@@ -180,12 +183,12 @@ export async function POST(request: Request) {
 
         emailResults.push({
           userId: user.userId,
-          email: profile.email,
+          email: authUser.user.email,
           success: true,
           messageId: emailResponse.id
         });
 
-        logger.info(`Transparency email sent successfully to ${profile.email}`);
+        logger.info(`Transparency email sent successfully to ${authUser.user.email}`);
 
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
