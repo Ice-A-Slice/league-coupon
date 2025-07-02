@@ -261,6 +261,24 @@ export interface PlayerStatistic {
   // User to verify: Other stats like penalties, cards, minutes played if needed and available from top scorers endpoint.
 }
 
+// --- Enhanced League State Interface for Multiple Answers Support ---
+
+/**
+ * Enhanced league state interface that supports multiple correct answers
+ * for dynamic questionnaire points system. Used when ties exist in various
+ * league standings and statistics.
+ */
+export interface EnhancedLeagueState {
+  /** Array of player IDs who are tied for top scorer position */
+  topScorers: number[];
+  /** Array of team IDs who are tied for best goal difference */
+  bestGoalDifferenceTeams: number[];
+  /** Array of team IDs who are tied for league winner position (future implementation) */
+  leagueWinners?: number[];
+  /** Array of team IDs who are tied for last place position (future implementation) */
+  lastPlaceTeams?: number[];
+}
+
 // --- Service Interface ---
 
 export interface ILeagueDataService {
@@ -307,6 +325,32 @@ export interface ILeagueDataService {
     competitionApiId: number, // Changed parameter name for clarity
     seasonYear: number, // Changed parameter name for clarity
   ): Promise<TeamStanding | null>;
+
+  // --- New Methods for Multiple Correct Answers Support ---
+
+  /**
+   * Retrieves all player IDs who are tied for the top scorer position.
+   * This method supports multiple correct answers when players have identical goal counts.
+   * @param competitionApiId The API ID of the competition.
+   * @param seasonYear The API representation of the season.
+   * @returns A Promise resolving to an array of player IDs who share the top scorer position.
+   */
+  getTopScorers(
+    competitionApiId: number,
+    seasonYear: number,
+  ): Promise<number[]>;
+
+  /**
+   * Retrieves all team IDs who are tied for the best goal difference.
+   * This method supports multiple correct answers when teams have identical goal differences.
+   * @param competitionApiId The API ID of the competition.
+   * @param seasonYear The API representation of the season.
+   * @returns A Promise resolving to an array of team IDs who share the best goal difference.
+   */
+  getBestGoalDifferenceTeams(
+    competitionApiId: number,
+    seasonYear: number,
+  ): Promise<number[]>;
 }
 
 // We will implement a class `LeagueDataServiceImpl` that implements `ILeagueDataService` in later subtasks. 
@@ -546,5 +590,167 @@ export class LeagueDataServiceImpl implements ILeagueDataService {
     // this returns the first one encountered with the highest rank value.
     // Similar to getTeamWithBestGoalDifference, this could be modified to return all tied teams.
     return lastPlaceTeam;
+  }
+
+  async getTopScorers(
+    competitionApiId: number,
+    seasonYear: number,
+  ): Promise<number[]> {
+    try {
+      // Validate input parameters
+      if (!competitionApiId || competitionApiId <= 0) {
+        console.error('getTopScorers: Invalid competitionApiId provided:', competitionApiId);
+        return [];
+      }
+      if (!seasonYear || seasonYear <= 0) {
+        console.error('getTopScorers: Invalid seasonYear provided:', seasonYear);
+        return [];
+      }
+
+      console.log(`Getting top scorers for competition ${competitionApiId}, season ${seasonYear}`);
+      
+      // Use existing API client to fetch all top scorers data
+      const allTopScorers = await this.getCurrentTopScorers(competitionApiId, seasonYear);
+      
+      // Handle no data scenarios
+      if (!allTopScorers) {
+        console.warn('getTopScorers: getCurrentTopScorers returned null - API may be unavailable');
+        return [];
+      }
+      
+      if (allTopScorers.length === 0) {
+        console.warn('getTopScorers: No top scorers found for this competition/season');
+        return [];
+      }
+
+      // Validate that all players have valid goal counts
+      const validPlayers = allTopScorers.filter(player => {
+        console.log('DEBUG: Validating player', player.player_api_id, 'with goals:', player.goals, 'typeof:', typeof player.goals, 'isNaN:', isNaN(player.goals));
+        
+        if (typeof player.goals !== 'number' || isNaN(player.goals) || player.goals < 0) {
+          console.warn('getTopScorers: Invalid goal count for player', player.player_api_id, player.goals);
+          return false;
+        }
+        if (!player.player_api_id || player.player_api_id <= 0) {
+          console.warn('getTopScorers: Invalid player_api_id for player', player);
+          return false;
+        }
+        return true;
+      });
+
+      if (validPlayers.length === 0) {
+        console.warn('getTopScorers: No players with valid goal counts found');
+        return [];
+      }
+
+      // Find the maximum goal count
+      const maxGoals = Math.max(...validPlayers.map(player => player.goals));
+      console.log(`getTopScorers: Maximum goal count is ${maxGoals}`);
+      
+      // Find all players with the maximum goal count (handles ties)
+      const topScorers = validPlayers
+        .filter(player => player.goals === maxGoals)
+        .map(player => player.player_api_id);
+
+      console.log(`getTopScorers: Found ${topScorers.length} player(s) tied for top scorer:`, topScorers);
+      
+      // Additional validation: ensure no duplicate player IDs
+      const uniqueTopScorers: number[] = [];
+      for (const playerId of topScorers) {
+        if (uniqueTopScorers.indexOf(playerId) === -1) {
+          uniqueTopScorers.push(playerId);
+        }
+      }
+      
+      if (uniqueTopScorers.length !== topScorers.length) {
+        console.warn('getTopScorers: Removed duplicate player IDs from results');
+      }
+
+      return uniqueTopScorers;
+
+    } catch (error) {
+      console.error('getTopScorers: Unexpected error occurred:', error);
+      return [];
+    }
+  }
+
+  async getBestGoalDifferenceTeams(
+    competitionApiId: number,
+    seasonYear: number,
+  ): Promise<number[]> {
+    try {
+      // Validate input parameters
+      if (!competitionApiId || competitionApiId <= 0) {
+        console.error('getBestGoalDifferenceTeams: Invalid competitionApiId provided:', competitionApiId);
+        return [];
+      }
+      if (!seasonYear || seasonYear <= 0) {
+        console.error('getBestGoalDifferenceTeams: Invalid seasonYear provided:', seasonYear);
+        return [];
+      }
+
+      console.log(`Getting teams with best goal difference for competition ${competitionApiId}, season ${seasonYear}`);
+      
+      // Use existing API client to fetch league table data
+      const leagueTable = await this.getCurrentLeagueTable(competitionApiId, seasonYear);
+      
+      // Handle no data scenarios
+      if (!leagueTable) {
+        console.warn('getBestGoalDifferenceTeams: getCurrentLeagueTable returned null - API may be unavailable');
+        return [];
+      }
+      
+      if (!leagueTable.standings || leagueTable.standings.length === 0) {
+        console.warn('getBestGoalDifferenceTeams: No standings found for this competition/season');
+        return [];
+      }
+
+      // Validate that all teams have valid goal difference values
+      const validTeams = leagueTable.standings.filter(team => {
+        if (typeof team.goals_difference !== 'number' || isNaN(team.goals_difference)) {
+          console.warn('getBestGoalDifferenceTeams: Invalid goal difference for team', team.team_id, team.goals_difference);
+          return false;
+        }
+        if (!team.team_id || team.team_id <= 0) {
+          console.warn('getBestGoalDifferenceTeams: Invalid team_id for team', team);
+          return false;
+        }
+        return true;
+      });
+
+      if (validTeams.length === 0) {
+        console.warn('getBestGoalDifferenceTeams: No teams with valid goal difference found');
+        return [];
+      }
+
+      // Find the maximum goal difference
+      const maxGoalDifference = Math.max(...validTeams.map(team => team.goals_difference));
+      console.log(`getBestGoalDifferenceTeams: Maximum goal difference is ${maxGoalDifference}`);
+      
+      // Find all teams with the maximum goal difference (handles ties)
+      const bestTeams = validTeams
+        .filter(team => team.goals_difference === maxGoalDifference)
+        .map(team => team.team_id);
+
+      console.log(`getBestGoalDifferenceTeams: Found ${bestTeams.length} team(s) tied for best goal difference:`, bestTeams);
+      
+      // Additional validation: ensure no duplicate team IDs
+      const uniqueBestTeams: number[] = [];
+      for (const teamId of bestTeams) {
+        if (uniqueBestTeams.indexOf(teamId) === -1) {
+          uniqueBestTeams.push(teamId);
+        }
+      }
+      
+      if (uniqueBestTeams.length !== bestTeams.length) {
+        console.warn('getBestGoalDifferenceTeams: Removed duplicate team IDs from results');
+      }
+
+      return uniqueBestTeams;
+
+    } catch (error) {
+      console.error('getBestGoalDifferenceTeams: Unexpected error occurred:', error);
+      return [];
+    }
   }
 } 
