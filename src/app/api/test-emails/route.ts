@@ -96,7 +96,12 @@ export async function POST(request: Request) {
     const isDevelopment = process.env.NODE_ENV === 'development';
     const cronSecret = process.env.CRON_SECRET;
     const authHeader = request.headers.get('authorization');
-    const isAuthorized = authHeader === `Bearer ${cronSecret}`;
+    const cronSecretHeader = request.headers.get('x-cron-secret');
+    
+    const isAuthorized = cronSecret && (
+      authHeader === `Bearer ${cronSecret}` || 
+      cronSecretHeader === cronSecret
+    );
 
     if (!isDevelopment && !isAuthorized) {
       return NextResponse.json({ 
