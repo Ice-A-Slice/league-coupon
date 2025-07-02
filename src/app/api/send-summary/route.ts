@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import React from 'react';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
 import { emailDataService } from '@/lib/emailDataService';
@@ -47,6 +48,7 @@ export async function POST(request: Request) {
   const isServerCall = authHeader === `Bearer ${cronSecret}`;
 
   let userId: string | null = null;
+  let supabase;
 
   if (!isServerCall) {
     // For non-server calls, require user authentication
@@ -71,8 +73,8 @@ export async function POST(request: Request) {
       },
     };
 
-    // Create Supabase client
-    const supabase = createServerClient(
+    // Create Supabase client for user authentication
+    supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
@@ -91,6 +93,11 @@ export async function POST(request: Request) {
     userId = user.id;
     console.log(`User ${userId} attempting to send summary emails.`);
   } else {
+    // For server calls, use service role client
+    supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
     console.log('Server-to-server authentication successful for summary emails');
   }
 
