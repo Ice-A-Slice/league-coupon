@@ -30,8 +30,13 @@ export async function POST(request: Request) {
   try {
     // Authentication: Support both server-to-server (cron) and user session authentication
     const authHeader = request.headers.get('authorization');
+    const cronSecretHeader = request.headers.get('x-cron-secret');
     const cronSecret = process.env.CRON_SECRET;
-    const isServerCall = authHeader === `Bearer ${cronSecret}`;
+    
+    const isServerCall = cronSecret && (
+      authHeader === `Bearer ${cronSecret}` || 
+      cronSecretHeader === cronSecret
+    );
 
     if (!isServerCall) {
       // For non-server calls, require user authentication
