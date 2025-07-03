@@ -22,6 +22,7 @@ interface CurrentAnswer {
   question_label: string;
   current_answer: string;
   points_value: number;
+  row_index: number;
 }
 
 interface CurrentAnswersTableProps {
@@ -37,8 +38,18 @@ const CurrentAnswersTable: React.FC<CurrentAnswersTableProps> = ({ data }) => {
     );
   }
 
-  // Create a map for easy lookup of answers by question type
-  const answerMap = new Map(data.map(answer => [answer.question_type, answer.current_answer]));
+  // Group data by row_index to create multiple rows for ties
+  const rowGroups = new Map<number, Map<string, string>>();
+  
+  data.forEach(answer => {
+    if (!rowGroups.has(answer.row_index)) {
+      rowGroups.set(answer.row_index, new Map());
+    }
+    rowGroups.get(answer.row_index)!.set(answer.question_type, answer.current_answer);
+  });
+
+  // Sort row indices to ensure consistent ordering
+  const sortedRowIndices = Array.from(rowGroups.keys()).sort((a, b) => a - b);
 
   return (
     <TooltipProvider>
@@ -96,20 +107,28 @@ const CurrentAnswersTable: React.FC<CurrentAnswersTableProps> = ({ data }) => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow className="bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors duration-150 ease-in-out">
-              <TableCell className="px-3 py-4 font-semibold text-primary dark:text-teal-400">
-                {answerMap.get('league_winner') || 'TBD'}
-              </TableCell>
-              <TableCell className="px-3 py-4 font-semibold text-primary dark:text-teal-400">
-                {answerMap.get('best_goal_difference') || 'TBD'}
-              </TableCell>
-              <TableCell className="px-3 py-4 font-semibold text-primary dark:text-teal-400">
-                {answerMap.get('top_scorer') || 'TBD'}
-              </TableCell>
-              <TableCell className="px-3 py-4 font-semibold text-primary dark:text-teal-400">
-                {answerMap.get('last_place') || 'TBD'}
-              </TableCell>
-            </TableRow>
+            {sortedRowIndices.map((rowIndex) => {
+              const rowData = rowGroups.get(rowIndex)!;
+              return (
+                <TableRow 
+                  key={rowIndex}
+                  className="bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors duration-150 ease-in-out"
+                >
+                  <TableCell className="px-3 py-4 font-semibold text-primary dark:text-teal-400">
+                    {rowData.get('league_winner') || ''}
+                  </TableCell>
+                  <TableCell className="px-3 py-4 font-semibold text-primary dark:text-teal-400">
+                    {rowData.get('best_goal_difference') || ''}
+                  </TableCell>
+                  <TableCell className="px-3 py-4 font-semibold text-primary dark:text-teal-400">
+                    {rowData.get('top_scorer') || ''}
+                  </TableCell>
+                  <TableCell className="px-3 py-4 font-semibold text-primary dark:text-teal-400">
+                    {rowData.get('last_place') || ''}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
         
@@ -118,6 +137,9 @@ const CurrentAnswersTable: React.FC<CurrentAnswersTableProps> = ({ data }) => {
           <p className="text-xs text-blue-700 dark:text-blue-300">
             <strong>Note:</strong> These answers update automatically as the season progresses. 
             Users earn points when their predictions match the current leaders.
+            {sortedRowIndices.length > 1 && (
+              <span> Multiple rows indicate tied positions (e.g., tied top scorers).</span>
+            )}
           </p>
         </div>
       </div>
