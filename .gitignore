@@ -67,3 +67,7 @@ tasks/
 
 # Supabase CLI temp files
 supabase/.temp/ 
+
+# Local development files
+scripts/
+.windsurfrules 
