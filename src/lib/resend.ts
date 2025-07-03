@@ -261,7 +261,7 @@ export async function sendSimpleEmail(
   to: string | string[],
   subject: string,
   content: string,
-  from: string = 'noreply@tippslottet.com'
+  from: string = process.env.RESEND_FROM_EMAIL || 'noreply@tippslottet.com'
 ): Promise<EmailResponse> {
   return sendEmail({
     to,
@@ -280,7 +280,7 @@ export async function testEmailConnection(testEmail: string = 'test@example.com'
     testEmail,
     'Email Service Test',
     'This is a test email to verify the email service connection is working correctly.',
-    'test@tippslottet.com'
+    process.env.RESEND_FROM_EMAIL || 'test@tippslottet.com'
   );
 }
 
