@@ -1,4 +1,3 @@
-
 export type Json =
   | string
   | number
@@ -8,31 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          operationName?: string
-          query?: string
-          variables?: Json
-          extensions?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       betting_round_fixtures: {
@@ -383,10 +357,59 @@ export type Database = {
           },
         ]
       }
+      season_winners: {
+        Row: {
+          created_at: string | null
+          dynamic_points: number
+          game_points: number
+          id: number
+          league_id: number
+          season_id: number
+          total_points: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          dynamic_points: number
+          game_points: number
+          id?: number
+          league_id: number
+          season_id: number
+          total_points: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          dynamic_points?: number
+          game_points?: number
+          id?: number
+          league_id?: number
+          season_id?: number
+          total_points?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "season_winners_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "season_winners_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       seasons: {
         Row: {
           api_season_year: number
           competition_id: number
+          completed_at: string | null
           coverage_json: Json | null
           created_at: string | null
           end_date: string | null
@@ -394,10 +417,12 @@ export type Database = {
           is_current: boolean | null
           name: string | null
           start_date: string | null
+          winner_determined_at: string | null
         }
         Insert: {
           api_season_year: number
           competition_id: number
+          completed_at?: string | null
           coverage_json?: Json | null
           created_at?: string | null
           end_date?: string | null
@@ -405,10 +430,12 @@ export type Database = {
           is_current?: boolean | null
           name?: string | null
           start_date?: string | null
+          winner_determined_at?: string | null
         }
         Update: {
           api_season_year?: number
           competition_id?: number
+          completed_at?: string | null
           coverage_json?: Json | null
           created_at?: string | null
           end_date?: string | null
@@ -416,6 +443,7 @@ export type Database = {
           is_current?: boolean | null
           name?: string | null
           start_date?: string | null
+          winner_determined_at?: string | null
         }
         Relationships: [
           {
@@ -757,9 +785,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       betting_round_status: ["open", "closed", "scoring", "scored"],
