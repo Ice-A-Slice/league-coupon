@@ -44,8 +44,13 @@ type SendSummaryPayload = z.infer<typeof sendSummarySchema>;
 export async function POST(request: Request) {
   // Authentication: Support both server-to-server (cron) and user session authentication
   const authHeader = request.headers.get('authorization');
+  const cronSecretHeader = request.headers.get('x-cron-secret');
   const cronSecret = process.env.CRON_SECRET;
-  const isServerCall = authHeader === `Bearer ${cronSecret}`;
+  
+  const isServerCall = cronSecret && (
+    authHeader === `Bearer ${cronSecret}` || 
+    cronSecretHeader === cronSecret
+  );
 
   let userId: string | null = null;
   let supabase;
