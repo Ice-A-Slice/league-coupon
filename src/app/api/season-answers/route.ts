@@ -20,6 +20,7 @@ interface _CurrentAnswer {
   question_label: string;
   current_answer: string;
   points_value: number;
+  row_index: number;
 }
 
 // Type for raw user answer data from Supabase
@@ -171,7 +172,7 @@ export async function GET(_request: NextRequest) {
         // 1. Get current season
         const { data: currentSeason, error: seasonError } = await serviceRoleClient
             .from('seasons')
-            .select('id')
+            .select('id, api_season_year, competition:competitions!inner(api_league_id)')
             .eq('is_current', true)
             .single();
 
@@ -181,6 +182,10 @@ export async function GET(_request: NextRequest) {
         }
 
         const seasonId = currentSeason.id;
+        const leagueId = currentSeason.competition.api_league_id;
+        const seasonYear = currentSeason.api_season_year;
+
+        console.log(`GET /api/season-answers: Using current season ${seasonId} - League ${leagueId}, Year ${seasonYear}`);
 
         // 2. Fetch ALL user profiles first (to show all users, even those who haven't answered)
         // Use service role client to bypass RLS and read all profiles
@@ -218,15 +223,14 @@ export async function GET(_request: NextRequest) {
         const profileMap = new Map(profiles?.map(p => [p.id, p.full_name || `User ${p.id}`]) || []);
 
         // 3. Get current correct answers using our multiple answers logic
-        // Use the singleton instance
+        // Use the dynamic league/season from the database
         
         // Get current league data (including current standings)
-        // Note: Using hardcoded league/season for MVP - will be dynamic in future
         const [topScorers, bestGoalDifferenceTeams, currentLeagueTable, lastPlaceTeam] = await Promise.all([
-            LeagueDataService.getTopScorers(165, 2025), // Premier League 2025
-            LeagueDataService.getBestGoalDifferenceTeams(165, 2025), // Premier League 2025
-            LeagueDataService.getCurrentLeagueTable(165, 2025), // Current standings
-            LeagueDataService.getLastPlaceTeam(165, 2025) // Current last place team
+            LeagueDataService.getTopScorers(leagueId, seasonYear), // Dynamic from database
+            LeagueDataService.getBestGoalDifferenceTeams(leagueId, seasonYear), // Dynamic from database
+            LeagueDataService.getCurrentLeagueTable(leagueId, seasonYear), // Dynamic from database
+            LeagueDataService.getLastPlaceTeam(leagueId, seasonYear) // Dynamic from database
         ]);
 
         // Get current league winner (first place team) and team names for display
@@ -275,37 +279,51 @@ export async function GET(_request: NextRequest) {
         // 4. Manually fetch team and player names for user answers
         const userPredictionsWithNames = await transformUserPredictionsWithNames(userAnswers, profileMap, profiles, serviceRoleClient);
 
-        // 5. Create current answers data
-        const currentAnswers = [
-            {
+        // 5. Create current answers data with support for multiple rows when tied
+        const currentAnswers = [];
+        
+        // Find the maximum number of tied answers to determine how many rows we need
+        const maxTiedAnswers = Math.max(
+            1, // Always at least 1 row
+            topScorerNames.length,
+            bestGoalDifferenceNames.length
+            // League winner and last place are typically single answers, but could be extended
+        );
+        
+        // Create rows for each tied position
+        for (let rowIndex = 0; rowIndex < maxTiedAnswers; rowIndex++) {
+            currentAnswers.push({
                 question_type: 'league_winner',
-                question_label: 'League Winner',
-                current_answer: leagueWinnerName || 'TBD',
-                points_value: 3
-            },
-            {
+                question_label: 'League Winner', 
+                current_answer: rowIndex === 0 ? (leagueWinnerName || 'TBD') : '', // Only show in first row
+                points_value: 3,
+                row_index: rowIndex
+            });
+            
+            currentAnswers.push({
                 question_type: 'best_goal_difference',
                 question_label: 'Best Goal Difference',
-                current_answer: bestGoalDifferenceNames.length > 1 
-                    ? `${bestGoalDifferenceNames.join(', ')} (${bestGoalDifferenceNames.length} tied)`
-                    : bestGoalDifferenceNames[0] || 'TBD',
-                points_value: 3
-            },
-            {
-                question_type: 'top_scorer',
+                current_answer: bestGoalDifferenceNames[rowIndex] || (rowIndex === 0 ? 'TBD' : ''), // Show tied teams in separate rows
+                points_value: 3,
+                row_index: rowIndex
+            });
+            
+            currentAnswers.push({
+                question_type: 'top_scorer', 
                 question_label: 'Top Scorer',
-                current_answer: topScorerNames.length > 1 
-                    ? `${topScorerNames.join(', ')} (${topScorerNames.length} tied)`
-                    : topScorerNames[0] || 'TBD',
-                points_value: 3
-            },
-            {
+                current_answer: topScorerNames[rowIndex] || (rowIndex === 0 ? 'TBD' : ''), // Show tied players in separate rows
+                points_value: 3,
+                row_index: rowIndex
+            });
+            
+            currentAnswers.push({
                 question_type: 'last_place',
                 question_label: 'Last Place',
-                current_answer: lastPlaceName || 'TBD',
-                points_value: 3
-            }
-        ];
+                current_answer: rowIndex === 0 ? (lastPlaceName || 'TBD') : '', // Only show in first row
+                points_value: 3,
+                row_index: rowIndex
+            });
+        }
 
         console.log(`GET /api/season-answers: Success - ${userPredictionsWithNames.length} user predictions, ${currentAnswers.length} current answers`);
         
