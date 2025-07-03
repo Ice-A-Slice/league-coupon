@@ -19,6 +19,7 @@ interface CurrentAnswer {
   question_label: string;
   current_answer: string;
   points_value: number;
+  row_index: number;
 }
 
 interface TransparencyData {
