@@ -62,7 +62,7 @@ export class SummaryEmailSender {
 
   constructor(config?: Partial<SummaryEmailConfig>) {
     this.config = {
-      from: process.env.EMAIL_FROM || 'noreply@tippslottet.com',
+      from: process.env.RESEND_FROM_EMAIL || 'noreply@tippslottet.com',
       replyTo: process.env.EMAIL_REPLY_TO || 'support@tippslottet.com',
       batchSize: 10, // Process 10 emails at a time
       delayBetweenBatches: 1000, // 1 second between batches

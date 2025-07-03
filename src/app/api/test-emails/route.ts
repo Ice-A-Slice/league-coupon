@@ -172,7 +172,7 @@ export async function POST(request: Request) {
         // Send the email
         const result = await sendEmail({
           to: userEmail,
-          from: 'noreply@tippslottet.com',
+          from: process.env.RESEND_FROM_EMAIL || 'noreply@tippslottet.com',
           subject: `Week ${emailProps.roundNumber} Summary - Your Football Predictions`,
           react: React.createElement(SummaryEmail, emailProps),
           tags: [
@@ -242,7 +242,7 @@ export async function POST(request: Request) {
         // Send the email
         const result = await sendEmail({
           to: userEmail,
-          from: 'noreply@tippslottet.com',
+          from: process.env.RESEND_FROM_EMAIL || 'noreply@tippslottet.com',
           subject: `${reminderData.fixtures.deadline?.isUrgent ? '🚨 Last Chance!' : '⏰ Reminder'} Round ${reminderData.roundContext.roundNumber} Predictions - ${reminderData.fixtures.deadline?.timeRemaining || 'Time Running Out'}`,
           react: React.createElement(ReminderEmail, emailProps),
           tags: [
