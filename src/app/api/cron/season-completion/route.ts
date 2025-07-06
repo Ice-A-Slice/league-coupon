@@ -1,29 +1,33 @@
 import { NextResponse } from 'next/server';
 import { SeasonCompletionDetectorService } from '@/services/seasonCompletionDetectorService';
+import { WinnerDeterminationService, WinnerDeterminationResult } from '@/services/winnerDeterminationService';
 import { logger } from '@/utils/logger';
 import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { revalidatePath } from 'next/cache';
+import { startCronExecution, completeCronExecution } from '@/utils/cron/alerts';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * GET /api/cron/season-completion
  * 
- * Cron endpoint for automated season completion detection.
- * This endpoint should be called periodically (e.g., daily) to:
+ * Cron endpoint for automated season completion detection and winner determination.
+ * This endpoint should be called periodically (e.g., weekly) to:
  * - Check for seasons where all fixtures are complete
  * - Mark those seasons as completed with a timestamp
+ * - Determine winners for any newly completed seasons
  * 
  * Authentication: Requires CRON_SECRET environment variable
  * 
  * Returns:
- * - 200: Success with detection results
+ * - 200: Success with detection and winner determination results
  * - 401: Unauthorized (missing or invalid CRON_SECRET)
  * - 500: Internal server error
  */
 export async function GET(request: Request) {
   const startTime = Date.now();
-  logger.info('SeasonCompletion: Starting cron job for season completion detection...');
+  const executionId = startCronExecution('season-completion');
+  logger.info('SeasonCompletion: Starting cron job for season completion detection and winner determination...', { executionId });
 
   // Authenticate cron job using secret (support both Bearer and X-Cron-Secret headers)
   const cronSecret = process.env.CRON_SECRET;
@@ -47,7 +51,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    // Initialize Supabase service role client for the detector service
+    // Initialize Supabase service role client for both services
     const serviceRoleClient = getSupabaseServiceRoleClient();
     
     // Initialize the season completion detector service
@@ -56,33 +60,89 @@ export async function GET(request: Request) {
     // Run the season completion detection
     const detectionResult = await detectorService.detectAndMarkCompletedSeasons();
     
+    // Initialize winner determination variables
+    let winnerDeterminationResults: WinnerDeterminationResult[] = [];
+    let winnerDeterminationErrors: string[] = [];
+    let totalWinnersProcessed = 0;
+
+    // If seasons were marked as complete, determine winners for them
+    if (detectionResult.completedSeasonIds.length > 0) {
+      logger.info(`SeasonCompletion: ${detectionResult.completedSeasonIds.length} seasons marked as complete, determining winners...`, {
+        completedSeasonIds: detectionResult.completedSeasonIds
+      });
+
+      try {
+        // Initialize the winner determination service
+        const winnerService = new WinnerDeterminationService(serviceRoleClient);
+        
+        // Determine winners for completed seasons
+        winnerDeterminationResults = await winnerService.determineWinnersForCompletedSeasons();
+        
+        // Analyze winner determination results
+        const successfulDeterminations = winnerDeterminationResults.filter(r => r.errors.length === 0);
+        const failedDeterminations = winnerDeterminationResults.filter(r => r.errors.length > 0);
+        
+        totalWinnersProcessed = winnerDeterminationResults.reduce((sum, r) => sum + r.winners.length, 0);
+        
+        if (successfulDeterminations.length > 0) {
+          logger.info(`SeasonCompletion: Successfully determined winners for ${successfulDeterminations.length} seasons`, {
+            successfulSeasons: successfulDeterminations.map(r => r.seasonId),
+            totalWinners: totalWinnersProcessed
+          });
+        }
+        
+        if (failedDeterminations.length > 0) {
+          winnerDeterminationErrors = failedDeterminations.flatMap(r => r.errors.map(e => e.message));
+          logger.warn(`SeasonCompletion: Failed to determine winners for ${failedDeterminations.length} seasons`, {
+            failedSeasons: failedDeterminations.map(r => r.seasonId),
+            errors: winnerDeterminationErrors
+          });
+        }
+
+      } catch (winnerError) {
+        const errorMessage = winnerError instanceof Error ? winnerError.message : String(winnerError);
+        winnerDeterminationErrors.push(errorMessage);
+        logger.error('SeasonCompletion: Winner determination service failed', {
+          error: errorMessage,
+          stack: winnerError instanceof Error ? winnerError.stack : undefined,
+          completedSeasonIds: detectionResult.completedSeasonIds
+        });
+      }
+    }
+
     const endTime = Date.now();
     const duration = endTime - startTime;
 
-    // Analyze results
+    // Analyze overall results
     const totalProcessed = detectionResult.processedCount + detectionResult.skippedCount;
-    const hasErrors = detectionResult.errors.length > 0;
+    const hasSeasonDetectionErrors = detectionResult.errors.length > 0;
+    const hasWinnerDeterminationErrors = winnerDeterminationErrors.length > 0;
+    const hasAnyErrors = hasSeasonDetectionErrors || hasWinnerDeterminationErrors;
 
     const summary = {
-      success: !hasErrors || detectionResult.completedSeasonIds.length > 0,
-      message: `Season completion check completed. ${detectionResult.completedSeasonIds.length} seasons marked as complete.`,
+      success: !hasAnyErrors || detectionResult.completedSeasonIds.length > 0,
+      message: `Season completion check completed. ${detectionResult.completedSeasonIds.length} seasons marked as complete. ${totalWinnersProcessed} winners determined.`,
       duration_ms: duration,
       total_seasons_checked: totalProcessed,
       completed_seasons: detectionResult.completedSeasonIds.length,
       seasons_in_progress: detectionResult.skippedCount,
-      error_count: detectionResult.errors.length,
+      season_detection_error_count: detectionResult.errors.length,
       completed_season_ids: detectionResult.completedSeasonIds,
+      winner_determination_processed: winnerDeterminationResults.length,
+      total_winners_determined: totalWinnersProcessed,
+      winner_determination_error_count: winnerDeterminationErrors.length,
       timestamp: new Date().toISOString()
     };
 
-    // Log completion info
+    // Log completion info and trigger cache revalidation
     if (detectionResult.completedSeasonIds.length > 0) {
-      logger.info(`SeasonCompletion: Marked ${detectionResult.completedSeasonIds.length} seasons as complete`, {
+      logger.info(`SeasonCompletion: Marked ${detectionResult.completedSeasonIds.length} seasons as complete and determined ${totalWinnersProcessed} winners`, {
         completedSeasonIds: detectionResult.completedSeasonIds,
+        totalWinners: totalWinnersProcessed,
         duration
       });
 
-      // Trigger cache revalidation since season data has changed
+      // Trigger cache revalidation since season and standings data may have changed
       try {
         revalidatePath('/');
         revalidatePath('/standings');
@@ -97,20 +157,43 @@ export async function GET(request: Request) {
       });
     }
 
-    // Log any errors but don't fail the entire operation
-    if (hasErrors) {
-      logger.warn('SeasonCompletion: Some errors occurred during detection', {
+    // Log any errors but don't fail the entire operation if we had some success
+    if (hasSeasonDetectionErrors) {
+      logger.warn('SeasonCompletion: Some errors occurred during season detection', {
         errorCount: detectionResult.errors.length,
         errors: detectionResult.errors.map(e => e.message)
       });
     }
 
+    if (hasWinnerDeterminationErrors) {
+      logger.warn('SeasonCompletion: Some errors occurred during winner determination', {
+        errorCount: winnerDeterminationErrors.length,
+        errors: winnerDeterminationErrors
+      });
+    }
+
     logger.info('SeasonCompletion: Cron job completed', summary);
+
+    // Report successful execution to alerting system
+    completeCronExecution(executionId, 'success', undefined, {
+      seasonsChecked: totalProcessed,
+      seasonsCompleted: detectionResult.completedSeasonIds.length,
+      winnersProcessed: totalWinnersProcessed,
+      durationMs: duration
+    });
 
     // Include detailed results in response for debugging
     return NextResponse.json({
       ...summary,
-      detailed_errors: hasErrors ? detectionResult.errors.map(e => e.message) : undefined
+      detailed_season_detection_errors: hasSeasonDetectionErrors ? detectionResult.errors.map(e => e.message) : undefined,
+      detailed_winner_determination_errors: hasWinnerDeterminationErrors ? winnerDeterminationErrors : undefined,
+      winner_determination_results: winnerDeterminationResults.length > 0 ? winnerDeterminationResults.map(r => ({
+        seasonId: r.seasonId,
+        winnersCount: r.winners.length,
+        totalPlayers: r.totalPlayers,
+        isAlreadyDetermined: r.isSeasonAlreadyDetermined,
+        hasErrors: r.errors.length > 0
+      })) : undefined
     }, { status: 200 });
 
   } catch (error) {
@@ -125,9 +208,14 @@ export async function GET(request: Request) {
       timestamp: new Date().toISOString()
     });
 
+    // Report failed execution to alerting system
+    completeCronExecution(executionId, 'failure', errorMessage, {
+      durationMs: duration
+    });
+
     return NextResponse.json({
       success: false,
-      error: 'Season completion detection failed',
+      error: 'Season completion detection and winner determination failed',
       message: errorMessage,
       duration_ms: duration,
       timestamp: new Date().toISOString()
