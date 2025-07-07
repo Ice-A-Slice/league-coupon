@@ -18,6 +18,11 @@ export function MobileBottomNav() {
           Svar
         </span>
       </Link>
+      <Link href="/hall-of-fame" passHref>
+        <span className="text-sm font-medium text-muted-foreground hover:text-primary cursor-pointer p-2">
+          Hall of Fame
+        </span>
+      </Link>
     </nav>
   );
 } 
