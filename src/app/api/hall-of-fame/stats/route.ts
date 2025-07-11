@@ -45,26 +45,39 @@ export async function GET(request: NextRequest) {
         user_id: 'user-1',
         user: {
           id: 'user-1',
-          full_name: 'John Doe',
+          full_name: 'Alex Thompson',
           avatar_url: null,
-          updated_at: '2023-01-01T00:00:00Z'
+          updated_at: '2024-06-01T00:00:00Z'
         },
-        win_count: 3,
-        total_points: 450,
-        avg_points: 150,
-        max_points: 180,
-        min_points: 120,
-        first_win_date: '2023-01-01T00:00:00Z',
-        last_win_date: '2023-12-01T00:00:00Z',
+        win_count: 2,
+        total_points: 317, // 150 + 167
+        avg_points: 158.5,
+        max_points: 167,
+        min_points: 150,
+        first_win_date: '2019-05-31T00:00:00Z',
+        last_win_date: '2024-05-31T00:00:00Z',
         seasons: [
           {
             season_id: 1,
-            season_name: 'Premier League 2022/23',
-            season_year: 2022,
-            completed_at: '2023-05-31T23:59:59Z',
-            points: 180,
+            season_name: 'Premier League 2018/19',
+            season_year: 2018,
+            completed_at: '2019-05-31T23:59:59Z',
+            points: 150,
             competition: {
-              id: 39,
+              id: 7,
+              name: 'Premier League',
+              country_name: 'England',
+              logo_url: 'https://example.com/logo.png'
+            }
+          },
+          {
+            season_id: 6,
+            season_name: 'Premier League 2023/24',
+            season_year: 2023,
+            completed_at: '2024-05-31T23:59:59Z',
+            points: 167,
+            competition: {
+              id: 7,
               name: 'Premier League',
               country_name: 'England',
               logo_url: 'https://example.com/logo.png'
@@ -76,26 +89,163 @@ export async function GET(request: NextRequest) {
         user_id: 'user-2', 
         user: {
           id: 'user-2',
-          full_name: 'Jane Smith',
+          full_name: 'Sam Rodriguez',
           avatar_url: null,
-          updated_at: '2023-06-01T00:00:00Z'
+          updated_at: '2022-06-01T00:00:00Z'
         },
         win_count: 2,
-        total_points: 310,
-        avg_points: 155,
-        max_points: 170,
-        min_points: 140,
-        first_win_date: '2023-06-01T00:00:00Z',
-        last_win_date: '2023-11-01T00:00:00Z',
+        total_points: 323, // 165 + 158
+        avg_points: 161.5,
+        max_points: 165,
+        min_points: 158,
+        first_win_date: '2020-05-31T00:00:00Z',
+        last_win_date: '2022-05-31T00:00:00Z',
         seasons: [
           {
             season_id: 2,
-            season_name: 'Premier League 2023/24',
-            season_year: 2023,
-            completed_at: '2024-05-31T23:59:59Z',
-            points: 170,
+            season_name: 'Premier League 2019/20',
+            season_year: 2019,
+            completed_at: '2020-05-31T23:59:59Z',
+            points: 165,
             competition: {
-              id: 39,
+              id: 7,
+              name: 'Premier League',
+              country_name: 'England',
+              logo_url: 'https://example.com/logo.png'
+            }
+          },
+          {
+            season_id: 4,
+            season_name: 'Premier League 2021/22',
+            season_year: 2021,
+            completed_at: '2022-05-31T23:59:59Z',
+            points: 158,
+            competition: {
+              id: 7,
+              name: 'Premier League',
+              country_name: 'England',
+              logo_url: 'https://example.com/logo.png'
+            }
+          }
+        ]
+      },
+      {
+        user_id: 'user-4',
+        user: {
+          id: 'user-4',
+          full_name: 'Marcus Johnson',
+          avatar_url: null,
+          updated_at: '2023-06-01T00:00:00Z'
+        },
+        win_count: 1,
+        total_points: 173,
+        avg_points: 173,
+        max_points: 173,
+        min_points: 173,
+        first_win_date: '2023-05-31T00:00:00Z',
+        last_win_date: '2023-05-31T00:00:00Z',
+        seasons: [
+          {
+            season_id: 5,
+            season_name: 'Premier League 2022/23',
+            season_year: 2022,
+            completed_at: '2023-05-31T23:59:59Z',
+            points: 173,
+            competition: {
+              id: 7,
+              name: 'Premier League',
+              country_name: 'England',
+              logo_url: 'https://example.com/logo.png'
+            }
+          }
+        ]
+      },
+      {
+        user_id: 'user-5',
+        user: {
+          id: 'user-5',
+          full_name: 'Lisa Park',
+          avatar_url: null,
+          updated_at: '2025-01-16T00:00:00Z'
+        },
+        win_count: 1,
+        total_points: 149,
+        avg_points: 149,
+        max_points: 149,
+        min_points: 149,
+        first_win_date: '2025-01-15T00:00:00Z',
+        last_win_date: '2025-01-15T00:00:00Z',
+        seasons: [
+          {
+            season_id: 7,
+            season_name: 'Premier League 2024/25',
+            season_year: 2024,
+            completed_at: '2025-01-15T23:59:59Z',
+            points: 149,
+            competition: {
+              id: 7,
+              name: 'Premier League',
+              country_name: 'England',
+              logo_url: 'https://example.com/logo.png'
+            }
+          }
+        ]
+      },
+      {
+        user_id: 'user-3',
+        user: {
+          id: 'user-3',
+          full_name: 'Emily Chen',
+          avatar_url: null,
+          updated_at: '2021-06-01T00:00:00Z'
+        },
+        win_count: 1,
+        total_points: 142,
+        avg_points: 142,
+        max_points: 142,
+        min_points: 142,
+        first_win_date: '2021-05-31T00:00:00Z',
+        last_win_date: '2021-05-31T00:00:00Z',
+        seasons: [
+          {
+            season_id: 3,
+            season_name: 'Premier League 2020/21',
+            season_year: 2020,
+            completed_at: '2021-05-31T23:59:59Z',
+            points: 142,
+            competition: {
+              id: 7,
+              name: 'Premier League',
+              country_name: 'England',
+              logo_url: 'https://example.com/logo.png'
+            }
+          }
+        ]
+      },
+      {
+        user_id: 'user-6',
+        user: {
+          id: 'user-6',
+          full_name: 'Sophie Williams',
+          avatar_url: null,
+          updated_at: '2023-06-01T00:00:00Z'
+        },
+        win_count: 1,
+        total_points: 173,
+        avg_points: 173,
+        max_points: 173,
+        min_points: 173,
+        first_win_date: '2023-05-31T00:00:00Z',
+        last_win_date: '2023-05-31T00:00:00Z',
+        seasons: [
+          {
+            season_id: 5,
+            season_name: 'Premier League 2022/23',
+            season_year: 2022,
+            completed_at: '2023-05-31T23:59:59Z',
+            points: 173,
+            competition: {
+              id: 7,
               name: 'Premier League',
               country_name: 'England',
               logo_url: 'https://example.com/logo.png'
@@ -156,7 +306,7 @@ export async function GET(request: NextRequest) {
         })),
         overall_stats: {
           total_players: count,
-          total_seasons_completed: 5, // Mock value for now
+          total_seasons_completed: 7, // Updated to match our mock data (2018/19 to 2024/25)
           total_points_awarded: statsData.reduce((sum, stat) => sum + stat.total_points, 0),
           average_points_per_season: statsData.length > 0 
             ? statsData.reduce((sum, stat) => sum + stat.avg_points, 0) / statsData.length 
