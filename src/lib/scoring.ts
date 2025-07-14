@@ -1,11 +1,19 @@
 // src/lib/scoring.ts
 
-import { SupabaseClient } from '@supabase/supabase-js';
+import { Database, type Json } from '@/types/supabase';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/utils/logger';
-import { type Database, type Json } from '@/types/supabase'; // Import Database AND Json type
-import { LeagueDataServiceImpl, type ILeagueDataService } from './leagueDataService'; // Assuming ILeagueDataService is exported
-import { DynamicPointsCalculator } from './dynamicPointsCalculator'; // Remove DynamicPointsResult if unused here
-import { getUserSeasonAnswers, type UserSeasonAnswerRow } from './supabase/queries'; // For fetching all answers
+import { DynamicPointsCalculator } from './dynamicPointsCalculator';
+import { LeagueDataServiceImpl, ILeagueDataService } from './leagueDataService';
+import { getUserSeasonAnswers, type UserSeasonAnswerRow } from './supabase/queries';
+import { calculateRoundCupPoints } from '@/services/cup/cupScoringService';
+
+// Configuration for Cup Scoring Integration
+const getCupScoringConfig = () => ({
+  enabled: process.env.CUP_SCORING_ENABLED !== 'false', // Enabled by default
+  onlyAfterActivation: process.env.CUP_SCORING_ONLY_AFTER_ACTIVATION !== 'false', // Default true
+  skipOnMainScoringFailure: process.env.CUP_SCORING_SKIP_ON_MAIN_FAILURE === 'true', // Default false
+});
 
 type BettingRoundId = number;
 type FixtureId = number;
@@ -365,12 +373,46 @@ export async function calculateAndStoreMatchPoints(
     }
     // --- END NEW SECTION ---
 
-    // 7. Final success result (now indicates both match and dynamic points were attempted)
+    // --- NEW: Apply Cup Scoring Integration ---
+    logger.info({ bettingRoundId }, "Applying Cup Scoring Integration...");
+    const cupScoringConfig = getCupScoringConfig();
+    if (cupScoringConfig.enabled) {
+        logger.info({ bettingRoundId, config: cupScoringConfig }, "Cup Scoring Integration is enabled. Attempting to calculate and store cup points.");
+        const cupPointsResult = await calculateRoundCupPoints(bettingRoundId, {
+            onlyAfterActivation: cupScoringConfig.onlyAfterActivation
+        });
+        if (cupPointsResult.success) {
+            logger.info({ bettingRoundId, details: cupPointsResult.details }, "Cup Scoring Integration completed successfully.");
+        } else {
+            logger.warn({ bettingRoundId, message: cupPointsResult.message, errors: cupPointsResult.details?.errors }, "Cup Scoring Integration failed.");
+            if (cupScoringConfig.skipOnMainScoringFailure) {
+                logger.warn({ bettingRoundId }, "Skipping Cup Scoring due to main scoring failure.");
+            } else {
+                // If main scoring succeeded, but cup scoring failed, the overall operation might need review.
+                // For now, we'll return a partial success or failure.
+                return {
+                    success: false,
+                    message: `Match points stored, but Cup Scoring failed: ${cupPointsResult.message}`,
+                    details: {
+                        betsProcessed: betsProcessed,
+                        betsUpdated: betUpdatesForRPC.length,
+                        durationMs: Date.now() - startTime,
+                        error: cupPointsResult.details?.errors?.join(', ') || 'Unknown cup scoring error'
+                    }
+                };
+            }
+        }
+    } else {
+        logger.info({ bettingRoundId, config: cupScoringConfig }, "Cup Scoring Integration is disabled. Skipping.");
+    }
+    // --- END NEW SECTION ---
+
+    // 7. Final success result (now indicates match, dynamic, and cup points were attempted)
     const duration = Date.now() - startTime;
-    logger.info({ bettingRoundId, durationMs: duration }, `Scoring completed successfully (match and dynamic).`);
+    logger.info({ bettingRoundId, durationMs: duration }, `Scoring completed successfully (match, dynamic, and cup points processed).`);
     return {
       success: true,
-      message: "Scoring completed successfully (match and dynamic points processed).",
+      message: "Scoring completed successfully (match, dynamic, and cup points processed).",
       details: { 
           betsProcessed: betsProcessed, 
           betsUpdated: betUpdatesForRPC.length, 
