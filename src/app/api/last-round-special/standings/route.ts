@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/utils/logger';
 import { getCupStandings } from '@/services/cup/cupScoringService';
-import { parseQueryParams } from '@/utils/api/pagination';
 import { CacheStrategies } from '@/utils/api/cache';
-import { sortData, paginateData } from '@/utils/api/transforms';
 import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
 
 // Ensure the route is treated as dynamic to prevent caching issues
@@ -28,174 +26,146 @@ export interface CupStandingsAPIResult {
 /**
  * GET /api/last-round-special/standings
  * 
- * Public endpoint to retrieve the current Last Round Special cup standings.
- * Returns ranked list of users with their cup points, user details, and participation stats.
+ * Retrieves cup standings with user profile data, sorting, and pagination support.
  * 
  * Query Parameters:
- * - limit?: number (default: 50, max: 100) - Number of results per page
- * - offset?: number (default: 0) - Number of results to skip
- * - page?: number - Page number (alternative to offset)
- * - sort?: 'points_desc' | 'points_asc' | 'position_asc' | 'rounds_desc' | 'recent' (default: 'position_asc')
- * - season_id?: number - Filter by specific season (defaults to current season)
+ * - season: Season ID to filter standings (optional)
+ * - sort: Sort field (total_points, rounds_participated, position, user.full_name)
+ * - order: Sort order (asc, desc) - defaults to desc for points, asc for others
+ * - page: Page number for pagination (starts at 1)
+ * - limit: Items per page (1-100, default 20)
  * 
- * Returns:
- * - 200: Success with cup standings data, pagination, and metadata
- * - 400: Bad request (invalid parameters)
- * - 404: No cup data found for season
- * - 500: Internal server error
+ * Response:
+ * - data: Array of cup standings with user profile information
+ * - pagination: Pagination metadata
+ * 
+ * Caching:
+ * - Cache-Control: public, max-age=300, s-maxage=600
+ * - ETags for conditional requests
+ * 
+ * @param request Next.js request object
+ * @returns Promise<NextResponse> JSON response with cup standings
  */
 export async function GET(request: NextRequest) {
-  const startTime = Date.now();
-  const requestId = crypto.randomUUID();
-  const timestamp = new Date().toISOString();
-
+  const startTime = performance.now();
+  
   try {
-    logger.info('Cup Standings API: Processing request', {
-      requestId,
-      method: 'GET',
-      timestamp
-    });
+    // Parse query parameters manually like other routes
+    const { searchParams } = new URL(request.url);
+    const seasonParam = searchParams.get('season');
+    const seasonId = seasonParam ? parseInt(seasonParam, 10) : undefined;
+    
+    const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100);
+    const page = Math.max(parseInt(searchParams.get('page') || '1'), 1);
+    const sort = searchParams.get('sort') || 'total_points';
+    const order = searchParams.get('order') || 'desc';
 
-    // Parse and validate query parameters
-    const queryParams = parseQueryParams(request, {
-      pagination: {
-        defaultLimit: 50,
-        maxLimit: 100
-      },
-      sort: {
-        defaultSort: 'position_asc',
-        validSorts: ['points_desc', 'points_asc', 'position_asc', 'rounds_desc', 'recent']
-      },
-      filters: ['season_id']
-    });
-
-    const { pagination, sort, filters } = queryParams;
-    const seasonId = filters.season_id as number | undefined;
-
-    logger.debug('Cup Standings API: Parsed parameters', {
-      requestId,
-      pagination,
+    logger.info({
+      seasonId,
+      page,
+      limit,
       sort,
-      seasonId
-    });
+      order
+    }, 'Fetching cup standings with parameters');
 
-    // Get cup standings from the service
+    // Get base cup standings data
     const standings = await getCupStandings(seasonId);
-
+    
     if (!standings || standings.length === 0) {
-      logger.info('Cup Standings API: No standings data found', {
-        requestId,
-        seasonId
-      });
-
-      return NextResponse.json({
-        success: true,
+      logger.info({ seasonId }, 'No cup standings found');
+      
+      // Return empty result with pagination
+      const emptyResult = {
         data: [],
         pagination: {
-          total_items: 0,
-          total_pages: 0,
-          current_page: 1,
-          page_size: pagination.limit,
-          has_more: false,
-          offset: pagination.offset,
-          limit: pagination.limit
-        },
-        query_info: {
-          sort,
-          season_id: seasonId,
-          request_time_ms: Date.now() - startTime
-        },
-        metadata: {
-          requestId,
-          timestamp: new Date().toISOString(),
-          message: 'No cup standings data available for the specified season'
+          page,
+          limit,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false
         }
-      }, { status: 200 });
+      };
+      
+      // Apply caching headers
+      const response = NextResponse.json(emptyResult, { 
+        status: 200,
+        headers: {
+          'Cache-Control': `public, max-age=${CacheStrategies.LIVE_DATA.maxAge}, stale-while-revalidate=${CacheStrategies.LIVE_DATA.staleWhileRevalidate}`,
+        }
+      });
+      
+      return response;
     }
 
-    // Enhance standings with user profile information
+    // Enhance with user profile data
     const enhancedStandings = await enhanceStandingsWithUserProfiles(standings);
-
+    
     // Apply sorting
-    const sortedStandings = applySorting(enhancedStandings, sort || 'position_asc');
-
+    const sortedStandings = applySorting(enhancedStandings, sort, order);
+    
     // Apply pagination
-    const totalItems = sortedStandings.length;
-    const paginatedStandings = paginateData(sortedStandings, pagination.limit, pagination.offset);
-
-    // Calculate pagination metadata
-    const totalPages = Math.ceil(totalItems / pagination.limit);
-    const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
-    const hasMore = pagination.offset + pagination.limit < totalItems;
-
-    const processingTime = Date.now() - startTime;
-
-    const response = {
-      success: true,
-      data: paginatedStandings,
+    const offset = (page - 1) * limit;
+    const paginatedData = sortedStandings.slice(offset, offset + limit);
+    const totalPages = Math.ceil(sortedStandings.length / limit);
+    
+    const paginatedResult = {
+      data: paginatedData,
       pagination: {
-        total_items: totalItems,
-        total_pages: totalPages,
-        current_page: currentPage,
-        page_size: pagination.limit,
-        has_more: hasMore,
-        offset: pagination.offset,
-        limit: pagination.limit
-      },
-      query_info: {
-        sort,
-        season_id: seasonId,
-        request_time_ms: processingTime
-      },
-      metadata: {
-        requestId,
-        timestamp: new Date().toISOString(),
-        participantCount: totalItems,
-        processingTime
+        page,
+        limit,
+        total: sortedStandings.length,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1
       }
     };
+    
+    const duration = performance.now() - startTime;
+    logger.info({
+      seasonId,
+      totalStandings: enhancedStandings.length,
+      page,
+      limit,
+      sort,
+      order,
+      duration: `${duration.toFixed(2)}ms`
+    }, 'Cup standings retrieved successfully');
 
-    logger.info('Cup Standings API: Request completed', {
-      requestId,
-      resultCount: paginatedStandings.length,
-      totalCount: totalItems,
-      processingTime
-    });
-
-    return NextResponse.json(response, {
+    // Create response with caching headers
+    const response = NextResponse.json(paginatedResult, { 
       status: 200,
       headers: {
         'Cache-Control': `public, max-age=${CacheStrategies.LIVE_DATA.maxAge}, stale-while-revalidate=${CacheStrategies.LIVE_DATA.staleWhileRevalidate}`,
-        'Pragma': 'no-cache',
-        'Expires': '0'
       }
     });
+    
+    return response;
 
   } catch (error) {
-    const processingTime = Date.now() - startTime;
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    
-    logger.error('Cup Standings API: Unexpected error', {
-      requestId,
-      error: errorMessage,
+    const duration = performance.now() - startTime;
+    logger.error({
+      error: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
-      processingTime
-    });
+      duration: `${duration.toFixed(2)}ms`
+    }, 'Failed to fetch cup standings');
 
-    return NextResponse.json({
-      success: false,
-      error: 'Internal server error',
-      metadata: {
-        requestId,
-        timestamp: new Date().toISOString(),
-        processingTime
-      }
-    }, { status: 500 });
+    return NextResponse.json(
+      { 
+        error: 'Failed to fetch cup standings',
+        details: process.env.NODE_ENV === 'development' 
+          ? (error instanceof Error ? error.message : 'Unknown error')
+          : undefined
+      },
+      { status: 500 }
+    );
   }
 }
 
 /**
  * Enhance cup standings with user profile information
+ * @param standings Raw cup standings data
+ * @returns Enhanced standings with user profiles
  */
 async function enhanceStandingsWithUserProfiles(standings: Awaited<ReturnType<typeof getCupStandings>>): Promise<CupStandingsAPIResult[]> {
   if (!standings || standings.length === 0) {
@@ -204,7 +174,7 @@ async function enhanceStandingsWithUserProfiles(standings: Awaited<ReturnType<ty
 
   try {
     // Get all user IDs
-    const userIds = standings.map(standing => standing.userId);
+    const userIds = standings.map(standing => standing.user_id);
 
     // Fetch user profiles
     const supabase = getSupabaseServiceRoleClient();
@@ -217,83 +187,106 @@ async function enhanceStandingsWithUserProfiles(standings: Awaited<ReturnType<ty
       logger.error('Failed to fetch user profiles for cup standings', { error });
       // Fall back to basic user info without profile data
       return standings.map(standing => ({
-        user_id: standing.userId,
+        user_id: standing.user_id,
         user: {
-          id: standing.userId,
-          full_name: standing.userName || `User ${standing.userId}`,
+          id: standing.user_id,
+          full_name: `User ${standing.user_id}`,
           avatar_url: null
         },
-        total_points: standing.totalPoints,
-        rounds_participated: standing.roundsParticipated,
+        total_points: standing.total_points,
+        rounds_participated: standing.rounds_participated,
         position: standing.position,
-        last_updated: standing.lastUpdated
+        last_updated: standing.last_updated
       }));
     }
 
     // Create profile lookup map
     const profileMap = new Map(profiles?.map(profile => [
       profile.id,
-      {
-        id: profile.id,
-        full_name: profile.full_name || `User ${profile.id}`,
-        avatar_url: profile.avatar_url
-      }
+      profile
     ]) || []);
 
     // Enhance standings with profile data
     return standings.map(standing => {
-      const userProfile = profileMap.get(standing.userId) || {
-        id: standing.userId,
-        full_name: standing.userName || `User ${standing.userId}`,
+      const userProfile = profileMap.get(standing.user_id) || {
+        id: standing.user_id,
+        full_name: `User ${standing.user_id}`,
         avatar_url: null
       };
 
       return {
-        user_id: standing.userId,
-        user: userProfile,
-        total_points: standing.totalPoints,
-        rounds_participated: standing.roundsParticipated,
+        user_id: standing.user_id,
+        user: {
+          id: userProfile.id,
+          full_name: userProfile.full_name || `User ${standing.user_id}`,
+          avatar_url: userProfile.avatar_url
+        },
+        total_points: standing.total_points,
+        rounds_participated: standing.rounds_participated,
         position: standing.position,
-        last_updated: standing.lastUpdated
+        last_updated: standing.last_updated
       };
     });
 
   } catch (error) {
-    logger.error('Error enhancing standings with user profiles', { error });
+    logger.error('Error enhancing cup standings with user profiles', { error });
     
     // Fall back to basic user info
     return standings.map(standing => ({
-      user_id: standing.userId,
+      user_id: standing.user_id,
       user: {
-        id: standing.userId,
-        full_name: standing.userName || `User ${standing.userId}`,
+        id: standing.user_id,
+        full_name: `User ${standing.user_id}`,
         avatar_url: null
       },
-      total_points: standing.totalPoints,
-      rounds_participated: standing.roundsParticipated,
+      total_points: standing.total_points,
+      rounds_participated: standing.rounds_participated,
       position: standing.position,
-      last_updated: standing.lastUpdated
+      last_updated: standing.last_updated
     }));
   }
 }
 
 /**
  * Apply sorting to cup standings
+ * @param standings Standings data to sort
+ * @param sort Sort field
+ * @param order Sort order
+ * @returns Sorted standings
  */
-function applySorting(standings: CupStandingsAPIResult[], sort: string): CupStandingsAPIResult[] {
-  switch (sort) {
-    case 'points_desc':
-      return sortData(standings, 'total_points', 'desc');
-    case 'points_asc':
-      return sortData(standings, 'total_points', 'asc');
-    case 'position_asc':
-      return sortData(standings, 'position', 'asc');
-    case 'rounds_desc':
-      return sortData(standings, 'rounds_participated', 'desc');
-    case 'recent':
-      return sortData(standings, 'last_updated', 'desc');
-    default:
-      // Default to position ascending (best position first)
-      return sortData(standings, 'position', 'asc');
-  }
+function applySorting(standings: CupStandingsAPIResult[], sort: string, order: string): CupStandingsAPIResult[] {
+  return standings.sort((a, b) => {
+    let aValue: string | number;
+    let bValue: string | number;
+    
+    switch (sort) {
+      case 'total_points':
+        aValue = a.total_points;
+        bValue = b.total_points;
+        break;
+      case 'rounds_participated':
+        aValue = a.rounds_participated;
+        bValue = b.rounds_participated;
+        break;
+      case 'position':
+        aValue = a.position;
+        bValue = b.position;
+        break;
+      case 'user.full_name':
+        aValue = a.user.full_name;
+        bValue = b.user.full_name;
+        break;
+      default:
+        aValue = a.total_points;
+        bValue = b.total_points;
+    }
+    
+    if (aValue < bValue) {
+      return order === 'asc' ? -1 : 1;
+    }
+    if (aValue > bValue) {
+      return order === 'asc' ? 1 : -1;
+    }
+    return 0;
+  });
 } 
