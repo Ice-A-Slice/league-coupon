@@ -1,7 +1,7 @@
 import { createClient } from '@/utils/supabase/client';
 import { Tables } from '@/types/supabase';
 import { logger } from '@/utils/logger';
-import { cupActivationStatusChecker } from './cupActivationStatusChecker';
+import { cupActivationStatusChecker, CupActivationStatus } from './cupActivationStatusChecker';
 
 // --- Types ---
 export type ActivationAttemptResult = {
@@ -53,8 +53,7 @@ export const idempotentActivationService = {
     const attemptedAt = new Date().toISOString();
     log('Starting cup activation attempt for current season...');
     
-    const supabase = createClient();
-    let statusCheck: any = null;
+    let statusCheck: CupActivationStatus | null = null;
 
     try {
       // First, check if already activated (quick check to avoid unnecessary transaction)
@@ -138,7 +137,7 @@ export const idempotentActivationService = {
     const attemptedAt = new Date().toISOString();
     log(`Starting cup activation attempt for season ID: ${seasonId}...`);
 
-    let statusCheck: any = null;
+    let statusCheck: CupActivationStatus | null = null;
 
     try {
       // Validate input

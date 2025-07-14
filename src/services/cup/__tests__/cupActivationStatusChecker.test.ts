@@ -16,7 +16,7 @@ const mockLogger = logger as jest.Mocked<typeof logger>;
 describe('CupActivationStatusChecker', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockCreateClient.mockReturnValue(mockSupabase as any);
+    mockCreateClient.mockReturnValue(mockSupabase as ReturnType<typeof createClient>);
     mockLogger.error = jest.fn();
   });
 
@@ -248,7 +248,7 @@ describe('CupActivationStatusChecker', () => {
       await expect(cupActivationStatusChecker.checkSeasonActivationStatus(-1))
         .rejects.toThrow('Valid season ID is required');
 
-      await expect(cupActivationStatusChecker.checkSeasonActivationStatus(null as any))
+      await expect(cupActivationStatusChecker.checkSeasonActivationStatus(null as unknown as number))
         .rejects.toThrow('Valid season ID is required');
     });
 

@@ -16,7 +16,7 @@ const mockLogger = logger as jest.Mocked<typeof logger>;
 describe('FixtureDataService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockCreateClient.mockReturnValue(mockSupabase as any);
+    mockCreateClient.mockReturnValue(mockSupabase as ReturnType<typeof createClient>);
     mockLogger.error = jest.fn();
   });
 

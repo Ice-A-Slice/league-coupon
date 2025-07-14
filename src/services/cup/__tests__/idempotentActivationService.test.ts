@@ -19,7 +19,7 @@ const mockCupActivationStatusChecker = cupActivationStatusChecker as jest.Mocked
 describe('IdempotentActivationService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockCreateClient.mockReturnValue(mockSupabase as any);
+    mockCreateClient.mockReturnValue(mockSupabase as ReturnType<typeof createClient>);
     mockLogger.error = jest.fn();
     
     // Setup default mocks for cup activation status checker
@@ -275,7 +275,7 @@ describe('IdempotentActivationService', () => {
 
     it('should validate season ID input', async () => {
       // Test invalid season IDs
-      const invalidSeasonIds = [0, -1, null as any, undefined as any];
+      const invalidSeasonIds = [0, -1, null as unknown as number, undefined as unknown as number];
       
       for (const seasonId of invalidSeasonIds) {
         const result = await idempotentActivationService.activateSeasonCup(seasonId);

@@ -205,10 +205,10 @@ describe('ActivationConditionCalculator', () => {
     });
 
     it('should throw error for null/undefined fixture data', async () => {
-      await expect(activationConditionCalculator.calculateActivationCondition(null as any))
+      await expect(activationConditionCalculator.calculateActivationCondition(null as unknown as FixtureDataResult))
         .rejects.toThrow('Fixture data is required');
 
-      await expect(activationConditionCalculator.calculateActivationCondition(undefined as any))
+      await expect(activationConditionCalculator.calculateActivationCondition(undefined as unknown as FixtureDataResult))
         .rejects.toThrow('Fixture data is required');
     });
   });
@@ -244,10 +244,10 @@ describe('ActivationConditionCalculator', () => {
     });
 
     it('should throw error for invalid teams data', async () => {
-      await expect(activationConditionCalculator.calculateActivationConditionFromTeams(null as any))
+      await expect(activationConditionCalculator.calculateActivationConditionFromTeams(null as unknown as TeamRemainingGames[]))
         .rejects.toThrow('Teams data must be an array');
 
-      await expect(activationConditionCalculator.calculateActivationConditionFromTeams('invalid' as any))
+      await expect(activationConditionCalculator.calculateActivationConditionFromTeams('invalid' as unknown as TeamRemainingGames[]))
         .rejects.toThrow('Teams data must be an array');
     });
   });
