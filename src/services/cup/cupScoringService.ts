@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/client';
 import { logger } from '@/utils/logger';
+import { cupScoringMonitoringService } from '@/lib/cupScoringMonitoringService';
 
 // Types for Cup Scoring
 export interface CupPointsCalculationOptions {
@@ -144,27 +145,55 @@ export class CupScoringService {
     bettingRoundId: number, 
     options: CupPointsCalculationOptions = {}
   ): Promise<CupScoringResult> {
+    // Start monitoring this operation
+    const operationId = cupScoringMonitoringService.startOperation(
+      'single_round_calculation',
+      options.seasonId || null,
+      bettingRoundId,
+      'system',
+      { options }
+    );
+
     try {
+      cupScoringMonitoringService.updateOperationStatus(operationId, 'in_progress');
+      
       logger.info('Starting cup points calculation for round', { 
         bettingRoundId, 
-        options 
+        options,
+        operationId
       });
 
       // 1. Get season information and validate cup activation
       const seasonInfo = await this.getSeasonInfoForRound(bettingRoundId);
       if (!seasonInfo) {
-        throw new CupScoringServiceError('Season not found for betting round', { bettingRoundId });
+        const error = 'Season not found for betting round';
+        cupScoringMonitoringService.addError(operationId, 'validation_error', error, 'high', {
+          bettingRoundId,
+          metadata: { step: 'season_info_validation' }
+        });
+        throw new CupScoringServiceError(error, { bettingRoundId });
       }
 
       const { seasonId, seasonName, cupActivated, cupActivatedAt } = seasonInfo;
+      
+      // Update operation with discovered season ID
+      cupScoringMonitoringService.updateOperationProgress(operationId, 0, 0, 0);
 
       // 2. Check if cup is activated for this season
       if (!cupActivated) {
         logger.info('Cup not activated for season - skipping calculation', { 
           seasonId, 
           seasonName, 
-          bettingRoundId 
+          bettingRoundId,
+          operationId
         });
+        
+        cupScoringMonitoringService.completeOperation(operationId, 'completed', {
+          usersProcessed: 0,
+          roundsProcessed: 0,
+          totalPointsAwarded: 0
+        });
+        
         return {
           success: true,
           message: 'Cup not activated - no points calculated',
@@ -184,8 +213,16 @@ export class CupScoringService {
           logger.info('Round occurred before cup activation - skipping', { 
             bettingRoundId, 
             roundCreated: roundInfo.createdAt, 
-            cupActivated: cupActivatedAt 
+            cupActivated: cupActivatedAt,
+            operationId
           });
+          
+          cupScoringMonitoringService.completeOperation(operationId, 'completed', {
+            usersProcessed: 0,
+            roundsProcessed: 0,
+            totalPointsAwarded: 0
+          });
+          
           return {
             success: true,
             message: 'Round before cup activation - no points calculated',
@@ -202,7 +239,14 @@ export class CupScoringService {
       // 4. Get all user bets for this round with awarded points
       const userBetsData = await this.getUserBetsForRound(bettingRoundId);
       if (userBetsData.length === 0) {
-        logger.info('No user bets found for round', { bettingRoundId });
+        logger.info('No user bets found for round', { bettingRoundId, operationId });
+        
+        cupScoringMonitoringService.completeOperation(operationId, 'completed', {
+          usersProcessed: 0,
+          roundsProcessed: 1,
+          totalPointsAwarded: 0
+        });
+        
         return {
           success: true,
           message: 'No user bets found for round',
@@ -215,6 +259,12 @@ export class CupScoringService {
         };
       }
 
+      logger.info('Found user bets for processing', { 
+        bettingRoundId, 
+        userCount: userBetsData.length,
+        operationId
+      });
+
       // 5. Calculate cup points for each user
       const userResults = await this.calculateUserCupPointsForRound(
         userBetsData,
@@ -222,20 +272,62 @@ export class CupScoringService {
         seasonId
       );
 
-      // 6. Store the calculated points
-      const storeResult = await this.storeCupPoints(userResults);
-
+      // Track calculation progress
       const successfulUsers = userResults.filter(r => r.processed);
       const totalPoints = successfulUsers.reduce((sum, r) => sum + r.points, 0);
-      const errors = userResults.filter(r => r.error).map(r => r.error!);
+      const errors = userResults.filter(r => r.error);
+      
+      cupScoringMonitoringService.updateOperationProgress(
+        operationId, 
+        successfulUsers.length, 
+        1, 
+        totalPoints
+      );
+
+      // Log any calculation errors
+      errors.forEach(result => {
+        if (result.error) {
+          cupScoringMonitoringService.addError(operationId, 'calculation_error', result.error, 'medium', {
+            userId: result.userId,
+            bettingRoundId: result.bettingRoundId,
+            metadata: { step: 'user_points_calculation' }
+          });
+        }
+      });
+
+      // 6. Store the calculated points
+      const storeResult = await this.storeCupPoints(userResults);
+      
+      if (!storeResult.success) {
+        cupScoringMonitoringService.addError(operationId, 'storage_error', storeResult.message, 'high', {
+          bettingRoundId,
+          metadata: { 
+            step: 'points_storage',
+            userCount: userResults.length,
+            totalPoints
+          }
+        });
+      }
 
       logger.info('Cup points calculation completed', { 
         bettingRoundId, 
         seasonId,
         usersProcessed: successfulUsers.length,
         totalPointsAwarded: totalPoints,
-        errorCount: errors.length
+        errorCount: errors.length,
+        operationId
       });
+
+      // Complete monitoring with final status
+      cupScoringMonitoringService.completeOperation(
+        operationId, 
+        storeResult.success ? 'completed' : 'failed',
+        {
+          usersProcessed: successfulUsers.length,
+          roundsProcessed: 1,
+          totalPointsAwarded: totalPoints
+        }
+      );
 
       return {
         success: storeResult.success,
@@ -252,10 +344,24 @@ export class CupScoringService {
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Add error to monitoring
+      cupScoringMonitoringService.addError(operationId, 'calculation_error', errorMessage, 'critical', {
+        bettingRoundId,
+        metadata: { 
+          step: 'operation_failure',
+          stack: error instanceof Error ? error.stack : undefined
+        }
+      });
+      
+      // Complete operation as failed
+      cupScoringMonitoringService.completeOperation(operationId, 'failed');
+      
       logger.error('Error calculating cup points for round', { 
         bettingRoundId, 
         error: errorMessage,
-        stack: error instanceof Error ? error.stack : undefined
+        stack: error instanceof Error ? error.stack : undefined,
+        operationId
       });
 
       return {
