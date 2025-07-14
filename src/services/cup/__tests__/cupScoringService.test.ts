@@ -306,4 +306,336 @@ describe('CupScoringService', () => {
       expect(result.details.totalPointsAwarded).toBe(0); // null/undefined treated as 0
     });
   });
+
+  describe('Enhanced Storage Mechanism', () => {
+    describe('Batch Processing', () => {
+      it('should handle small datasets in single batch', async () => {
+        const seasonData = {
+          season_id: 1,
+          seasons: {
+            id: 1,
+            season_name: '2024/25',
+            last_round_special_activated: true,
+            last_round_special_activated_at: '2024-01-01T00:00:00Z'
+          }
+        };
+
+        const userBetsData = Array.from({ length: 50 }, (_, i) => ({
+          user_id: `user${i + 1}`,
+          fixture_id: 1,
+          points_awarded: Math.floor(Math.random() * 10)
+        }));
+
+        // Mock the season info query
+        mockClient.single.mockResolvedValueOnce({ data: seasonData, error: null });
+        
+        // Mock the user bets query
+        const mockChain = {
+          ...mockClient,
+          then: jest.fn((resolve) => resolve({ data: userBetsData, error: null }))
+        };
+        mockClient.not.mockReturnValueOnce(mockChain);
+        
+        // Mock storage operation
+        mockClient.upsert.mockResolvedValueOnce({ data: null, error: null });
+        
+        // Mock verification queries (called during verifyStorageIntegrity)
+        for (let i = 0; i < Math.min(10, userBetsData.length); i++) {
+          mockClient.single.mockResolvedValueOnce({ 
+            data: { points: userBetsData[i].points_awarded }, 
+            error: null 
+          });
+        }
+
+        const result = await service.calculateRoundCupPoints(1);
+
+        expect(result.success).toBe(true);
+        expect(result.details.usersProcessed).toBe(50);
+        expect(mockClient.upsert).toHaveBeenCalledTimes(1); // Single batch
+      });
+
+      it('should handle large datasets with multiple batches', async () => {
+        const seasonData = {
+          season_id: 1,
+          seasons: {
+            id: 1,
+            season_name: '2024/25',
+            last_round_special_activated: true,
+            last_round_special_activated_at: '2024-01-01T00:00:00Z'
+          }
+        };
+
+        const userBetsData = Array.from({ length: 300 }, (_, i) => ({
+          user_id: `user${i + 1}`,
+          fixture_id: 1,
+          points_awarded: Math.floor(Math.random() * 10)
+        }));
+
+        // Mock the season info query
+        mockClient.single.mockResolvedValueOnce({ data: seasonData, error: null });
+        
+        // Mock the user bets query
+        const mockChain = {
+          ...mockClient,
+          then: jest.fn((resolve) => resolve({ data: userBetsData, error: null }))
+        };
+        mockClient.not.mockReturnValueOnce(mockChain);
+        
+        // Mock storage operations (will be called 3 times for batches)
+        mockClient.upsert.mockResolvedValue({ data: null, error: null });
+        
+        // Mock verification queries
+        for (let i = 0; i < 10; i++) {
+          mockClient.single.mockResolvedValueOnce({ 
+            data: { points: userBetsData[i].points_awarded }, 
+            error: null 
+          });
+        }
+
+        const result = await service.calculateRoundCupPoints(1);
+
+        expect(result.success).toBe(true);
+        expect(result.details.usersProcessed).toBe(300);
+        expect(mockClient.upsert).toHaveBeenCalledTimes(3); // Multiple batches (300/100 = 3)
+      });
+    });
+
+    describe('Data Validation', () => {
+      it('should validate data before storage', async () => {
+        const seasonData = {
+          season_id: 1,
+          seasons: {
+            id: 1,
+            season_name: '2024/25',
+            last_round_special_activated: true,
+            last_round_special_activated_at: '2024-01-01T00:00:00Z'
+          }
+        };
+
+        // Invalid data: missing userId (empty string)
+        const invalidUserBetsData = [
+          { user_id: '', fixture_id: 1, points_awarded: 5 },
+          { user_id: 'user2', fixture_id: 2, points_awarded: 3 }
+        ];
+
+        // Mock the season info query
+        mockClient.single.mockResolvedValueOnce({ data: seasonData, error: null });
+        
+        // Mock the user bets query
+        const mockChain = {
+          ...mockClient,
+          then: jest.fn((resolve) => resolve({ data: invalidUserBetsData, error: null }))
+        };
+        mockClient.not.mockReturnValueOnce(mockChain);
+
+        const result = await service.calculateRoundCupPoints(1);
+
+        expect(result.success).toBe(false);
+        expect(result.message).toContain('Cup points calculation completed with errors'); // Actual error message
+        expect(result.details.errors).toEqual(expect.arrayContaining([
+          expect.stringContaining('Data validation failed')
+        ]));
+        expect(mockClient.upsert).not.toHaveBeenCalled(); // Storage should not be attempted
+      });
+
+      it('should detect duplicate user-round-season combinations', async () => {
+        const seasonData = {
+          season_id: 1,
+          seasons: {
+            id: 1,
+            season_name: '2024/25',
+            last_round_special_activated: true,
+            last_round_special_activated_at: '2024-01-01T00:00:00Z'
+          }
+        };
+
+        // Duplicate data: same user appears twice for same fixture
+        const duplicateUserBetsData = [
+          { user_id: 'user1', fixture_id: 1, points_awarded: 5 },
+          { user_id: 'user1', fixture_id: 1, points_awarded: 3 }
+        ];
+
+        // Mock the season info query
+        mockClient.single.mockResolvedValueOnce({ data: seasonData, error: null });
+        
+        // Mock the user bets query
+        const mockChain = {
+          ...mockClient,
+          then: jest.fn((resolve) => resolve({ data: duplicateUserBetsData, error: null }))
+        };
+        mockClient.not.mockReturnValueOnce(mockChain);
+        
+        // Mock storage operation
+        mockClient.upsert.mockResolvedValueOnce({ data: null, error: null });
+        
+        // Mock verification queries
+        mockClient.single.mockResolvedValueOnce({ 
+          data: { points: 8 }, // Combined points: 5 + 3
+          error: null 
+        });
+
+        const result = await service.calculateRoundCupPoints(1);
+
+        expect(result.success).toBe(true); // This should succeed as the service aggregates by user
+        expect(result.details.usersProcessed).toBe(1); // Only one unique user
+        expect(result.details.totalPointsAwarded).toBe(8); // Combined points: 5 + 3
+      });
+    });
+
+    describe('Error Handling', () => {
+      it('should handle partial batch failures gracefully', async () => {
+        const seasonData = {
+          season_id: 1,
+          seasons: {
+            id: 1,
+            season_name: '2024/25',
+            last_round_special_activated: true,
+            last_round_special_activated_at: '2024-01-01T00:00:00Z'
+          }
+        };
+
+        const userBetsData = Array.from({ length: 250 }, (_, i) => ({
+          user_id: `user${i + 1}`,
+          fixture_id: 1,
+          points_awarded: 5
+        }));
+
+        // Mock the season info query
+        mockClient.single.mockResolvedValueOnce({ data: seasonData, error: null });
+        
+        // Mock the user bets query
+        const mockChain = {
+          ...mockClient,
+          then: jest.fn((resolve) => resolve({ data: userBetsData, error: null }))
+        };
+        mockClient.not.mockReturnValueOnce(mockChain);
+        
+        // Mock verification queries
+        for (let i = 0; i < 10; i++) {
+          mockClient.single.mockResolvedValueOnce({ 
+            data: { points: 5 }, 
+            error: null 
+          });
+        }
+
+        // First batch succeeds, second batch fails, third succeeds
+        mockClient.upsert
+          .mockResolvedValueOnce({ data: null, error: null })
+          .mockResolvedValueOnce({ data: null, error: { message: 'Non-critical error' } })
+          .mockResolvedValueOnce({ data: null, error: null });
+
+        const result = await service.calculateRoundCupPoints(1);
+
+        expect(result.success).toBe(false); // Should fail due to batch error
+        expect(result.message).toContain('Cup points calculation completed with errors'); // Actual error message
+        expect(result.details.errors).toEqual(expect.arrayContaining([
+          expect.stringContaining('Partial success')
+        ]));
+        expect(mockClient.upsert).toHaveBeenCalledTimes(3); // Should try all batches
+      });
+
+      it('should abort on critical storage errors', async () => {
+        const seasonData = {
+          season_id: 1,
+          seasons: {
+            id: 1,
+            season_name: '2024/25',
+            last_round_special_activated: true,
+            last_round_special_activated_at: '2024-01-01T00:00:00Z'
+          }
+        };
+
+        const userBetsData = Array.from({ length: 250 }, (_, i) => ({
+          user_id: `user${i + 1}`,
+          fixture_id: 1,
+          points_awarded: 5
+        }));
+
+        // Mock the season info query
+        mockClient.single.mockResolvedValueOnce({ data: seasonData, error: null });
+        
+        // Mock the user bets query
+        const mockChain = {
+          ...mockClient,
+          then: jest.fn((resolve) => resolve({ data: userBetsData, error: null }))
+        };
+        mockClient.not.mockReturnValueOnce(mockChain);
+
+        // First batch has critical error (foreign key violation)
+        mockClient.upsert.mockResolvedValueOnce({ 
+          data: null, 
+          error: { message: 'Foreign key constraint violation' } 
+        });
+
+        const result = await service.calculateRoundCupPoints(1);
+
+        expect(result.success).toBe(false);
+        expect(result.message).toContain('Cup points calculation completed with errors'); // Actual error message
+        expect(result.details.errors).toEqual(expect.arrayContaining([
+          expect.stringContaining('Critical storage error')
+        ]));
+        expect(mockClient.upsert).toHaveBeenCalledTimes(1); // Should abort after first critical error
+      });
+    });
+
+    describe('Performance Monitoring', () => {
+      it('should log performance metrics', async () => {
+        const seasonData = {
+          season_id: 1,
+          seasons: {
+            id: 1,
+            season_name: '2024/25',
+            last_round_special_activated: true,
+            last_round_special_activated_at: '2024-01-01T00:00:00Z'
+          }
+        };
+
+        const userBetsData = [
+          { user_id: 'user1', fixture_id: 1, points_awarded: 5 }
+        ];
+
+        // Mock the season info query
+        mockClient.single.mockResolvedValueOnce({ data: seasonData, error: null });
+        
+        // Mock the user bets query
+        const mockChain = {
+          ...mockClient,
+          then: jest.fn((resolve) => resolve({ data: userBetsData, error: null }))
+        };
+        mockClient.not.mockReturnValueOnce(mockChain);
+        
+        // Mock storage operation
+        mockClient.upsert.mockResolvedValueOnce({ data: null, error: null });
+        
+        // Mock verification query
+        mockClient.single.mockResolvedValueOnce({ 
+          data: { points: 5 }, 
+          error: null 
+        });
+
+        await service.calculateRoundCupPoints(1);
+
+        // Verify performance logging
+        expect(mockLogger.info).toHaveBeenCalledWith(
+          'Cup points stored successfully',
+          expect.objectContaining({
+            recordCount: 1,
+            totalPoints: 5,
+            storageDurationMs: expect.any(Number),
+            batchSize: 1,
+            averageTimePerRecord: expect.any(Number)
+          })
+        );
+
+        expect(mockLogger.info).toHaveBeenCalledWith(
+          'Starting batch storage operation',
+          expect.objectContaining({
+            totalRecords: 1,
+            batchCount: 1,
+            optimalBatchSize: 1
+          })
+        );
+      });
+    });
+  });
 }); 

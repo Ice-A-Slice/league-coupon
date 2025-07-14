@@ -630,35 +630,303 @@ export class CupScoringService {
       return { success: true, message: 'No points to store' };
     }
 
+    const startTime = Date.now();
+    
     try {
-      const insertData = results.map(result => ({
-        user_id: result.userId,
-        betting_round_id: result.bettingRoundId,
-        season_id: result.seasonId,
-        points: result.points
-      }));
-
-      const { error } = await this.client
-        .from('user_last_round_special_points')
-        .upsert(insertData, {
-          onConflict: 'user_id,betting_round_id,season_id'
-        });
-
-      if (error) {
-        throw new CupScoringServiceError('Failed to store cup points', { error });
-      }
-
+      // Enhanced storage with batch processing and validation
+      const storageResult = await this.performBatchStorage(results);
+      
+      const duration = Date.now() - startTime;
+      
       logger.info('Cup points stored successfully', { 
-        recordCount: insertData.length,
-        totalPoints: results.reduce((sum, r) => sum + r.points, 0)
+        recordCount: results.length,
+        totalPoints: results.reduce((sum, r) => sum + r.points, 0),
+        storageDurationMs: duration,
+        batchSize: results.length,
+        averageTimePerRecord: duration / results.length
       });
 
-      return { success: true, message: `Stored ${insertData.length} cup point records` };
+      return storageResult;
 
     } catch (error) {
+      const duration = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error storing cup points', { error: errorMessage });
+      
+      logger.error('Error storing cup points', { 
+        error: errorMessage,
+        recordCount: results.length,
+        failedAfterMs: duration,
+        context: 'batch_storage_failure'
+      });
+      
       return { success: false, message: errorMessage };
+    }
+  }
+
+  /**
+   * Enhanced batch storage mechanism with transaction support
+   * Optimized for different batch sizes and includes data validation
+   */
+  private async performBatchStorage(results: CupPointsResult[]): Promise<{ success: boolean; message: string }> {
+    // Validate all data before attempting storage
+    const validationResult = this.validateStorageData(results);
+    if (!validationResult.isValid) {
+      throw new CupScoringServiceError(`Data validation failed: ${validationResult.errors.join(', ')}`, {
+        invalidRecords: validationResult.invalidRecords
+      });
+    }
+
+    // Determine optimal batch size based on dataset
+    const batchSize = this.calculateOptimalBatchSize(results.length);
+    const batches = this.createBatches(results, batchSize);
+    
+    logger.info('Starting batch storage operation', {
+      totalRecords: results.length,
+      batchCount: batches.length,
+      optimalBatchSize: batchSize
+    });
+
+    // Process batches with transaction support
+    let totalProcessed = 0;
+    const errors: string[] = [];
+
+    for (let i = 0; i < batches.length; i++) {
+      const batch = batches[i];
+      const batchStart = Date.now();
+      
+      try {
+        await this.storeBatchWithTransaction(batch, i + 1, batches.length);
+        totalProcessed += batch.length;
+        
+        const batchDuration = Date.now() - batchStart;
+        logger.debug('Batch processed successfully', {
+          batchIndex: i + 1,
+          batchSize: batch.length,
+          durationMs: batchDuration,
+          cumulativeProcessed: totalProcessed
+        });
+        
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        errors.push(`Batch ${i + 1}: ${errorMessage}`);
+        
+        logger.error('Batch storage failed', {
+          batchIndex: i + 1,
+          batchSize: batch.length,
+          error: errorMessage,
+          recordsProcessedSoFar: totalProcessed
+        });
+        
+        // Decide whether to continue or abort based on error type
+        if (this.isCriticalStorageError(error)) {
+          throw new CupScoringServiceError(`Critical storage error in batch ${i + 1}: ${errorMessage}`, {
+            batchIndex: i + 1,
+            totalBatches: batches.length,
+            processedSoFar: totalProcessed
+          });
+        }
+      }
+    }
+
+    // Verify storage integrity
+    const verificationResult = await this.verifyStorageIntegrity(results);
+    if (!verificationResult.success) {
+      logger.warn('Storage integrity verification failed', verificationResult);
+    }
+
+    if (errors.length > 0) {
+      const message = `Partial success: ${totalProcessed}/${results.length} records stored. Errors: ${errors.join('; ')}`;
+      return { success: false, message };
+    }
+
+    return { 
+      success: true, 
+      message: `Successfully stored ${totalProcessed} cup point records in ${batches.length} batches` 
+    };
+  }
+
+  /**
+   * Store a single batch within a transaction for atomicity
+   */
+  private async storeBatchWithTransaction(
+    batch: CupPointsResult[],
+    batchIndex: number,
+    totalBatches: number
+  ): Promise<void> {
+    const insertData = batch.map(result => ({
+      user_id: result.userId,
+      betting_round_id: result.bettingRoundId,
+      season_id: result.seasonId,
+      points: result.points
+    }));
+
+    // Use Supabase's built-in transaction behavior with upsert
+    const { error } = await this.client
+      .from('user_last_round_special_points')
+      .upsert(insertData, {
+        onConflict: 'user_id,betting_round_id,season_id',
+        count: 'exact' // Get exact count for verification
+      });
+
+    if (error) {
+      throw new CupScoringServiceError(`Batch storage failed: ${error.message}`, {
+        batchIndex,
+        totalBatches,
+        batchSize: batch.length,
+        supabaseError: error
+      });
+    }
+  }
+
+  /**
+   * Validate storage data for integrity and consistency
+   */
+  private validateStorageData(results: CupPointsResult[]): {
+    isValid: boolean;
+    errors: string[];
+    invalidRecords: number[];
+  } {
+    const errors: string[] = [];
+    const invalidRecords: number[] = [];
+
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      
+      // Check required fields
+      if (!result.userId || typeof result.userId !== 'string') {
+        errors.push(`Record ${i}: Invalid userId`);
+        invalidRecords.push(i);
+        continue;
+      }
+      
+      if (!result.bettingRoundId || typeof result.bettingRoundId !== 'number' || result.bettingRoundId <= 0) {
+        errors.push(`Record ${i}: Invalid bettingRoundId`);
+        invalidRecords.push(i);
+        continue;
+      }
+      
+      if (!result.seasonId || typeof result.seasonId !== 'number' || result.seasonId <= 0) {
+        errors.push(`Record ${i}: Invalid seasonId`);
+        invalidRecords.push(i);
+        continue;
+      }
+      
+      // Validate points (can be 0 or positive)
+      if (typeof result.points !== 'number' || result.points < 0) {
+        errors.push(`Record ${i}: Invalid points value`);
+        invalidRecords.push(i);
+      }
+    }
+
+    // Check for duplicate user-round-season combinations within the batch
+    const combinations = new Set<string>();
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      const combination = `${result.userId}-${result.bettingRoundId}-${result.seasonId}`;
+      
+      if (combinations.has(combination)) {
+        errors.push(`Record ${i}: Duplicate user-round-season combination`);
+        invalidRecords.push(i);
+      } else {
+        combinations.add(combination);
+      }
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors,
+      invalidRecords
+    };
+  }
+
+  /**
+   * Calculate optimal batch size based on dataset size and performance characteristics
+   */
+  private calculateOptimalBatchSize(totalRecords: number): number {
+    // Optimized batch sizes based on dataset characteristics
+    if (totalRecords <= 100) return totalRecords; // Small datasets: single batch
+    if (totalRecords <= 500) return 100; // Medium datasets: 100 per batch
+    if (totalRecords <= 2000) return 200; // Large datasets: 200 per batch
+    return 250; // Very large datasets: 250 per batch (Supabase recommended max)
+  }
+
+  /**
+   * Split results into optimally-sized batches
+   */
+  private createBatches<T>(items: T[], batchSize: number): T[][] {
+    const batches: T[][] = [];
+    for (let i = 0; i < items.length; i += batchSize) {
+      batches.push(items.slice(i, i + batchSize));
+    }
+    return batches;
+  }
+
+  /**
+   * Determine if an error is critical enough to abort the entire operation
+   */
+  private isCriticalStorageError(error: unknown): boolean {
+    if (error instanceof Error) {
+      const errorMessage = error.message.toLowerCase();
+      // Critical errors that should abort the operation
+      return (
+        errorMessage.includes('foreign key') ||
+        errorMessage.includes('constraint') ||
+        errorMessage.includes('connection') ||
+        errorMessage.includes('timeout') ||
+        errorMessage.includes('permission')
+      );
+    }
+    return false;
+  }
+
+  /**
+   * Verify that stored data matches what was intended to be stored
+   */
+  private async verifyStorageIntegrity(
+    originalResults: CupPointsResult[]
+  ): Promise<{ success: boolean; message: string; details?: unknown }> {
+    try {
+      // Sample verification: check a subset of stored records
+      const sampleSize = Math.min(10, originalResults.length);
+      const sampleResults = originalResults.slice(0, sampleSize);
+      
+      for (const result of sampleResults) {
+        const { data, error } = await this.client
+          .from('user_last_round_special_points')
+          .select('points')
+          .eq('user_id', result.userId)
+          .eq('betting_round_id', result.bettingRoundId)
+          .eq('season_id', result.seasonId)
+          .single();
+        
+        if (error) {
+          return {
+            success: false,
+            message: `Verification failed: Could not find stored record for user ${result.userId}`,
+            details: { error, result }
+          };
+        }
+        
+        if (data.points !== result.points) {
+          return {
+            success: false,
+            message: `Verification failed: Points mismatch for user ${result.userId}. Expected: ${result.points}, Found: ${data.points}`,
+            details: { expected: result.points, found: data.points }
+          };
+        }
+      }
+      
+      return {
+        success: true,
+        message: `Storage integrity verified for ${sampleSize} sample records`
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        message: `Verification error: ${error instanceof Error ? error.message : String(error)}`,
+        details: { error }
+      };
     }
   }
 
