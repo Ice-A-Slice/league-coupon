@@ -2,6 +2,11 @@
 require('@testing-library/jest-dom');
 require('whatwg-fetch'); // Use require for the polyfill
 
+// Polyfills for Next.js API routes in tests
+const { TextEncoder, TextDecoder } = require('util');
+global.TextEncoder = TextEncoder;
+global.TextDecoder = TextDecoder;
+
 // Mock environment variables required by Supabase client
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost:54321';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'mock-anon-key';
