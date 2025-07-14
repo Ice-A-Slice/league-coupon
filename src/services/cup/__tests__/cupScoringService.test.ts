@@ -1,11 +1,12 @@
-import {
-  CupScoringService,
-  cupScoringService,
-  calculateRoundCupPoints,
-  CupScoringServiceError
-} from '../cupScoringService';
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createClient } from '@/utils/supabase/client';
 import { logger } from '@/utils/logger';
+import { 
+  CupScoringService, 
+  CupScoringServiceError, 
+  cupScoringService, 
+  calculateRoundCupPoints 
+} from '../cupScoringService';
 
 // Mock dependencies
 jest.mock('@/utils/supabase/client');
@@ -642,7 +643,15 @@ describe('CupScoringService', () => {
 
 // Edge Case Handling Tests
 describe('CupScoringService - Edge Case Handling', () => {
-  let mockClient: any;
+  let mockClient: {
+    from: jest.Mock;
+    select: jest.Mock;
+    eq: jest.Mock;
+    maybeSingle: jest.Mock;
+    upsert: jest.Mock;
+    order: jest.Mock;
+    limit: jest.Mock;
+  };
   let cupScoringService: CupScoringService;
 
   beforeEach(() => {
@@ -760,12 +769,12 @@ describe('CupScoringService - Edge Case Handling', () => {
       ];
 
       // Mock season info
-      jest.spyOn(cupScoringService as any, 'getSeasonInfoForRound').mockResolvedValue({
+      jest.spyOn(cupScoringService, 'getSeasonInfoForRound' as keyof CupScoringService).mockResolvedValue({
         seasonId: 1
-      });
+      } as ReturnType<CupScoringService['getSeasonInfoForRound']>);
 
       // Mock notification creation to avoid errors
-      jest.spyOn(cupScoringService as any, 'createNotification').mockResolvedValue(undefined);
+      jest.spyOn(cupScoringService, 'createNotification' as keyof CupScoringService).mockResolvedValue(undefined);
 
       // Create proper mock chain for existing points check
       mockClient.from.mockImplementation((table: string) => {
@@ -812,9 +821,9 @@ describe('CupScoringService - Edge Case Handling', () => {
       ];
 
       // Mock season info
-      jest.spyOn(cupScoringService as any, 'getSeasonInfoForRound').mockResolvedValue({
+      jest.spyOn(cupScoringService, 'getSeasonInfoForRound' as keyof CupScoringService).mockResolvedValue({
         seasonId: 1
-      });
+      } as ReturnType<CupScoringService['getSeasonInfoForRound']>);
 
       // Mock recent update (conflict scenario)
       const recentTime = new Date(Date.now() - 2 * 60 * 1000).toISOString(); // 2 minutes ago
@@ -832,7 +841,7 @@ describe('CupScoringService - Edge Case Handling', () => {
       });
 
       // Mock conflict resolution
-      jest.spyOn(cupScoringService as any, 'detectAndResolveConflict').mockResolvedValue({
+      jest.spyOn(cupScoringService, 'detectAndResolveConflict' as keyof CupScoringService).mockResolvedValue({
         userId: 'user1',
         bettingRoundId: 1,
         conflictType: 'concurrent_update',
@@ -840,10 +849,10 @@ describe('CupScoringService - Edge Case Handling', () => {
         attemptedValue: 15,
         resolution: 'latest_wins',
         timestamp: new Date().toISOString()
-      });
+      } as ReturnType<CupScoringService['detectAndResolveConflict']>);
 
       // Mock notification creation
-      jest.spyOn(cupScoringService as any, 'createNotification').mockResolvedValue(undefined);
+      jest.spyOn(cupScoringService, 'createNotification' as keyof CupScoringService).mockResolvedValue(undefined);
 
       const result = await cupScoringService.handlePointCorrections(corrections, {
         enableConflictResolution: true
@@ -877,7 +886,7 @@ describe('CupScoringService - Edge Case Handling', () => {
       });
 
       // Mock handlePointCorrections
-      jest.spyOn(cupScoringService, 'handlePointCorrections').mockResolvedValue({
+      jest.spyOn(cupScoringService, 'handlePointCorrections' as keyof CupScoringService).mockResolvedValue({
         success: true,
         message: 'Applied 1 correction',
         details: {
@@ -886,10 +895,10 @@ describe('CupScoringService - Edge Case Handling', () => {
           usersAffected: ['user1'],
           conflicts: []
         }
-      });
+      } as ReturnType<CupScoringService['handlePointCorrections']>);
 
       // Mock notification creation
-      jest.spyOn(cupScoringService as any, 'createNotification').mockResolvedValue(undefined);
+      jest.spyOn(cupScoringService, 'createNotification' as keyof CupScoringService).mockResolvedValue(undefined);
 
       const result = await cupScoringService.applyManualOverride(
         userId, bettingRoundId, newPoints, reason, adminUserId, {
@@ -918,7 +927,7 @@ describe('CupScoringService - Edge Case Handling', () => {
       const bettingRoundId = 1;
 
       // Mock detectLateSubmissions
-      jest.spyOn(cupScoringService, 'detectLateSubmissions').mockResolvedValue([
+      jest.spyOn(cupScoringService, 'detectLateSubmissions' as keyof CupScoringService).mockResolvedValue([
         {
           userId: 'user1',
           fixtureId: 1,
@@ -935,10 +944,10 @@ describe('CupScoringService - Edge Case Handling', () => {
           minutesLate: 0,
           isLate: false
         }
-      ]);
+      ] as ReturnType<CupScoringService['detectLateSubmissions']>);
 
       // Mock notification creation
-      jest.spyOn(cupScoringService as any, 'createNotification').mockResolvedValue(undefined);
+      jest.spyOn(cupScoringService, 'createNotification' as keyof CupScoringService).mockResolvedValue(undefined);
 
       const result = await cupScoringService.processLateSubmissions(bettingRoundId, {
         allowLateSubmissions: true,
@@ -953,7 +962,7 @@ describe('CupScoringService - Edge Case Handling', () => {
     it('should handle no late submissions', async () => {
       const bettingRoundId = 1;
 
-      jest.spyOn(cupScoringService, 'detectLateSubmissions').mockResolvedValue([
+      jest.spyOn(cupScoringService, 'detectLateSubmissions' as keyof CupScoringService).mockResolvedValue([
         {
           userId: 'user1',
           fixtureId: 1,
@@ -962,7 +971,7 @@ describe('CupScoringService - Edge Case Handling', () => {
           minutesLate: 0,
           isLate: false
         }
-      ]);
+      ] as ReturnType<CupScoringService['detectLateSubmissions']>);
 
       const result = await cupScoringService.processLateSubmissions(bettingRoundId, {
         allowLateSubmissions: true
@@ -989,7 +998,7 @@ describe('CupScoringService - Edge Case Handling', () => {
       const recentTime = new Date(Date.now() - 2 * 60 * 1000).toISOString();
       
       // Mock notification creation
-      jest.spyOn(cupScoringService as any, 'createNotification').mockResolvedValue(undefined);
+      jest.spyOn(cupScoringService, 'createNotification' as keyof CupScoringService).mockResolvedValue(undefined);
 
       const result = await (cupScoringService as any).detectAndResolveConflict(
         correction, 12, recentTime // Different existing points
@@ -1014,7 +1023,7 @@ describe('CupScoringService - Edge Case Handling', () => {
 
       const recentTime = new Date(Date.now() - 2 * 60 * 1000).toISOString();
       
-      jest.spyOn(cupScoringService as any, 'createNotification').mockResolvedValue(undefined);
+      jest.spyOn(cupScoringService, 'createNotification' as keyof CupScoringService).mockResolvedValue(undefined);
 
       const result = await (cupScoringService as any).detectAndResolveConflict(
         correction, 12, recentTime
@@ -1037,7 +1046,7 @@ describe('CupScoringService - Edge Case Handling', () => {
 
       const recentTime = new Date(Date.now() - 2 * 60 * 1000).toISOString();
       
-      jest.spyOn(cupScoringService as any, 'createNotification').mockResolvedValue(undefined);
+      jest.spyOn(cupScoringService, 'createNotification' as keyof CupScoringService).mockResolvedValue(undefined);
 
       const result = await (cupScoringService as any).detectAndResolveConflict(
         correction, 10, recentTime

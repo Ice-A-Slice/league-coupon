@@ -55,6 +55,17 @@ export interface LateSubmissionInfo {
   isLate: boolean;
 }
 
+// Interface for Supabase query result with fixtures join
+interface BetWithFixtureData {
+  user_id: string;
+  fixture_id: number;
+  created_at: string;
+  fixtures: {
+    id: number;
+    start_time: string;
+  };
+}
+
 export interface PointCorrectionRequest {
   userId: string;
   bettingRoundId: number;
@@ -553,7 +564,7 @@ export class CupScoringService {
             start_time
           )
         `)
-        .eq('betting_round_id', bettingRoundId);
+        .eq('betting_round_id', bettingRoundId) as { data: BetWithFixtureData[] | null; error: unknown };
 
       if (betsError) {
         throw new CupScoringServiceError('Failed to fetch bets for late submission detection', { betsError });
@@ -568,6 +579,7 @@ export class CupScoringService {
 
       for (const bet of betsData) {
         const betTime = new Date(bet.created_at);
+        // Now we can safely access fixtures as a single object
         const matchStartTime = new Date(bet.fixtures.start_time);
         const minutesDifference = (betTime.getTime() - matchStartTime.getTime()) / (1000 * 60);
         
