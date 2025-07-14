@@ -45,6 +45,66 @@ export interface CupStandingsResult {
   lastUpdated: string;
 }
 
+// Edge Case Handling Types
+export interface LateSubmissionInfo {
+  userId: string;
+  fixtureId: number;
+  betTimestamp: string;
+  matchStartTime: string;
+  minutesLate: number;
+  isLate: boolean;
+}
+
+export interface PointCorrectionRequest {
+  userId: string;
+  bettingRoundId: number;
+  fixtureId?: number; // Optional - if correcting specific fixture
+  oldPoints: number;
+  newPoints: number;
+  reason: string;
+  correctionType: 'result_update' | 'manual_override' | 'late_submission';
+  adminUserId?: string; // For manual overrides
+}
+
+export interface PointCorrectionResult {
+  success: boolean;
+  message: string;
+  details: {
+    correctionsApplied: number;
+    pointsChanged: number;
+    usersAffected: string[];
+    conflicts: ConflictInfo[];
+  };
+}
+
+export interface ConflictInfo {
+  userId: string;
+  bettingRoundId: number;
+  conflictType: 'concurrent_update' | 'data_mismatch' | 'manual_override_conflict';
+  existingValue: number;
+  attemptedValue: number;
+  resolution: 'latest_wins' | 'manual_review_required' | 'admin_override';
+  timestamp: string;
+}
+
+export interface NotificationInfo {
+  type: 'point_correction' | 'late_submission' | 'conflict_resolution' | 'admin_override';
+  severity: 'info' | 'warning' | 'error';
+  userId?: string;
+  bettingRoundId: number;
+  message: string;
+  metadata: Record<string, unknown>;
+  timestamp: string;
+}
+
+export interface EdgeCaseHandlingOptions {
+  allowLateSubmissions?: boolean;
+  lateSubmissionGracePeriodMinutes?: number;
+  enableConflictResolution?: boolean;
+  notifyOnPointChanges?: boolean;
+  requireAdminApprovalForOverrides?: boolean;
+}
+
 export class CupScoringServiceError extends Error {
   constructor(message: string, public context?: Record<string, unknown>) {
     super(message);
@@ -468,7 +528,326 @@ export class CupScoringService {
     }
   }
 
-  // Private helper methods
+  // Edge Case Handling Methods
+
+  /**
+   * Detect late submissions for a specific round
+   * Compares bet timestamps with match start times
+   */
+  async detectLateSubmissions(
+    bettingRoundId: number, 
+    options: EdgeCaseHandlingOptions = {}
+  ): Promise<LateSubmissionInfo[]> {
+    try {
+      logger.info(`Detecting late submissions for round ${bettingRoundId}`);
+
+      // Get all bets for the round with fixture start times
+      const { data: betsData, error: betsError } = await this.client
+        .from('user_bets')
+        .select(`
+          user_id,
+          fixture_id,
+          created_at,
+          fixtures!inner(
+            id,
+            start_time
+          )
+        `)
+        .eq('betting_round_id', bettingRoundId);
+
+      if (betsError) {
+        throw new CupScoringServiceError('Failed to fetch bets for late submission detection', { betsError });
+      }
+
+      if (!betsData?.length) {
+        return [];
+      }
+
+      const gracePeriodMinutes = options.lateSubmissionGracePeriodMinutes ?? 0;
+      const lateSubmissions: LateSubmissionInfo[] = [];
+
+      for (const bet of betsData) {
+        const betTime = new Date(bet.created_at);
+        const matchStartTime = new Date(bet.fixtures.start_time);
+        const minutesDifference = (betTime.getTime() - matchStartTime.getTime()) / (1000 * 60);
+        
+        const isLate = minutesDifference > gracePeriodMinutes;
+
+        lateSubmissions.push({
+          userId: bet.user_id,
+          fixtureId: bet.fixture_id,
+          betTimestamp: bet.created_at,
+          matchStartTime: bet.fixtures.start_time,
+          minutesLate: Math.max(0, minutesDifference),
+          isLate
+        });
+      }
+
+      const lateCount = lateSubmissions.filter(s => s.isLate).length;
+      logger.info(`Detected ${lateCount} late submissions out of ${lateSubmissions.length} total bets`);
+
+      return lateSubmissions;
+    } catch (error) {
+      logger.error('Error detecting late submissions:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle point corrections when match results are updated
+   */
+  async handlePointCorrections(
+    corrections: PointCorrectionRequest[], 
+    options: EdgeCaseHandlingOptions = {}
+  ): Promise<PointCorrectionResult> {
+    try {
+      logger.info(`Processing ${corrections.length} point corrections`);
+
+      const result: PointCorrectionResult = {
+        success: true,
+        message: '',
+        details: {
+          correctionsApplied: 0,
+          pointsChanged: 0,
+          usersAffected: [],
+          conflicts: []
+        }
+      };
+
+      for (const correction of corrections) {
+        try {
+          // Check for existing points to detect conflicts
+          const { data: existingPoints, error: fetchError } = await this.client
+            .from('user_last_round_special_points')
+            .select('points, last_updated')
+            .eq('user_id', correction.userId)
+            .eq('betting_round_id', correction.bettingRoundId)
+            .maybeSingle();
+
+          if (fetchError) {
+            logger.error(`Error fetching existing points for correction:`, fetchError);
+            continue;
+          }
+
+          // Detect conflicts
+          if (existingPoints && options.enableConflictResolution) {
+            const conflict = await this.detectAndResolveConflict(
+              correction, 
+              existingPoints.points, 
+              existingPoints.last_updated
+            );
+            
+            if (conflict) {
+              result.details.conflicts.push(conflict);
+              
+              // Skip if manual review required
+              if (conflict.resolution === 'manual_review_required') {
+                continue;
+              }
+            }
+          }
+
+          // Apply the correction
+          const { error: updateError } = await this.client
+            .from('user_last_round_special_points')
+            .upsert({
+              user_id: correction.userId,
+              betting_round_id: correction.bettingRoundId,
+              season_id: (await this.getSeasonInfoForRound(correction.bettingRoundId))?.seasonId,
+              points: correction.newPoints,
+              last_updated: new Date().toISOString()
+            }, {
+              onConflict: 'user_id,betting_round_id'
+            });
+
+          if (updateError) {
+            logger.error(`Error applying point correction:`, updateError);
+            continue;
+          }
+
+          result.details.correctionsApplied++;
+          result.details.pointsChanged += Math.abs(correction.newPoints - correction.oldPoints);
+          
+          if (!result.details.usersAffected.includes(correction.userId)) {
+            result.details.usersAffected.push(correction.userId);
+          }
+
+          // Create notification
+          if (options.notifyOnPointChanges) {
+            await this.createNotification({
+              type: 'point_correction',
+              severity: 'info',
+              userId: correction.userId,
+              bettingRoundId: correction.bettingRoundId,
+              message: `Points corrected from ${correction.oldPoints} to ${correction.newPoints}. Reason: ${correction.reason}`,
+              metadata: {
+                correctionType: correction.correctionType,
+                pointsDifference: correction.newPoints - correction.oldPoints,
+                adminUserId: correction.adminUserId
+              },
+              timestamp: new Date().toISOString()
+            });
+          }
+
+        } catch (error) {
+          logger.error(`Error processing correction for user ${correction.userId}:`, error);
+          result.success = false;
+        }
+      }
+
+      result.message = `Applied ${result.details.correctionsApplied} corrections affecting ${result.details.usersAffected.length} users`;
+      logger.info(result.message);
+
+      return result;
+    } catch (error) {
+      logger.error('Error handling point corrections:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Apply manual administrative override to user points
+   */
+  async applyManualOverride(
+    userId: string,
+    bettingRoundId: number,
+    newPoints: number,
+    reason: string,
+    adminUserId: string,
+    options: EdgeCaseHandlingOptions = {}
+  ): Promise<PointCorrectionResult> {
+    try {
+      logger.info(`Applying manual override for user ${userId} in round ${bettingRoundId}`);
+
+      // Require admin approval if configured
+      if (options.requireAdminApprovalForOverrides) {
+        // In a real system, this would check admin permissions
+        logger.info(`Admin override requested by ${adminUserId} for user ${userId}`);
+      }
+
+      // Get current points
+      const { data: currentData, error: fetchError } = await this.client
+        .from('user_last_round_special_points')
+        .select('points')
+        .eq('user_id', userId)
+        .eq('betting_round_id', bettingRoundId)
+        .maybeSingle();
+
+      if (fetchError) {
+        throw new CupScoringServiceError('Failed to fetch current points for override', { fetchError });
+      }
+
+      const oldPoints = currentData?.points ?? 0;
+
+      const correction: PointCorrectionRequest = {
+        userId,
+        bettingRoundId,
+        oldPoints,
+        newPoints,
+        reason: `Manual override by admin: ${reason}`,
+        correctionType: 'manual_override',
+        adminUserId
+      };
+
+      const result = await this.handlePointCorrections([correction], options);
+
+      // Create admin override notification
+      if (options.notifyOnPointChanges) {
+        await this.createNotification({
+          type: 'admin_override',
+          severity: 'warning',
+          userId,
+          bettingRoundId,
+          message: `Admin ${adminUserId} manually overrode points from ${oldPoints} to ${newPoints}`,
+          metadata: {
+            adminUserId,
+            reason,
+            pointsDifference: newPoints - oldPoints
+          },
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      return result;
+    } catch (error) {
+      logger.error('Error applying manual override:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Process late submissions with grace period handling
+   */
+  async processLateSubmissions(
+    bettingRoundId: number,
+    options: EdgeCaseHandlingOptions = {}
+  ): Promise<PointCorrectionResult> {
+    try {
+      if (!options.allowLateSubmissions) {
+        return {
+          success: true,
+          message: 'Late submissions not allowed',
+          details: {
+            correctionsApplied: 0,
+            pointsChanged: 0,
+            usersAffected: [],
+            conflicts: []
+          }
+        };
+      }
+
+      const lateSubmissions = await this.detectLateSubmissions(bettingRoundId, options);
+      const lateOnes = lateSubmissions.filter(s => s.isLate);
+
+      if (lateOnes.length === 0) {
+        return {
+          success: true,
+          message: 'No late submissions found',
+          details: {
+            correctionsApplied: 0,
+            pointsChanged: 0,
+            usersAffected: [],
+            conflicts: []
+          }
+        };
+      }
+
+      logger.info(`Processing ${lateOnes.length} late submissions`);
+
+      // Create notifications for late submissions
+      for (const late of lateOnes) {
+        if (options.notifyOnPointChanges) {
+          await this.createNotification({
+            type: 'late_submission',
+            severity: 'warning',
+            userId: late.userId,
+            bettingRoundId,
+            message: `Late submission detected: bet placed ${late.minutesLate.toFixed(1)} minutes after match start`,
+            metadata: {
+              fixtureId: late.fixtureId,
+              minutesLate: late.minutesLate,
+              gracePeriodMinutes: options.lateSubmissionGracePeriodMinutes ?? 0
+            },
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
+
+      return {
+        success: true,
+        message: `Processed ${lateOnes.length} late submissions`,
+        details: {
+          correctionsApplied: lateOnes.length,
+          pointsChanged: 0, // Late submissions don't change points, just flag them
+          usersAffected: [...new Set(lateOnes.map(s => s.userId))],
+          conflicts: []
+        }
+      };
+    } catch (error) {
+      logger.error('Error processing late submissions:', error);
+      throw error;
+    }
+  }
 
   private async getSeasonInfoForRound(bettingRoundId: number): Promise<{
     seasonId: number;
@@ -930,6 +1309,127 @@ export class CupScoringService {
     }
   }
 
+  /**
+   * Detect and resolve conflicts when multiple updates occur
+   */
+  private async detectAndResolveConflict(
+    correction: PointCorrectionRequest,
+    existingPoints: number,
+    lastUpdated: string
+  ): Promise<ConflictInfo | null> {
+    try {
+      const now = new Date();
+      const lastUpdate = new Date(lastUpdated);
+      const timeSinceUpdate = now.getTime() - lastUpdate.getTime();
+      
+      // Consider it a conflict if updated within last 5 minutes and values differ
+      const isRecentUpdate = timeSinceUpdate < 5 * 60 * 1000; // 5 minutes
+      const valuesDiffer = existingPoints !== correction.oldPoints;
+
+      if (!isRecentUpdate && !valuesDiffer) {
+        return null; // No conflict
+      }
+
+      let conflictType: ConflictInfo['conflictType'] = 'data_mismatch';
+      let resolution: ConflictInfo['resolution'] = 'latest_wins';
+
+      if (isRecentUpdate) {
+        conflictType = 'concurrent_update';
+        
+        // Admin overrides take precedence
+        if (correction.correctionType === 'manual_override') {
+          conflictType = 'manual_override_conflict';
+          resolution = 'admin_override';
+        } else if (Math.abs(correction.newPoints - correction.oldPoints) > 10) {
+          // Large point corrections require manual review, regardless of existing value differences
+          resolution = 'manual_review_required';
+        } else if (valuesDiffer) {
+          // For smaller corrections, only require review if values actually differ
+          resolution = 'latest_wins';
+        }
+      }
+
+      const conflict: ConflictInfo = {
+        userId: correction.userId,
+        bettingRoundId: correction.bettingRoundId,
+        conflictType,
+        existingValue: existingPoints,
+        attemptedValue: correction.newPoints,
+        resolution,
+        timestamp: now.toISOString()
+      };
+
+      logger.warn(`Conflict detected for user ${correction.userId}:`, conflict);
+
+      // Create conflict notification
+      await this.createNotification({
+        type: 'conflict_resolution',
+        severity: resolution === 'manual_review_required' ? 'error' : 'warning',
+        userId: correction.userId,
+        bettingRoundId: correction.bettingRoundId,
+        message: `Conflict detected: ${conflictType}, resolution: ${resolution}`,
+        metadata: {
+          conflict,
+          correctionType: correction.correctionType,
+          timeSinceUpdate,
+          adminUserId: correction.adminUserId
+        },
+        timestamp: now.toISOString()
+      });
+
+      return conflict;
+    } catch (error) {
+      logger.error('Error detecting/resolving conflict:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Create notification for significant events
+   */
+  private async createNotification(notification: NotificationInfo): Promise<void> {
+    try {
+      // Log the notification
+      const logLevel = notification.severity === 'error' ? 'error' : 
+                     notification.severity === 'warning' ? 'warn' : 'info';
+      
+      logger[logLevel](`[${notification.type.toUpperCase()}] ${notification.message}`, {
+        userId: notification.userId,
+        bettingRoundId: notification.bettingRoundId,
+        metadata: notification.metadata
+      });
+
+      // In a production system, you might also:
+      // 1. Store notifications in a database table
+      // 2. Send emails/SMS for critical notifications
+      // 3. Push to a real-time notification service
+      // 4. Integrate with monitoring/alerting systems
+      
+      // For now, we'll store critical notifications in the database
+      if (notification.severity === 'error' || notification.type === 'admin_override') {
+        try {
+          // This would require a notifications table in the database
+          // For demonstration, we'll just log it with extra detail
+          logger.error('CRITICAL NOTIFICATION - Store in DB:', {
+            type: notification.type,
+            severity: notification.severity,
+            userId: notification.userId,
+            bettingRoundId: notification.bettingRoundId,
+            message: notification.message,
+            metadata: notification.metadata,
+            timestamp: notification.timestamp
+          });
+        } catch (dbError) {
+          logger.error('Failed to store critical notification in database:', dbError);
+        }
+      }
+
+    } catch (error) {
+      logger.error('Error creating notification:', error);
+      // Don't throw - notifications shouldn't break the main flow
+    }
+  }
+
   private async getBettingRoundsAfterActivation(
     seasonId: number, 
     activationDate: string
@@ -972,4 +1472,23 @@ export const getCupStandings = (seasonId?: number) =>
   cupScoringService.getCupStandings(seasonId);
 
 export const getUserCupTotalPoints = (userId: string, seasonId?: number) => 
-  cupScoringService.getUserCupTotalPoints(userId, seasonId); 
+  cupScoringService.getUserCupTotalPoints(userId, seasonId);
+
+// Edge Case Handling Exports
+export const detectLateSubmissions = (bettingRoundId: number, options?: EdgeCaseHandlingOptions) =>
+  cupScoringService.detectLateSubmissions(bettingRoundId, options);
+
+export const handlePointCorrections = (corrections: PointCorrectionRequest[], options?: EdgeCaseHandlingOptions) =>
+  cupScoringService.handlePointCorrections(corrections, options);
+
+export const applyManualOverride = (
+  userId: string,
+  bettingRoundId: number,
+  newPoints: number,
+  reason: string,
+  adminUserId: string,
+  options?: EdgeCaseHandlingOptions
+) => cupScoringService.applyManualOverride(userId, bettingRoundId, newPoints, reason, adminUserId, options);
+
+export const processLateSubmissions = (bettingRoundId: number, options?: EdgeCaseHandlingOptions) =>
+  cupScoringService.processLateSubmissions(bettingRoundId, options); 

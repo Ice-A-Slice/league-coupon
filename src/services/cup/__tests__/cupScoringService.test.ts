@@ -638,4 +638,506 @@ describe('CupScoringService', () => {
       });
     });
   });
+});
+
+// Edge Case Handling Tests
+describe('CupScoringService - Edge Case Handling', () => {
+  let mockClient: any;
+  let cupScoringService: CupScoringService;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockClient = {
+      from: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockReturnThis(),
+      upsert: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis()
+    };
+
+    // Mock the client creation
+    (createClient as jest.Mock).mockReturnValue(mockClient);
+    cupScoringService = new CupScoringService();
+  });
+
+  describe('detectLateSubmissions', () => {
+    it('should detect late submissions correctly', async () => {
+      const bettingRoundId = 1;
+      const mockBetsData = [
+        {
+          user_id: 'user1',
+          fixture_id: 1,
+          created_at: '2024-01-01T15:05:00Z', // 5 minutes after match start
+          fixtures: { id: 1, start_time: '2024-01-01T15:00:00Z' }
+        },
+        {
+          user_id: 'user2',
+          fixture_id: 1,
+          created_at: '2024-01-01T14:55:00Z', // 5 minutes before match start
+          fixtures: { id: 1, start_time: '2024-01-01T15:00:00Z' }
+        }
+      ];
+
+      mockClient.from.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockResolvedValue({
+            data: mockBetsData,
+            error: null
+          })
+        })
+      });
+
+      const result = await cupScoringService.detectLateSubmissions(bettingRoundId, {
+        lateSubmissionGracePeriodMinutes: 0
+      });
+
+      expect(result).toHaveLength(2);
+      expect(result[0].isLate).toBe(true);
+      expect(result[0].minutesLate).toBe(5);
+      expect(result[1].isLate).toBe(false);
+      expect(result[1].minutesLate).toBe(0);
+    });
+
+    it('should handle grace period correctly', async () => {
+      const bettingRoundId = 1;
+      const mockBetsData = [
+        {
+          user_id: 'user1',
+          fixture_id: 1,
+          created_at: '2024-01-01T15:05:00Z', // 5 minutes after match start
+          fixtures: { id: 1, start_time: '2024-01-01T15:00:00Z' }
+        }
+      ];
+
+      mockClient.from.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockResolvedValue({
+            data: mockBetsData,
+            error: null
+          })
+        })
+      });
+
+      const result = await cupScoringService.detectLateSubmissions(bettingRoundId, {
+        lateSubmissionGracePeriodMinutes: 10 // 10 minute grace period
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result[0].isLate).toBe(false); // Within grace period
+      expect(result[0].minutesLate).toBe(5);
+    });
+
+    it('should return empty array when no bets found', async () => {
+      const bettingRoundId = 1;
+
+      mockClient.from.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockResolvedValue({
+            data: null,
+            error: null
+          })
+        })
+      });
+
+      const result = await cupScoringService.detectLateSubmissions(bettingRoundId);
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('handlePointCorrections', () => {
+    it('should apply point corrections successfully', async () => {
+      const corrections = [
+        {
+          userId: 'user1',
+          bettingRoundId: 1,
+          oldPoints: 10,
+          newPoints: 15,
+          reason: 'Match result correction',
+          correctionType: 'result_update' as const
+        }
+      ];
+
+      // Mock season info
+      jest.spyOn(cupScoringService as any, 'getSeasonInfoForRound').mockResolvedValue({
+        seasonId: 1
+      });
+
+      // Mock notification creation to avoid errors
+      jest.spyOn(cupScoringService as any, 'createNotification').mockResolvedValue(undefined);
+
+      // Create proper mock chain for existing points check
+      mockClient.from.mockImplementation((table: string) => {
+        if (table === 'user_last_round_special_points') {
+          // First call - fetch existing points
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                eq: jest.fn().mockReturnValue({
+                  maybeSingle: jest.fn().mockResolvedValue({
+                    data: { points: 10, last_updated: '2024-01-01T10:00:00Z' },
+                    error: null
+                  })
+                })
+              })
+            }),
+            // Second call - upsert operation
+            upsert: jest.fn().mockResolvedValue({
+              error: null
+            })
+          };
+        }
+        return mockClient;
+      });
+
+      const result = await cupScoringService.handlePointCorrections(corrections);
+
+      expect(result.success).toBe(true);
+      expect(result.details.correctionsApplied).toBe(1);
+      expect(result.details.pointsChanged).toBe(5);
+      expect(result.details.usersAffected).toContain('user1');
+    });
+
+    it('should detect and handle conflicts', async () => {
+      const corrections = [
+        {
+          userId: 'user1',
+          bettingRoundId: 1,
+          oldPoints: 10,
+          newPoints: 15,
+          reason: 'Match result correction',
+          correctionType: 'result_update' as const
+        }
+      ];
+
+      // Mock season info
+      jest.spyOn(cupScoringService as any, 'getSeasonInfoForRound').mockResolvedValue({
+        seasonId: 1
+      });
+
+      // Mock recent update (conflict scenario)
+      const recentTime = new Date(Date.now() - 2 * 60 * 1000).toISOString(); // 2 minutes ago
+      mockClient.from.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              maybeSingle: jest.fn().mockResolvedValue({
+                data: { points: 12, last_updated: recentTime }, // Different points = conflict
+                error: null
+              })
+            })
+          })
+        })
+      });
+
+      // Mock conflict resolution
+      jest.spyOn(cupScoringService as any, 'detectAndResolveConflict').mockResolvedValue({
+        userId: 'user1',
+        bettingRoundId: 1,
+        conflictType: 'concurrent_update',
+        existingValue: 12,
+        attemptedValue: 15,
+        resolution: 'latest_wins',
+        timestamp: new Date().toISOString()
+      });
+
+      // Mock notification creation
+      jest.spyOn(cupScoringService as any, 'createNotification').mockResolvedValue(undefined);
+
+      const result = await cupScoringService.handlePointCorrections(corrections, {
+        enableConflictResolution: true
+      });
+
+      expect(result.details.conflicts).toHaveLength(1);
+      expect(result.details.conflicts[0].conflictType).toBe('concurrent_update');
+    });
+  });
+
+  describe('applyManualOverride', () => {
+    it('should apply manual override successfully', async () => {
+      const userId = 'user1';
+      const bettingRoundId = 1;
+      const newPoints = 20;
+      const reason = 'Administrative correction';
+      const adminUserId = 'admin1';
+
+      // Mock existing points
+      mockClient.from.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              maybeSingle: jest.fn().mockResolvedValue({
+                data: { points: 10 },
+                error: null
+              })
+            })
+          })
+        })
+      });
+
+      // Mock handlePointCorrections
+      jest.spyOn(cupScoringService, 'handlePointCorrections').mockResolvedValue({
+        success: true,
+        message: 'Applied 1 correction',
+        details: {
+          correctionsApplied: 1,
+          pointsChanged: 10,
+          usersAffected: ['user1'],
+          conflicts: []
+        }
+      });
+
+      // Mock notification creation
+      jest.spyOn(cupScoringService as any, 'createNotification').mockResolvedValue(undefined);
+
+      const result = await cupScoringService.applyManualOverride(
+        userId, bettingRoundId, newPoints, reason, adminUserId, {
+          notifyOnPointChanges: true,
+          requireAdminApprovalForOverrides: true
+        }
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.details.correctionsApplied).toBe(1);
+    });
+  });
+
+  describe('processLateSubmissions', () => {
+    it('should return early when late submissions not allowed', async () => {
+      const result = await cupScoringService.processLateSubmissions(1, {
+        allowLateSubmissions: false
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.message).toBe('Late submissions not allowed');
+      expect(result.details.correctionsApplied).toBe(0);
+    });
+
+    it('should process late submissions and create notifications', async () => {
+      const bettingRoundId = 1;
+
+      // Mock detectLateSubmissions
+      jest.spyOn(cupScoringService, 'detectLateSubmissions').mockResolvedValue([
+        {
+          userId: 'user1',
+          fixtureId: 1,
+          betTimestamp: '2024-01-01T15:05:00Z',
+          matchStartTime: '2024-01-01T15:00:00Z',
+          minutesLate: 5,
+          isLate: true
+        },
+        {
+          userId: 'user2',
+          fixtureId: 1,
+          betTimestamp: '2024-01-01T14:55:00Z',
+          matchStartTime: '2024-01-01T15:00:00Z',
+          minutesLate: 0,
+          isLate: false
+        }
+      ]);
+
+      // Mock notification creation
+      jest.spyOn(cupScoringService as any, 'createNotification').mockResolvedValue(undefined);
+
+      const result = await cupScoringService.processLateSubmissions(bettingRoundId, {
+        allowLateSubmissions: true,
+        notifyOnPointChanges: true
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.details.correctionsApplied).toBe(1); // Only 1 late submission
+      expect(result.details.usersAffected).toContain('user1');
+    });
+
+    it('should handle no late submissions', async () => {
+      const bettingRoundId = 1;
+
+      jest.spyOn(cupScoringService, 'detectLateSubmissions').mockResolvedValue([
+        {
+          userId: 'user1',
+          fixtureId: 1,
+          betTimestamp: '2024-01-01T14:55:00Z',
+          matchStartTime: '2024-01-01T15:00:00Z',
+          minutesLate: 0,
+          isLate: false
+        }
+      ]);
+
+      const result = await cupScoringService.processLateSubmissions(bettingRoundId, {
+        allowLateSubmissions: true
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.message).toBe('No late submissions found');
+      expect(result.details.correctionsApplied).toBe(0);
+    });
+  });
+
+  describe('detectAndResolveConflict', () => {
+    it('should detect concurrent update conflicts', async () => {
+      const correction = {
+        userId: 'user1',
+        bettingRoundId: 1,
+        oldPoints: 10,
+        newPoints: 15,
+        reason: 'Test correction',
+        correctionType: 'result_update' as const
+      };
+
+      // Mock recent update time (conflict scenario)
+      const recentTime = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+      
+      // Mock notification creation
+      jest.spyOn(cupScoringService as any, 'createNotification').mockResolvedValue(undefined);
+
+      const result = await (cupScoringService as any).detectAndResolveConflict(
+        correction, 12, recentTime // Different existing points
+      );
+
+      expect(result).toBeTruthy();
+      expect(result.conflictType).toBe('concurrent_update');
+      expect(result.existingValue).toBe(12);
+      expect(result.attemptedValue).toBe(15);
+    });
+
+    it('should handle admin override conflicts', async () => {
+      const correction = {
+        userId: 'user1',
+        bettingRoundId: 1,
+        oldPoints: 10,
+        newPoints: 15,
+        reason: 'Admin override',
+        correctionType: 'manual_override' as const,
+        adminUserId: 'admin1'
+      };
+
+      const recentTime = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+      
+      jest.spyOn(cupScoringService as any, 'createNotification').mockResolvedValue(undefined);
+
+      const result = await (cupScoringService as any).detectAndResolveConflict(
+        correction, 12, recentTime
+      );
+
+      expect(result).toBeTruthy();
+      expect(result.conflictType).toBe('manual_override_conflict');
+      expect(result.resolution).toBe('admin_override');
+    });
+
+    it('should require manual review for large point differences', async () => {
+      const correction = {
+        userId: 'user1',
+        bettingRoundId: 1,
+        oldPoints: 10,
+        newPoints: 25, // Large difference (15 points)
+        reason: 'Major correction',
+        correctionType: 'result_update' as const
+      };
+
+      const recentTime = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+      
+      jest.spyOn(cupScoringService as any, 'createNotification').mockResolvedValue(undefined);
+
+      const result = await (cupScoringService as any).detectAndResolveConflict(
+        correction, 10, recentTime
+      );
+
+      expect(result).toBeTruthy();
+      expect(result.resolution).toBe('manual_review_required');
+    });
+
+    it('should return null when no conflict exists', async () => {
+      const correction = {
+        userId: 'user1',
+        bettingRoundId: 1,
+        oldPoints: 10,
+        newPoints: 15,
+        reason: 'Test correction',
+        correctionType: 'result_update' as const
+      };
+
+      // Old update time (no conflict)
+      const oldTime = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      
+      const result = await (cupScoringService as any).detectAndResolveConflict(
+        correction, 10, oldTime // Same existing points, old timestamp
+      );
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('createNotification', () => {
+    it('should log notifications with appropriate levels', async () => {
+      const loggerSpy = jest.spyOn(logger, 'info');
+      const loggerWarnSpy = jest.spyOn(logger, 'warn');
+      const loggerErrorSpy = jest.spyOn(logger, 'error');
+
+      // Test info notification
+      await (cupScoringService as any).createNotification({
+        type: 'point_correction',
+        severity: 'info',
+        userId: 'user1',
+        bettingRoundId: 1,
+        message: 'Points corrected',
+        metadata: {},
+        timestamp: new Date().toISOString()
+      });
+
+      expect(loggerSpy).toHaveBeenCalled();
+
+      // Test warning notification
+      await (cupScoringService as any).createNotification({
+        type: 'late_submission',
+        severity: 'warning',
+        userId: 'user1',
+        bettingRoundId: 1,
+        message: 'Late submission detected',
+        metadata: {},
+        timestamp: new Date().toISOString()
+      });
+
+      expect(loggerWarnSpy).toHaveBeenCalled();
+
+      // Test error notification (should be stored)
+      await (cupScoringService as any).createNotification({
+        type: 'conflict_resolution',
+        severity: 'error',
+        userId: 'user1',
+        bettingRoundId: 1,
+        message: 'Critical conflict',
+        metadata: {},
+        timestamp: new Date().toISOString()
+      });
+
+      expect(loggerErrorSpy).toHaveBeenCalledTimes(2); // Once for the notification, once for critical storage
+    });
+
+    it('should handle notification errors gracefully', async () => {
+      const loggerErrorSpy = jest.spyOn(logger, 'error');
+      
+      // Force an error in notification processing
+      const originalLoggerInfo = logger.info;
+      logger.info = jest.fn().mockImplementation(() => {
+        throw new Error('Logger error');
+      });
+
+      // Should not throw even if logging fails
+      await expect((cupScoringService as any).createNotification({
+        type: 'point_correction',
+        severity: 'info',
+        userId: 'user1',
+        bettingRoundId: 1,
+        message: 'Test message',
+        metadata: {},
+        timestamp: new Date().toISOString()
+      })).resolves.not.toThrow();
+
+      expect(loggerErrorSpy).toHaveBeenCalledWith('Error creating notification:', expect.any(Error));
+      
+      // Restore original logger
+      logger.info = originalLoggerInfo;
+    });
+  });
 }); 
