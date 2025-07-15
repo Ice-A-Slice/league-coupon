@@ -10,6 +10,9 @@ export type {
   LeagueStanding,
   AIGeneratedStory,
   SummaryEmailProps,
+  CupStanding,
+  CupWinner,
+  CupData,
 } from './SummaryEmail';
 
 // TypeScript Types for Reminder Email

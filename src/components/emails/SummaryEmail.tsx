@@ -86,6 +86,33 @@ export interface NextRoundPreview {
   };
 }
 
+export interface CupStanding {
+  user_id: string;
+  username: string;
+  total_points: number;
+  rounds_participated: number;
+  rank: number;
+  is_tied: boolean;
+}
+
+export interface CupWinner {
+  user_id: string;
+  username: string;
+  total_points: number;
+  rank: number;
+  is_tied: boolean;
+}
+
+export interface CupData {
+  isActive: boolean;
+  seasonId: number | null;
+  seasonName: string | null;
+  activatedAt: string | null;
+  standings?: CupStanding[];
+  winners?: CupWinner[];
+  totalParticipants?: number;
+}
+
 export interface SummaryEmailProps {
   user: UserPerformance;
   roundNumber: number;
@@ -99,6 +126,9 @@ export interface SummaryEmailProps {
     goalOfTheWeek?: string;
   };
   appUrl: string;
+  // Cup data for season finales
+  cupData?: CupData;
+  isSeasonFinale?: boolean;
 }
 
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';

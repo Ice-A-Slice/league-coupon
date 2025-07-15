@@ -13,13 +13,19 @@ import {
   type MatchResult, 
   type UserPerformance, 
   type LeagueStanding, 
-  type AIGeneratedStory 
+  type AIGeneratedStory,
+  type CupData
 } from '@/components/emails/SummaryEmail';
 import { logger } from '@/utils/logger';
 
 // Import our new AI services
 import { storyGenerationService } from '@/lib/storyGenerationService';
 import { promptTemplateService } from '@/lib/promptTemplateService';
+
+// Import cup-related services for season finale detection
+import { cupActivationStatusChecker, type CupActivationStatus } from '@/services/cup/cupActivationStatusChecker';
+import { CupWinnerDeterminationService } from '@/services/cup/cupWinnerDeterminationService';
+import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
 
 // Re-export types for external use
 export type { SummaryEmailProps };
@@ -433,6 +439,133 @@ export class EmailDataService {
   }
 
   /**
+   * Check if this is a season finale email by examining if no roundId is provided
+   * or if the season is marked as completed
+   */
+  private async isSeasonFinaleEmail(roundId?: number): Promise<boolean> {
+    // If no roundId provided, this is likely a season summary email
+    if (!roundId) {
+      return true;
+    }
+
+    // Check if the season containing this round is completed
+    try {
+      const supabase = getSupabaseServiceRoleClient();
+      const { data: roundLink } = await supabase
+        .from('betting_round_fixtures')
+        .select(`
+          fixtures (
+            rounds (
+              seasons (
+                completed_at
+              )
+            )
+          )
+        `)
+        .eq('betting_round_id', roundId)
+        .limit(1)
+        .single();
+
+      return !!roundLink?.fixtures?.rounds?.seasons?.completed_at;
+    } catch (error) {
+      logger.warn('EmailDataService: Failed to check season completion status', { roundId, error });
+      return false;
+    }
+  }
+
+  /**
+   * Get cup data for season finale emails
+   */
+  private async getCupDataForSeason(seasonId?: number): Promise<CupData | null> {
+    try {
+      let cupStatus: CupActivationStatus;
+      
+      if (seasonId) {
+        // Check specific season
+        cupStatus = await cupActivationStatusChecker.checkSeasonActivationStatus(seasonId);
+      } else {
+        // Check current season
+        cupStatus = await cupActivationStatusChecker.checkCurrentSeasonActivationStatus();
+      }
+
+      const cupData: CupData = {
+        isActive: cupStatus.isActivated,
+        seasonId: cupStatus.seasonId,
+        seasonName: cupStatus.seasonName,
+        activatedAt: cupStatus.activatedAt
+      };
+
+      // If cup was not activated, return basic cup data
+      if (!cupStatus.isActivated || !cupStatus.seasonId) {
+        return cupData;
+      }
+
+      // Get cup standings and winners for activated cups
+      const cupService = new CupWinnerDeterminationService(getSupabaseServiceRoleClient());
+      
+      // Get cup standings
+      const standingsResult = await cupService.calculateCupStandings(cupStatus.seasonId);
+      cupData.standings = standingsResult.standings.map(entry => ({
+        user_id: entry.user_id,
+        username: entry.username || 'Unknown User',
+        total_points: entry.total_points,
+        rounds_participated: entry.rounds_participated,
+        rank: entry.rank,
+        is_tied: entry.is_tied
+      }));
+      cupData.totalParticipants = standingsResult.standings.length;
+
+      // Check if season is completed and get winners
+      const supabase = getSupabaseServiceRoleClient();
+      const { data: season } = await supabase
+        .from('seasons')
+        .select('completed_at')
+        .eq('id', cupStatus.seasonId)
+        .single();
+
+      if (season?.completed_at) {
+        // Get cup winners from season_winners table
+        const { data: winners } = await supabase
+          .from('season_winners')
+          .select(`
+            user_id,
+            total_points,
+            profiles!inner(full_name)
+          `)
+          .eq('season_id', cupStatus.seasonId)
+          .eq('competition_type', 'last_round_special')
+          .order('total_points', { ascending: false });
+
+        if (winners && winners.length > 0) {
+          cupData.winners = winners.map((winner, index) => ({
+            user_id: winner.user_id,
+            username: winner.profiles?.full_name || 'Unknown User',
+            total_points: winner.total_points || 0,
+            rank: index + 1, // Calculate rank based on order
+            is_tied: false // TODO: Could enhance this with tie detection
+          }));
+        }
+      }
+
+      logger.info('EmailDataService: Successfully aggregated cup data', {
+        seasonId: cupStatus.seasonId,
+        isActive: cupData.isActive,
+        participantsCount: cupData.totalParticipants,
+        winnersCount: cupData.winners?.length || 0
+      });
+
+      return cupData;
+
+    } catch (error) {
+      logger.error('EmailDataService: Failed to get cup data for season', {
+        seasonId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      return null;
+    }
+  }
+
+  /**
    * Get complete SummaryEmail props for a specific user and round
    */
   async getSummaryEmailProps(
@@ -441,6 +574,9 @@ export class EmailDataService {
   ): Promise<SummaryEmailProps> {
     try {
       logger.info('EmailDataService: Fetching summary email data', { userId, roundId });
+      
+      // Check if this is a season finale email
+      const isSeasonFinale = await this.isSeasonFinaleEmail(roundId);
       
       // Fetch raw data from EmailDataFetchingService
       const summaryData = await this.emailDataFetcher.getSummaryEmailData(roundId);
@@ -454,22 +590,57 @@ export class EmailDataService {
         throw new Error(`User predictions not found for userId: ${userId}`);
       }
 
+      // Get season ID for cup data (if season finale)
+      let seasonId: number | undefined;
+      if (isSeasonFinale && roundId) {
+        try {
+          const supabase = getSupabaseServiceRoleClient();
+          const { data: roundLink } = await supabase
+            .from('betting_round_fixtures')
+            .select(`
+              fixtures (
+                rounds (
+                  season_id
+                )
+              )
+            `)
+            .eq('betting_round_id', roundId)
+            .limit(1)
+            .single();
+          seasonId = roundLink?.fixtures?.rounds?.season_id;
+        } catch (error) {
+          logger.warn('EmailDataService: Failed to get season ID for round', { roundId, error });
+        }
+      }
+
+      // Get cup data for season finales
+      let cupData: CupData | undefined;
+      if (isSeasonFinale) {
+        cupData = await this.getCupDataForSeason(seasonId) || undefined;
+      }
+
       // Transform data to SummaryEmail format
       const props: SummaryEmailProps = {
         user: this.transformUserPerformance(userPredictions, summaryData),
         roundNumber: summaryData.round.roundId,
         matches: this.transformMatches(summaryData.round.matches),
         leagueStandings: this.transformLeagueStandings(summaryData.standings),
-        aiStories: await this.generateAIStories(summaryData), // Now using AI-powered story generation!
+        aiStories: await this.generateAIStories(summaryData, cupData), // Enhanced with cup data for season finales
         weekHighlights: this.generateWeekHighlights(summaryData),
-        appUrl: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+        appUrl: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+        // Cup data for season finales
+        cupData,
+        isSeasonFinale
       };
 
       logger.info('EmailDataService: Successfully transformed summary email data', { 
         userId, 
         roundId: summaryData.round.roundId,
         matchCount: props.matches.length,
-        standingsCount: props.leagueStandings.length 
+        standingsCount: props.leagueStandings.length,
+        isSeasonFinale,
+        hasCupData: !!cupData,
+        cupIsActive: cupData?.isActive || false
       });
 
       return props;
@@ -543,7 +714,7 @@ export class EmailDataService {
   /**
    * Generate AI-powered stories using our new AI content generation services
    */
-  private async generateAIStories(summaryData: FetchedSummaryEmailData): Promise<AIGeneratedStory[]> {
+  private async generateAIStories(summaryData: FetchedSummaryEmailData, cupData?: CupData): Promise<AIGeneratedStory[]> {
     const stories: AIGeneratedStory[] = [];
     
     try {
@@ -563,6 +734,12 @@ export class EmailDataService {
       // 3. Round analysis story
       const roundStory = await this.generateRoundAnalysisStory(summaryData);
       if (roundStory) stories.push(roundStory);
+
+      // 4. Cup story if it's a season finale and we have cup data
+      if (cupData?.isActive && cupData.winners && cupData.winners.length > 0) {
+        const cupStory = await this.generateCupStory(cupData);
+        if (cupStory) stories.push(cupStory);
+      }
 
       // Limit to 3 stories maximum
       return stories.slice(0, 3);
@@ -647,6 +824,60 @@ export class EmailDataService {
       content,
       type: 'form'
     };
+  }
+
+  /**
+   * Generate cup story for season finale emails
+   */
+  private async generateCupStory(cupData: CupData): Promise<AIGeneratedStory | null> {
+    if (!cupData.isActive || !cupData.winners || cupData.winners.length === 0) {
+      return null;
+    }
+
+    try {
+      const winner = cupData.winners[0]; // Primary winner
+      const totalParticipants = cupData.totalParticipants || 0;
+      const isMultipleWinners = cupData.winners.length > 1;
+
+      // Determine story type and content based on cup outcome
+      let headline: string;
+      let content: string;
+
+      if (isMultipleWinners) {
+        // Multiple winners (tie scenario)
+        const winnerNames = cupData.winners.map(w => w.username).join(', ');
+        headline = `🏆 Last Round Special: ${cupData.winners.length}-Way Tie for the Crown!`;
+        content = `The Last Round Special cup concludes with a thrilling ${cupData.winners.length}-way tie! ${winnerNames} all finished with ${winner.total_points} points each, sharing the cup victory. Out of ${totalParticipants} participants, these champions rose above the rest when it mattered most. What a spectacular finish to the competition!`;
+      } else {
+        // Single winner
+        headline = `🏆 Last Round Special Champion: ${winner.username} Takes the Crown!`;
+        content = `${winner.username} has emerged victorious in the Last Round Special cup! With ${winner.total_points} points, they outpredicted ${totalParticipants - 1} other participants in this exclusive competition. The cup was activated when 60% of teams had 5 or fewer games remaining, and ${winner.username} proved they could handle the pressure when it counted most.`;
+      }
+
+      // Use AI to enhance the story if possible
+      try {
+        const prompt = `Create an engaging story about the Last Round Special cup winner(s): ${cupData.winners.map(w => w.username).join(', ')} with ${winner.total_points} points. There were ${totalParticipants} total participants. Make it exciting and congratulatory. Keep it under 100 words.`;
+        
+        const aiStory = await storyGenerationService.generateStory(prompt, 'cup_winner');
+
+        if (aiStory && aiStory.length > 50) {
+          content = aiStory;
+        }
+      } catch (aiError) {
+        logger.warn('EmailDataService: AI cup story generation failed, using fallback', { aiError });
+        // Keep the fallback content created above
+      }
+
+      return {
+        headline,
+        content,
+        type: 'title_race' // Cup winners are title race type stories
+      };
+
+    } catch (error) {
+      logger.error('EmailDataService: Failed to generate cup story', { error });
+      return null;
+    }
   }
 
   /**
