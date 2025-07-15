@@ -1,6 +1,6 @@
 import React from 'react';
-import StandingsTable from '@/components/standings/StandingsTable';
-import { logger } from '@/utils/logger'; // Assuming logger is configured for server-side use
+import { StandingsPageContent } from '@/components/standings/StandingsPageContent';
+import { logger } from '@/utils/logger';
 
 // Define the expected structure for a standing entry, matching UserStandingEntry from backend
 interface UserStandingEntry {
@@ -9,16 +9,56 @@ interface UserStandingEntry {
   dynamic_points: number;
   combined_total_score: number;
   rank: number;
-  // We might need to fetch or join username/avatar if not directly in API response
-  // For now, we assume the API might provide it or we handle it later.
+  username?: string;
 }
 
-async function getStandingsData(): Promise<UserStandingEntry[] | null> {
-  const loggerContext = { page: '/standings', function: 'getStandingsData' };
-  try {
-    // REMOVED ARTIFICIAL DELAY - Suspense with loading.tsx handles this now
-    // await new Promise(resolve => setTimeout(resolve, 3000));
+// Cup standings interface
+interface CupStandingEntry {
+  user_id: string;
+  user: {
+    id: string;
+    full_name: string;
+    avatar_url: string | null;
+  };
+  total_points: number;
+  rounds_participated: number;
+  position: number;
+  last_updated: string;
+}
 
+// Cup status interface
+interface CupStatus {
+  is_active: boolean;
+  season_id: number | null;
+  season_name: string | null;
+  activated_at: string | null;
+}
+
+// Enhanced response interface from the /api/standings endpoint
+interface EnhancedStandingsResponse {
+  league_standings: UserStandingEntry[];
+  cup: {
+    is_active: boolean;
+    season_id: number | null;
+    season_name: string | null;
+    activated_at: string | null;
+    standings?: CupStandingEntry[]; // Cup standings if available
+  };
+  metadata: {
+    timestamp: string;
+    has_cup_data: boolean;
+    total_league_participants: number;
+    total_cup_participants?: number;
+  };
+}
+
+async function getEnhancedStandingsData(): Promise<{
+  leagueStandings: UserStandingEntry[] | null;
+  cupStandings: CupStandingEntry[] | null;
+  cupStatus: CupStatus | null;
+}> {
+  const loggerContext = { page: '/standings', function: 'getEnhancedStandingsData' };
+  try {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const response = await fetch(`${appUrl}/api/standings`, {
       cache: 'no-store', // Ensure fresh data for standings
@@ -27,53 +67,61 @@ async function getStandingsData(): Promise<UserStandingEntry[] | null> {
     if (!response.ok) {
       logger.error(
         { ...loggerContext, status: response.status, statusText: response.statusText },
-        `API request failed with status ${response.status}`
+        `Enhanced standings API request failed with status ${response.status}`
       );
-      // Optionally, parse error response body if available and useful
-      // const errorBody = await response.text();
-      // logger.error({ ...loggerContext, errorBody }, 'Error response body');
-      return null; // Or throw an error to be caught by Next.js error boundary
+      return { leagueStandings: null, cupStandings: null, cupStatus: null };
     }
 
-    const data: UserStandingEntry[] = await response.json();
-    logger.info({ ...loggerContext, count: data.length }, 'Successfully fetched standings data.');
-    return data;
+    const result: EnhancedStandingsResponse = await response.json();
+    
+    // Extract league standings
+    const leagueStandings = result.league_standings || [];
+    
+    // Extract cup status
+    const cupStatus: CupStatus = {
+      is_active: result.cup.is_active,
+      season_id: result.cup.season_id,
+      season_name: result.cup.season_name,
+      activated_at: result.cup.activated_at
+    };
+    
+    // Extract cup standings if available
+    const cupStandings = result.cup.standings || null;
+    
+    logger.info(
+      { 
+        ...loggerContext, 
+        leagueCount: leagueStandings.length,
+        cupActive: cupStatus.is_active,
+        cupCount: cupStandings?.length || 0
+      }, 
+      'Successfully fetched enhanced standings data.'
+    );
+    
+    return { leagueStandings, cupStandings, cupStatus };
   } catch (error) {
     logger.error(
       { ...loggerContext, error: error instanceof Error ? error.message : String(error) },
-      'Failed to fetch standings data'
+      'Failed to fetch enhanced standings data'
     );
-    return null; // Or throw an error
+    return { leagueStandings: null, cupStandings: null, cupStatus: null };
   }
 }
 
 export default async function StandingsPage() {
-  const standingsData = await getStandingsData();
+  // Fetch all data in a single call
+  const { leagueStandings, cupStandings, cupStatus } = await getEnhancedStandingsData();
 
-  // Pass the fetched data to the client component
-  // isLoading and error states for the initial fetch are handled here
-  // The StandingsTable component itself might have internal loading/error states 
-  // if it supports re-fetching or live updates, but initial load is handled by the Server Component.
-
-  if (!standingsData) {
-    // This will be caught by the nearest error.tsx or Next.js default error page
-    // You could also return a specific error component here
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-4">Standings</h1>
-        <p className="text-red-500">Failed to load standings data. Please try again later.</p>
-      </div>
-    );
-  }
-  
+  // Pass all data to the client component for rendering
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-4">League Standings</h1>
-      {/* The StandingsTable component handles its own display based on props */}
-      <StandingsTable standings={standingsData} />
-    </div>
+    <StandingsPageContent 
+      leagueStandings={leagueStandings}
+      cupStandings={cupStandings}
+      cupStatus={cupStatus}
+    />
   );
 }
 
 // Optional: Revalidate data periodically or on demand if standings change frequently
+// export const revalidate = 60; // Revalidate every 60 seconds 
 // export const revalidate = 60; // Revalidate every 60 seconds 

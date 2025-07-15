@@ -35,10 +35,12 @@ interface StandingsTableProps {
 }
 
 const StandingsTable: React.FC<StandingsTableProps> = ({ standings, isLoading, error }) => {
+  // Guard clauses - check for loading state first
   if (isLoading) {
     return <StandingsTableSkeleton />; // Render skeleton loader
   }
 
+  // Check for errors
   if (error) {
     return (
       <div className="p-4 my-4 text-sm text-red-800 rounded-lg bg-red-50 dark:bg-gray-800 dark:text-red-400" role="alert">
@@ -47,7 +49,8 @@ const StandingsTable: React.FC<StandingsTableProps> = ({ standings, isLoading, e
     );
   }
 
-  if (!standings || standings.length === 0) {
+  // Check for empty or invalid data - this is crucial to prevent .map() errors
+  if (!standings || !Array.isArray(standings) || standings.length === 0) {
     return (
       <div className="p-4 my-4 text-sm text-gray-700 rounded-lg bg-gray-100 dark:bg-gray-800 dark:text-gray-300" role="alert">
         No standings data available yet.
@@ -59,27 +62,27 @@ const StandingsTable: React.FC<StandingsTableProps> = ({ standings, isLoading, e
     <TooltipProvider>
       <div className="border shadow-md sm:rounded-lg my-6 overflow-hidden">
         <Table>
-          <TableCaption className="py-3 px-4 text-xs text-gray-500 dark:text-gray-400 text-left">
-            1X2: Game Points, ?: Question Points
+          <TableCaption className="text-sm text-gray-500 dark:text-gray-400 mt-4">
+            Current tournament standings. Updated after each round.
           </TableCaption>
-          <TableHeader>
-            <TableRow className="bg-primary hover:bg-primary/90">
+          <TableHeader className="bg-primary text-primary-foreground">
+            <TableRow>
               <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold text-center">Rank</TableHead>
-              <TableHead className="px-6 py-3 text-xs text-primary-foreground font-semibold">Player</TableHead>
+              <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold text-left">Player</TableHead>
               <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold text-center">
                 <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span>1X2</span>
+                  <TooltipTrigger className="cursor-help underline decoration-dotted underline-offset-2">
+                    Game Points
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Points from predicting match outcomes (Home win, Draw, Away win)</p>
+                    <p>Points from match outcome predictions</p>
                   </TooltipContent>
                 </Tooltip>
               </TableHead>
               <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold text-center">
                 <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span>?</span>
+                  <TooltipTrigger className="cursor-help underline decoration-dotted underline-offset-2">
+                    Dynamic Points
                   </TooltipTrigger>
                   <TooltipContent>
                     <p>Points from season-long questionnaire predictions</p>
@@ -98,16 +101,16 @@ const StandingsTable: React.FC<StandingsTableProps> = ({ standings, isLoading, e
                 <TableCell className="px-3 py-4 font-medium text-gray-900 dark:text-white text-center">
                   {entry.rank}
                 </TableCell>
-                <TableCell className="px-6 py-4 text-gray-800 dark:text-gray-200 truncate max-w-xs">
-                  {entry.username || entry.user_id} 
+                <TableCell className="px-3 py-4 font-medium text-gray-900 dark:text-white text-left">
+                  {entry.username || 'Unknown Player'}
                 </TableCell>
-                <TableCell className="px-3 py-4 text-center text-gray-700 dark:text-gray-300">
+                <TableCell className="px-3 py-4 text-gray-900 dark:text-white text-center">
                   {entry.game_points}
                 </TableCell>
-                <TableCell className="px-3 py-4 text-center text-gray-700 dark:text-gray-300">
+                <TableCell className="px-3 py-4 text-gray-900 dark:text-white text-center">
                   {entry.dynamic_points}
                 </TableCell>
-                <TableCell className="px-3 py-4 text-center font-semibold text-primary dark:text-teal-400">
+                <TableCell className="px-3 py-4 font-semibold text-gray-900 dark:text-white text-center">
                   {entry.combined_total_score}
                 </TableCell>
               </TableRow>
