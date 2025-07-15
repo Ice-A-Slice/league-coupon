@@ -4,13 +4,13 @@ import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SeasonWinnersList from './SeasonWinnersList';
 import LeaderboardTable from './LeaderboardTable';
-import { HallOfFameViewProps, HallOfFameViewType, SeasonWinner, PlayerStats } from '@/types/hall-of-fame';
+import { HallOfFameViewProps, HallOfFameViewType, PlayerStats } from '@/types/hall-of-fame';
 import { TrophyIcon, ChartBarIcon } from '@heroicons/react/24/outline';
 import { cn } from '@/lib/utils';
 
 interface HallOfFameProps extends HallOfFameViewProps {
   defaultView?: HallOfFameViewType;
-  onWinnerSelect?: (winner: SeasonWinner) => void;
+  onWinnerSelect?: (winnerId: string) => void;
   onPlayerSelect?: (player: PlayerStats) => void;
 }
 

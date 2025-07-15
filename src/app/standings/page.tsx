@@ -1,6 +1,12 @@
 import React from 'react';
 import { StandingsPageContent } from '@/components/standings/StandingsPageContent';
 import { logger } from '@/utils/logger';
+import { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Standings - TippSlottet',
+  description: 'View current tournament standings and leaderboard'
+};
 
 // Define the expected structure for a standing entry, matching UserStandingEntry from backend
 interface UserStandingEntry {

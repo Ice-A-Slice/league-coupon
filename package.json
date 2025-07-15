@@ -12,7 +12,21 @@
     "parse-prd": "node scripts/dev.js parse-prd",
     "test": "jest --config jest.config.cjs",
     "test:watch": "jest --watch --config jest.config.cjs",
-    "test:coverage": "jest --coverage --config jest.config.cjs"
+    "test:coverage": "jest --coverage --config jest.config.cjs",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:report": "playwright show-report",
+    "test:all": "npm run test && npm run test:e2e",
+    "perf:test": "ts-node tests/performance/performance-test-runner.ts",
+    "perf:test:light": "npm run perf:test -- --scenario=light_load",
+    "perf:test:moderate": "npm run perf:test -- --scenario=moderate_load",
+    "perf:test:heavy": "npm run perf:test -- --scenario=heavy_load",
+    "perf:frontend": "playwright test tests/performance/frontend-performance.playwright.ts",
+    "perf:k6": "k6 run tests/performance/load-test.k6.js",
+    "perf:artillery": "artillery run tests/performance/artillery-config.yml",
+    "perf:all": "npm run perf:test:light && npm run perf:frontend"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -73,6 +87,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@heroicons/react": "^2.2.0",
+    "@playwright/test": "^1.54.1",
     "@swc/core": "^1.11.21",
     "@swc/jest": "^0.2.37",
     "@tailwindcss/postcss": "^4",
@@ -86,6 +101,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/testing-library__jest-dom": "^5.14.9",
+    "artillery": "^2.0.21",
     "eslint": "^9",
     "eslint-config-next": "15.3.0",
     "identity-obj-proxy": "^3.0.0",
@@ -97,6 +113,7 @@
     "supabase": "^2.22.6",
     "tailwindcss": "^4",
     "ts-jest": "^29.3.2",
+    "ts-node": "^10.9.2",
     "typescript": "^5",
     "whatwg-fetch": "^3.6.20"
   },

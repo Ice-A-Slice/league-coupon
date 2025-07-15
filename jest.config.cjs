@@ -17,7 +17,7 @@ module.exports = {
     '^@/data/(.*)$': '<rootDir>/src/data/$1',
     '^@/utils/(.*)$': '<rootDir>/src/utils/$1',
   },
-  testPathIgnorePatterns: ['<rootDir>/node_modules/', '<rootDir>/.next/'],
+  testPathIgnorePatterns: ['<rootDir>/node_modules/', '<rootDir>/.next/', '<rootDir>/tests/e2e/'],
   transform: {
     '^.+\\.(js|jsx|ts|tsx)$': ['@swc/jest'],
   },

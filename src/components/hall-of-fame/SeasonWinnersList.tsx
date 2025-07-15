@@ -2,28 +2,39 @@
 
 import React, { useState } from 'react';
 import { useHallOfFame } from '@/hooks/useHallOfFame';
-import { HallOfFameViewProps, HallOfFameFilters, SeasonWinner } from '@/types/hall-of-fame';
+import { HallOfFameFilters, SeasonWinner } from '@/types/hall-of-fame';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { ChevronLeftIcon, ChevronRightIcon, TrophyIcon, ViewColumnsIcon, ListBulletIcon } from '@heroicons/react/24/outline';
 import { cn } from '@/lib/utils';
 
-interface SeasonWinnersListProps extends HallOfFameViewProps {
-  onWinnerSelect?: (winner: SeasonWinner) => void;
+// Define proper types for grouped season data
+interface SeasonGroup {
+  year: string;
+  leagueWinner?: SeasonWinner;
+  cupWinner?: SeasonWinner;
 }
 
-type ViewMode = 'list' | 'badges';
+// Define view mode type
+type ViewMode = 'badges' | 'list';
 
-// Helper to group winners by season
-const groupWinnersBySeason = (winners: SeasonWinner[]) => {
+interface SeasonWinnersListProps {
+  currentUserId?: string;
+  competitionId?: number;
+  className?: string;
+  onWinnerSelect?: (winnerId: string) => void;
+}
+
+// Helper function to group winners by season with proper typing
+const groupWinnersBySeason = (winners: SeasonWinner[]): SeasonGroup[] => {
   const grouped = winners.reduce((acc, winner) => {
-    const seasonKey = `${winner.season.api_season_year}`;
+    const seasonKey = winner.season.name; // Use season name as string key
+    
     if (!acc[seasonKey]) {
-      acc[seasonKey] = {
-        year: winner.season.api_season_year,
-        seasonName: winner.season.name,
-        leagueWinner: null,
-        cupWinner: null
+      acc[seasonKey] = { 
+        year: winner.season.name,
+        leagueWinner: undefined,
+        cupWinner: undefined
       };
     }
     
@@ -34,9 +45,9 @@ const groupWinnersBySeason = (winners: SeasonWinner[]) => {
     }
     
     return acc;
-  }, {} as Record<string, any>);
+  }, {} as Record<string, SeasonGroup>);
   
-  return Object.values(grouped).sort((a: any, b: any) => b.year.localeCompare(a.year));
+  return Object.values(grouped).sort((a: SeasonGroup, b: SeasonGroup) => b.year.localeCompare(a.year));
 };
 
 function CircularBadge({ 
@@ -48,7 +59,7 @@ function CircularBadge({
   winner: SeasonWinner; 
   type: 'league' | 'cup'; 
   currentUserId?: string;
-  onWinnerSelect?: (winner: SeasonWinner) => void;
+  onWinnerSelect?: (winnerId: string) => void;
 }) {
   const isLeague = type === 'league';
   const isCurrentUser = currentUserId && winner.user_id === currentUserId;
@@ -56,7 +67,7 @@ function CircularBadge({
   return (
     <div 
       className="flex flex-col items-center space-y-3 cursor-pointer"
-      onClick={() => onWinnerSelect?.(winner)}
+      onClick={() => onWinnerSelect?.(winner.id.toString())}
     >
       <div className={`
         w-36 h-36 rounded-full flex flex-col items-center justify-center text-white text-center p-4
@@ -223,12 +234,11 @@ const SeasonWinnersList: React.FC<SeasonWinnersListProps> = ({
       {/* Badges View */}
       {viewMode === 'badges' && (
         <div className="space-y-12">
-          {groupedSeasons.map((season: any) => (
+          {groupedSeasons.map((season: SeasonGroup) => (
             <div key={season.year} className="space-y-6">
               {/* Season Year Header */}
               <div className="text-center">
                 <h2 className="text-4xl font-bold text-gray-800">{season.year}</h2>
-                <p className="text-gray-600 text-sm mt-1">{season.seasonName}</p>
               </div>
 
               {/* Winners Grid */}
@@ -286,7 +296,7 @@ const SeasonWinnersList: React.FC<SeasonWinnersListProps> = ({
                 "bg-white border rounded-lg p-6 transition-all duration-200 hover:shadow-md cursor-pointer",
                 isCurrentUser(winner.user_id) && "ring-2 ring-teal-500 bg-teal-50 border-teal-200"
               )}
-              onClick={() => onWinnerSelect?.(winner)}
+              onClick={() => onWinnerSelect?.(winner.id.toString())}
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-start space-x-4">

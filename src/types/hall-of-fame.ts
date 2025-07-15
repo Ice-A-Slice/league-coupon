@@ -35,6 +35,7 @@ export interface SeasonWinner {
   total_points: number;
   game_points: number;
   dynamic_points: number;
+  competition_type: string | null;
   created_at: string;
   season: Season;
   user: User;

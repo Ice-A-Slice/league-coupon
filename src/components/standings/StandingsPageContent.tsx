@@ -145,13 +145,6 @@ export function StandingsPageContent({
       ) : (
         /* Show standings directly when no cup is active */
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Tournament Standings</h2>
-            <Badge variant="outline">
-              {leagueStandings?.length || 0} Players
-            </Badge>
-          </div>
-          
           {leagueError ? (
             <div className="p-4 my-4 text-sm text-red-800 rounded-lg bg-red-50 dark:bg-gray-800 dark:text-red-400" role="alert">
               <span className="font-medium">Error!</span> {leagueError}

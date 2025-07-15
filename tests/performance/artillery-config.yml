@@ -1,0 +1,161 @@
+config:
+  target: "{{ $processEnvironment.PERF_BASE_URL || 'http://localhost:3000' }}"
+  phases:
+    # Light Load Scenario (50 users)
+    - name: "Light Load - Ramp Up"
+      duration: 60
+      arrivalRate: 1
+      rampTo: 10
+      weight: 100
+    - name: "Light Load - Sustained"
+      duration: 300
+      arrivalRate: 10
+      weight: 100
+    - name: "Light Load - Ramp Down"
+      duration: 60
+      arrivalRate: 10
+      rampTo: 1
+      weight: 100
+  
+  # Separate scenarios for different load levels
+  environments:
+    light:
+      phases:
+        - name: "Light Load"
+          duration: 300
+          arrivalRate: 10 # 50 concurrent users approx
+    
+    moderate:
+      phases:
+        - name: "Moderate Load - Ramp Up"
+          duration: 120
+          arrivalRate: 5
+          rampTo: 30
+        - name: "Moderate Load - Sustained"
+          duration: 600
+          arrivalRate: 30 # 200 concurrent users approx
+        - name: "Moderate Load - Ramp Down"
+          duration: 120
+          arrivalRate: 30
+          rampTo: 5
+    
+    heavy:
+      phases:
+        - name: "Heavy Load - Ramp Up"
+          duration: 300
+          arrivalRate: 10
+          rampTo: 80
+        - name: "Heavy Load - Sustained"
+          duration: 900
+          arrivalRate: 80 # 500 concurrent users approx
+        - name: "Heavy Load - Ramp Down"
+          duration: 300
+          arrivalRate: 80
+          rampTo: 10
+
+  # SLA and performance expectations
+  ensure:
+    p99: 2000  # 99th percentile under 2 seconds
+    p95: 1000  # 95th percentile under 1 second
+    median: 500  # Median response under 500ms
+    max: 5000  # Maximum response time under 5 seconds
+    
+  # Custom metrics and plugins
+  plugins:
+    metrics-by-endpoint:
+      useOnlyRequestNames: true
+    publish-metrics:
+      - type: statsd
+        host: localhost
+        port: 8125
+        prefix: "artillery.lastround"
+
+# Test scenarios simulating realistic user behavior
+scenarios:
+  - name: "Last Round Special User Journey"
+    weight: 70
+    flow:
+      # Primary user flow: Check status → View standings
+      - get:
+          url: "/api/last-round-special/status"
+          name: "Cup Status Check"
+          expect:
+            - statusCode: 200
+            - hasProperty: "isActive"
+            - contentType: json
+      
+      - think: 1  # User processing time
+      
+      - get:
+          url: "/api/standings"
+          name: "Enhanced Standings"
+          expect:
+            - statusCode: 200
+      
+      - think: 2
+      
+      # 50% chance to check cup standings
+      - get:
+          url: "/api/last-round-special/standings"
+          name: "Cup Standings"
+          ifTrue: "{{ Math.random() < 0.5 }}"
+          expect:
+            - statusCode: [200, 404]  # 404 if cup not active
+
+  - name: "Hall of Fame Browsing"
+    weight: 20
+    flow:
+      - get:
+          url: "/api/hall-of-fame"
+          name: "Hall of Fame"
+          expect:
+            - statusCode: 200
+            - hasProperty: "winners"
+      
+      - think: 3
+      
+      # Browse specific season data
+      - get:
+          url: "/api/hall-of-fame/stats"
+          name: "Hall of Fame Stats"
+          expect:
+            - statusCode: 200
+
+  - name: "General App Usage"
+    weight: 10
+    flow:
+      # Health check and basic app functionality
+      - get:
+          url: "/api/health"
+          name: "Health Check"
+          expect:
+            - statusCode: 200
+      
+      - get:
+          url: "/api/fixtures"
+          name: "Fixtures"
+          expect:
+            - statusCode: 200
+      
+      - think: 1
+      
+      - get:
+          url: "/api/teams"
+          name: "Teams"
+          expect:
+            - statusCode: 200
+
+# Before/After hooks for test preparation
+before:
+  flow:
+    - log: "Starting Last Round Special Performance Test"
+    - log: "Base URL: {{ $processEnvironment.PERF_BASE_URL || 'http://localhost:3000' }}"
+    - get:
+        url: "/api/health"
+        expect:
+          - statusCode: 200
+
+after:
+  flow:
+    - log: "Performance test completed"
+    - log: "Check metrics for SLA compliance" 
