@@ -142,6 +142,8 @@ export const SummaryEmail: React.FC<SummaryEmailProps> = ({
   nextRoundPreview,
   weekHighlights,
   appUrl = baseUrl,
+  cupData,
+  isSeasonFinale,
 }) => {
   const positionChange = user.previousPosition
     ? user.previousPosition - user.currentPosition  // Fixed: lower position number is better
@@ -254,6 +256,79 @@ export const SummaryEmail: React.FC<SummaryEmailProps> = ({
               ))}
             </div>
           </Section>
+
+          {/* Last Round Special Cup Section - Only for Season Finales */}
+          {cupData?.isActive && isSeasonFinale && (
+            <Section style={section}>
+              <Heading style={h2}>🏆 Last Round Special Cup Championship</Heading>
+              
+              {/* Cup Status */}
+              <div style={cupHeaderCard}>
+                <Text style={cupHeaderText}>
+                  The Last Round Special cup has concluded for Season {cupData.seasonName}!
+                </Text>
+                {cupData.activatedAt && (
+                  <Text style={cupActivationText}>
+                    Activated: {new Date(cupData.activatedAt).toLocaleDateString('en-US', { 
+                      month: 'long', 
+                      day: 'numeric', 
+                      year: 'numeric' 
+                    })}
+                  </Text>
+                )}
+              </div>
+
+              {/* Cup Winners */}
+              {cupData.winners && cupData.winners.length > 0 && (
+                <div style={cupWinnersSection}>
+                  <Heading style={h3}>
+                    {cupData.winners.length === 1 ? '👑 Cup Champion' : '👑 Cup Champions (Tied)'}
+                  </Heading>
+                  <div style={cupWinnersGrid}>
+                    {cupData.winners.map((winner, _index) => (
+                      <div key={winner.user_id} style={cupWinnerCard}>
+                        <Text style={cupWinnerRank}>#{winner.rank}</Text>
+                        <Text style={cupWinnerName}>{winner.username}</Text>
+                        <Text style={cupWinnerPoints}>{winner.total_points} points</Text>
+                        {winner.is_tied && cupData.winners!.length > 1 && (
+                          <Text style={cupTiedBadge}>🤝 Tied</Text>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Cup Standings (Top 5) */}
+              {cupData.standings && cupData.standings.length > 0 && (
+                <div style={cupStandingsSection}>
+                  <Heading style={h3}>🏅 Final Cup Standings (Top 5)</Heading>
+                  <div style={cupStandingsContainer}>
+                    {cupData.standings.slice(0, 5).map((entry) => (
+                      <div key={entry.user_id} style={cupStandingRow}>
+                        <Text style={cupStandingRank}>#{entry.rank}</Text>
+                        <Text style={cupStandingName}>{entry.username}</Text>
+                        <Text style={cupStandingPoints}>{entry.total_points} pts</Text>
+                        <Text style={cupStandingRounds}>{entry.rounds_participated} rounds</Text>
+                      </div>
+                    ))}
+                  </div>
+                  {cupData.totalParticipants && cupData.totalParticipants > 5 && (
+                    <Text style={cupParticipantCount}>
+                      {cupData.totalParticipants} total participants in the cup
+                    </Text>
+                  )}
+                </div>
+              )}
+              
+              <div style={cupCongratulations}>
+                <Text style={cupCongratsText}>
+                  🎉 Congratulations to all cup participants! The Last Round Special showcased 
+                  the very best predictions when the stakes were highest.
+                </Text>
+              </div>
+            </Section>
+          )}
 
           {/* Week Highlights */}
           {weekHighlights && (
@@ -638,6 +713,149 @@ const footer = {
 
 const footerText = {
   lineHeight: '1.5',
+};
+
+// Cup-related styles
+const cupHeaderCard = {
+  backgroundColor: '#fef3c7',
+  border: '2px solid #f59e0b',
+  borderRadius: '8px',
+  padding: '16px',
+  marginBottom: '20px',
+};
+
+const cupHeaderText = {
+  fontSize: '16px',
+  fontWeight: '600',
+  color: '#92400e',
+  margin: '0 0 8px 0',
+  textAlign: 'center' as const,
+};
+
+const cupActivationText = {
+  fontSize: '14px',
+  color: '#78350f',
+  margin: '0',
+  textAlign: 'center' as const,
+};
+
+const cupWinnersSection = {
+  marginBottom: '24px',
+};
+
+const cupWinnersGrid = {
+  display: 'flex',
+  flexDirection: 'column' as const,
+  gap: '12px',
+};
+
+const cupWinnerCard = {
+  backgroundColor: '#fef3c7',
+  border: '2px solid #d97706',
+  borderRadius: '8px',
+  padding: '16px',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+};
+
+const cupWinnerRank = {
+  fontSize: '20px',
+  fontWeight: 'bold',
+  color: '#92400e',
+  minWidth: '40px',
+};
+
+const cupWinnerName = {
+  fontSize: '16px',
+  fontWeight: '600',
+  color: '#1f2937',
+  flex: '1',
+  textAlign: 'center' as const,
+};
+
+const cupWinnerPoints = {
+  fontSize: '16px',
+  fontWeight: 'bold',
+  color: '#059669',
+};
+
+const cupTiedBadge = {
+  fontSize: '12px',
+  backgroundColor: '#f3f4f6',
+  color: '#6b7280',
+  padding: '4px 8px',
+  borderRadius: '12px',
+  marginLeft: '8px',
+};
+
+const cupStandingsSection = {
+  marginBottom: '24px',
+};
+
+const cupStandingsContainer = {
+  border: '1px solid #e5e7eb',
+  borderRadius: '6px',
+  overflow: 'hidden',
+};
+
+const cupStandingRow = {
+  display: 'flex',
+  alignItems: 'center',
+  padding: '12px 16px',
+  borderBottom: '1px solid #f3f4f6',
+  gap: '12px',
+};
+
+const cupStandingRank = {
+  fontSize: '14px',
+  fontWeight: 'bold',
+  color: '#6b7280',
+  minWidth: '30px',
+};
+
+const cupStandingName = {
+  fontSize: '14px',
+  fontWeight: '500',
+  color: '#1f2937',
+  flex: '1',
+};
+
+const cupStandingPoints = {
+  fontSize: '14px',
+  fontWeight: 'bold',
+  color: '#059669',
+  minWidth: '50px',
+};
+
+const cupStandingRounds = {
+  fontSize: '12px',
+  color: '#6b7280',
+  minWidth: '60px',
+};
+
+const cupParticipantCount = {
+  fontSize: '12px',
+  color: '#6b7280',
+  textAlign: 'center' as const,
+  padding: '8px',
+  fontStyle: 'italic',
+};
+
+const cupCongratulations = {
+  backgroundColor: '#f0fdf4',
+  border: '1px solid #22c55e',
+  borderRadius: '6px',
+  padding: '16px',
+  marginTop: '16px',
+};
+
+const cupCongratsText = {
+  fontSize: '14px',
+  color: '#15803d',
+  lineHeight: '1.5',
+  textAlign: 'center' as const,
+  margin: '0',
 };
 
 export default SummaryEmail; 
