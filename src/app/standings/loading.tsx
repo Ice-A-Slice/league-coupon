@@ -18,9 +18,9 @@ export default function LoadingStandings() {
           {/* Skeleton player count */}
           <div className="h-6 w-20 bg-gray-200 rounded-full animate-pulse"></div>
         </div>
-        
-        <StandingsTableSkeleton />
       </div>
+
+      <StandingsTableSkeleton />
     </div>
   );
 } 
