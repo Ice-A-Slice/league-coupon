@@ -2,6 +2,11 @@
 require('@testing-library/jest-dom');
 require('whatwg-fetch'); // Use require for the polyfill
 
+// Polyfills for Next.js API routes in tests
+const { TextEncoder, TextDecoder } = require('util');
+global.TextEncoder = TextEncoder;
+global.TextDecoder = TextDecoder;
+
 // Mock environment variables required by Supabase client
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost:54321';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'mock-anon-key';
@@ -37,8 +42,10 @@ global.ResizeObserver = class ResizeObserver {
   }
 };
 
-// Mock for scrollIntoView
-Element.prototype.scrollIntoView = jest.fn();
+// Mock for scrollIntoView (only if Element is available in this environment)
+if (typeof Element !== 'undefined') {
+  Element.prototype.scrollIntoView = jest.fn();
+}
 
 // Mock Supabase client and auth methods
 jest.mock('@/utils/supabase/client', () => {
@@ -123,18 +130,22 @@ const localStorageMock = {
   clear: jest.fn(),
 };
 
-// Set up localStorage mock
-Object.defineProperty(window, 'localStorage', {
-  value: localStorageMock
-});
+// Set up localStorage mock (only if window is available in this environment)
+if (typeof window !== 'undefined') {
+  Object.defineProperty(window, 'localStorage', {
+    value: localStorageMock
+  });
+}
 
-// Clear localStorage before each test
+// Clear localStorage before each test (only if window is available)
 beforeEach(() => {
-  localStorageMock.clear.mockClear();
-  localStorageMock.getItem.mockClear();
-  localStorageMock.setItem.mockClear();
-  localStorageMock.removeItem.mockClear();
-  
-  // Reset localStorage to empty state
-  localStorageMock.getItem.mockReturnValue(null);
+  if (typeof window !== 'undefined') {
+    localStorageMock.clear.mockClear();
+    localStorageMock.getItem.mockClear();
+    localStorageMock.setItem.mockClear();
+    localStorageMock.removeItem.mockClear();
+    
+    // Reset localStorage to empty state
+    localStorageMock.getItem.mockReturnValue(null);
+  }
 });

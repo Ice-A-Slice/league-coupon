@@ -23,6 +23,11 @@ export function DesktopHeader() {
               Svar
             </span>
           </Link>
+          <Link href="/hall-of-fame" passHref>
+            <span className="text-sm font-medium text-muted-foreground hover:text-primary cursor-pointer">
+              Hall of Fame
+            </span>
+          </Link>
         </div>
       </nav>
     </header>
