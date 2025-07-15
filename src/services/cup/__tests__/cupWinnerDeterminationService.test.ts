@@ -31,7 +31,7 @@ describe.skip('CupWinnerDeterminationService', () => {
   });
 
   // Helper function to create mock query chain that resolves with data
-  const createMockQueryChain = (resolveValue: any) => {
+  const createMockQueryChain = (resolveValue: unknown) => {
     const mockChain = {
       select: jest.fn(),
       eq: jest.fn(),
