@@ -4,6 +4,7 @@ import { StandingsTableSkeleton } from '@/components/standings/StandingsTableSke
 export default function LoadingStandings() {
   return (
     <div className="container mx-auto px-4 py-8">
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
         <h1 className="text-2xl font-bold mb-4 sm:mb-0">Standings</h1>
         {/* Skeleton badge */}
@@ -19,6 +20,7 @@ export default function LoadingStandings() {
           <div className="h-6 w-20 bg-gray-200 rounded-full animate-pulse"></div>
         </div>
       </div>
+
 
       <StandingsTableSkeleton />
     </div>
