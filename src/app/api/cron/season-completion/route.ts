@@ -110,6 +110,65 @@ export async function GET(request: Request) {
       }
     }
 
+    // Send enhanced season finale summary emails if seasons were completed
+    let emailSendingResults = {
+      attempted: false,
+      success: false,
+      totalSent: 0,
+      errors: [] as string[]
+    };
+
+    if (detectionResult.completedSeasonIds.length > 0) {
+      logger.info(`SeasonCompletion: Sending enhanced summary emails for ${detectionResult.completedSeasonIds.length} completed seasons`);
+      
+      try {
+        // Call the summary email endpoint with season finale context
+        const emailResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/send-summary`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Cron-Secret': process.env.CRON_SECRET || '',
+          },
+          body: JSON.stringify({
+            test_mode: false,
+            // Don't specify round_id to trigger season finale detection automatically
+            // Our enhanced EmailDataService will detect completed seasons and include cup data
+          }),
+        });
+
+        if (emailResponse.ok) {
+          const emailResult = await emailResponse.json();
+          emailSendingResults = {
+            attempted: true,
+            success: emailResult.success,
+            totalSent: emailResult.email_stats?.total_sent || 0,
+            errors: emailResult.errors ? [emailResult.errors.slice(0, 3).join(', ')] : []
+          };
+          
+          logger.info('SeasonCompletion: Enhanced summary emails sent successfully', {
+            totalSent: emailSendingResults.totalSent,
+            operationId: emailResult.operation_id
+          });
+        } else {
+          const errorText = await emailResponse.text();
+          emailSendingResults.errors.push(`HTTP ${emailResponse.status}: ${errorText}`);
+          logger.error('SeasonCompletion: Failed to send enhanced summary emails', {
+            status: emailResponse.status,
+            error: errorText
+          });
+        }
+      } catch (emailError) {
+        const errorMessage = emailError instanceof Error ? emailError.message : String(emailError);
+        emailSendingResults.errors.push(errorMessage);
+        logger.error('SeasonCompletion: Enhanced summary email sending failed', {
+          error: errorMessage,
+          completedSeasonIds: detectionResult.completedSeasonIds
+        });
+      }
+
+      emailSendingResults.attempted = true;
+    }
+
     const endTime = Date.now();
     const duration = endTime - startTime;
 
@@ -121,7 +180,7 @@ export async function GET(request: Request) {
 
     const summary = {
       success: !hasAnyErrors || detectionResult.completedSeasonIds.length > 0,
-      message: `Season completion check completed. ${detectionResult.completedSeasonIds.length} seasons marked as complete. ${totalWinnersProcessed} winners determined.`,
+      message: `Season completion check completed. ${detectionResult.completedSeasonIds.length} seasons marked as complete. ${totalWinnersProcessed} winners determined.${emailSendingResults.attempted ? ` Enhanced summary emails: ${emailSendingResults.totalSent} sent.` : ''}`,
       duration_ms: duration,
       total_seasons_checked: totalProcessed,
       completed_seasons: detectionResult.completedSeasonIds.length,
@@ -131,6 +190,10 @@ export async function GET(request: Request) {
       winner_determination_processed: winnerDeterminationResults.length,
       total_winners_determined: totalWinnersProcessed,
       winner_determination_error_count: winnerDeterminationErrors.length,
+      enhanced_email_attempted: emailSendingResults.attempted,
+      enhanced_email_success: emailSendingResults.success,
+      enhanced_email_total_sent: emailSendingResults.totalSent,
+      enhanced_email_error_count: emailSendingResults.errors.length,
       timestamp: new Date().toISOString()
     };
 
@@ -187,6 +250,7 @@ export async function GET(request: Request) {
       ...summary,
       detailed_season_detection_errors: hasSeasonDetectionErrors ? detectionResult.errors.map(e => e.message) : undefined,
       detailed_winner_determination_errors: hasWinnerDeterminationErrors ? winnerDeterminationErrors : undefined,
+      detailed_enhanced_email_errors: emailSendingResults.errors.length > 0 ? emailSendingResults.errors : undefined,
       winner_determination_results: winnerDeterminationResults.length > 0 ? winnerDeterminationResults.map(r => ({
         seasonId: r.seasonId,
         winnersCount: r.winners.length,
