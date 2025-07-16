@@ -67,7 +67,6 @@
     "gradient-string": "^3.0.0",
     "helmet": "^8.1.0",
     "inquirer": "^12.5.0",
-    "jsonwebtoken": "^9.0.2",
     "lodash.debounce": "^4.0.8",
     "lru-cache": "^10.2.0",
     "lucide-react": "^0.488.0",

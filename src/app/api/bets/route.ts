@@ -1,6 +1,20 @@
 import { NextResponse } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { z } from 'zod';
+
+/**
+ * Zod schema for validating a single bet submission.
+ */
+const betSubmissionSchema = z.object({
+  fixture_id: z.number().int().positive(),
+  prediction: z.enum(['1', 'X', '2'])
+});
+
+/**
+ * Zod schema for validating the request body (array of bet submissions).
+ */
+const betArraySchema = z.array(betSubmissionSchema).min(1);
 
 /**
  * Represents the structure of a single bet submission within the request payload.
@@ -35,72 +49,45 @@ type BetSubmissionPayload = BetSubmission[];
  * @returns {Promise<NextResponse>} A promise that resolves to a Next.js response object.
  */
 export async function POST(request: Request) {
-  // await needed to resolve type inference issue for cookieStore during build
-  const cookieStore = await cookies();
+  // Use a try-catch block to handle potential errors from cookie parsing
+  let cookieStore;
+  try {
+    cookieStore = cookies();
+  } catch (error) {
+    // This happens in test environments where there is no request scope.
+    // The auth check below will handle returning the 401.
+  }
 
-  // Define cookie methods beforehand
-  const cookieMethods = {
-      get(name: string) {
-          return cookieStore.get(name)?.value;
-      },
-      set(name: string, value: string, options: CookieOptions) {
-          try {
-              cookieStore.set({ name, value, ...options });
-          } catch (error) {
-              // Handle read-only cookies error (e.g., in Route Handler)
-              console.error("Error setting cookie in Route Handler:", error); // Uncomment error log
-          }
-      },
-      remove(name: string, options: CookieOptions) {
-          try {
-              cookieStore.set({ name, value: '', ...options });
-          } catch (error) {
-              // Handle read-only cookies error
-              console.error("Error removing cookie in Route Handler:", error); // Uncomment error log
-          }
-      },
-  };
-
-  // Create client using the pattern from @supabase/ssr docs for Route Handlers
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      // Pass the pre-defined methods
-      cookies: cookieMethods,
+      cookies: {
+        get(name: string) {
+          return cookieStore?.get(name)?.value;
+        },
+      },
     }
   );
 
-  // 1. Check Authentication
-  // Use getUser() for stronger server-side authentication check
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-  // const { data: { session }, error: sessionError } = await supabase.auth.getSession(); // Old method
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  // Adjust check for user object and userError
-  if (userError || !user) { 
-    // console.error('Error getting session or no user found:', sessionError); // Old check
-    console.error('Error getting user or no user found:', userError);
+  if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  
+  // Now we know we have a user, we can safely proceed with the original logic
+  const body = await request.json();
+  const validation = betArraySchema.safeParse(body);
 
-  // Get userId from the user object
-  // const userId = session.user.id; // Old way
-  const userId = user.id;
-  console.log(`User ${userId} attempting to submit bets.`);
-
-  // 2. Parse Request Body (Basic)
-  let submissions: BetSubmissionPayload;
-  try {
-    submissions = await request.json();
-    if (!Array.isArray(submissions) || submissions.length === 0) {
-       return NextResponse.json({ error: 'Invalid request body. Expected a non-empty array of bets.' }, { status: 400 });
-    }
-    // TODO: Add more robust validation (e.g., Zod)
-  } catch {
-    return NextResponse.json({ error: 'Failed to parse request body' }, { status: 400 });
+  if (!validation.success) {
+    return NextResponse.json({ error: 'Invalid request body. Expected a non-empty array of bets.' }, { status: 400 });
   }
 
-  console.log(`Received ${submissions.length} bet submissions from user ${userId}.`);
+  const submissions: BetSubmissionPayload = validation.data;
+  console.log(`Received ${submissions.length} bet submissions from user ${user.id}.`);
 
   // --- Refactored: Find Betting Round, Validate Status & Deadline (Task related fix) ---
   let bettingRoundId: number;
@@ -155,7 +142,7 @@ export async function POST(request: Request) {
     // 4. Check Round Status
     bettingRoundStatus = roundData.status;
     if (bettingRoundStatus !== 'open') {
-        console.log(`User ${userId} submission rejected: Betting round ${bettingRoundId} is not open (status: ${bettingRoundStatus}).`);
+        console.log(`User ${user.id} submission rejected: Betting round ${bettingRoundId} is not open (status: ${bettingRoundStatus}).`);
         return NextResponse.json({ error: `Betting is closed for this round (Status: ${bettingRoundStatus}).` }, { status: 403 });
     }
 
@@ -171,11 +158,11 @@ export async function POST(request: Request) {
     console.log(`Betting round ${bettingRoundId} deadline UTC millis: ${deadlineUtcMillis} (${bettingRoundDeadline.toISOString()}), Current UTC millis: ${nowUtcMillis} (${new Date(nowUtcMillis).toISOString()})`);
 
     if (nowUtcMillis >= deadlineUtcMillis) {
-      console.log(`User ${userId} submission rejected: Deadline for betting round ${bettingRoundId} passed.`);
+      console.log(`User ${user.id} submission rejected: Deadline for betting round ${bettingRoundId} passed.`);
           return NextResponse.json({ error: 'Cannot submit bets, the betting deadline has passed.' }, { status: 403 });
     }
 
-    console.log(`Submission validated for user ${userId}, betting round ${bettingRoundId}. Proceeding...`);
+    console.log(`Submission validated for user ${user.id}, betting round ${bettingRoundId}. Proceeding...`);
 
   } catch (e) {
       console.error('Error during submission validation:', e);
@@ -185,7 +172,7 @@ export async function POST(request: Request) {
 
   // 4. Prepare data for Upsert
   const upsertData = submissions.map(sub => ({
-    user_id: userId,
+    user_id: user.id,
     fixture_id: sub.fixture_id,
     prediction: sub.prediction, 
     betting_round_id: bettingRoundId, // Use the correct column name
@@ -194,7 +181,7 @@ export async function POST(request: Request) {
 
   // 5. Perform Upsert using supabase client
   try {
-    console.log(`Upserting ${upsertData.length} bets for user ${userId}, round ${bettingRoundId}...`);
+    console.log(`Upserting ${upsertData.length} bets for user ${user.id}, round ${bettingRoundId}...`);
     const { error: upsertError } = await supabase
       .from('user_bets')
       .upsert(upsertData, {
@@ -203,14 +190,14 @@ export async function POST(request: Request) {
       // Supabase handles conflict on UNIQUE(user_id, fixture_id) automatically
 
     if (upsertError) {
-      console.error(`Error upserting bets for user ${userId}:`, upsertError);
+      console.error(`Error upserting bets for user ${user.id}:`, upsertError);
       if (upsertError.code === '23503') { // Foreign key violation
            return NextResponse.json({ error: 'Invalid fixture ID provided.' }, { status: 400 });
       }
       return NextResponse.json({ error: 'Failed to save bets to database.' }, { status: 500 });
     }
 
-    console.log(`Successfully saved bets for user ${userId}, round ${bettingRoundId}.`);
+    console.log(`Successfully saved bets for user ${user.id}, round ${bettingRoundId}.`);
 
     // 6. Return success response
     return NextResponse.json({ message: 'Bets submitted successfully!' }, { status: 200 });

@@ -1,185 +1,209 @@
-import { POST } from './route'; // Import the handler to test
-// The following imports are no longer needed directly as they are fully mocked by Jest
-// import { createServerClient } from '@supabase/ssr';
-// import { cookies } from 'next/headers';
-// import { NextResponse } from 'next/server';
+/**
+ * @jest-environment node
+ */
+import { POST } from './route';
+import {
+  connectToTestDb,
+  resetDatabase,
+  disconnectDb,
+  createTestProfiles,
+  seedTestData,
+} from '../../../../tests/utils/db';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { Database } from '@/types/supabase';
+import { NextRequest } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
 
-// --- Mocks ---
-
-// Mock next/headers
-const mockCookieStore = {
-  get: jest.fn(),
-  set: jest.fn(),
-  delete: jest.fn(),
-};
-jest.mock('next/headers', () => ({
-  cookies: jest.fn(() => mockCookieStore), // Return our mock store
-}));
-
-// Mock @supabase/ssr
-const mockSupabaseGetUser = jest.fn();
-const mockSupabaseUpsert = jest.fn();
-
-const mockInRoundFixtures = jest.fn();
-const mockSelectRoundFixtures = jest.fn(() => ({ in: mockInRoundFixtures }));
-
-const mockSingleRound = jest.fn();
-const mockEqRound = jest.fn(() => ({ single: mockSingleRound }));
-const mockSelectRound = jest.fn(() => ({ eq: mockEqRound }));
-
-const mockFrom = jest.fn();
-
-const mockAuth = {
-  getUser: mockSupabaseGetUser,
-};
-const mockSupabaseClient = {
-  auth: mockAuth,
-  from: mockFrom,
-};
+// Mock the createServerClient function to control authentication
 jest.mock('@supabase/ssr', () => ({
-  createServerClient: jest.fn(() => mockSupabaseClient),
+  createServerClient: jest.fn(),
 }));
 
-// Mock next/server
-const mockNextResponseJson = jest.fn();
-jest.mock('next/server', () => ({
-  NextResponse: {
-    json: jest.fn((body, init) => {
-      mockNextResponseJson(body, init); // Track calls
-      return { status: init?.status ?? 200, body }; 
-    }),
-  },
-}));
+const mockCreateServerClient = createServerClient as jest.MockedFunction<typeof createServerClient>;
 
-// --- Test Suite ---
 describe('POST /api/bets', () => {
-  
-  beforeEach(() => {
-    jest.clearAllMocks();
-    
-    mockFrom.mockImplementation((tableName: string) => {
-      if (tableName === 'betting_round_fixtures') {
-        return { select: mockSelectRoundFixtures }; 
-      } else if (tableName === 'betting_rounds') {
-        return { select: mockSelectRound };
-      } else if (tableName === 'user_bets') {
-        return { upsert: mockSupabaseUpsert };
-      }
-      console.warn(`Unmocked table called in test: ${tableName}`);
-      return { select: jest.fn(), upsert: jest.fn() };
-    });
+  let client: SupabaseClient<Database>;
+  let testProfiles: Array<{ id: string; full_name: string | null; }>;
+
+  // Helper function to create authenticated mock
+  function createAuthenticatedMock(userId: string) {
+    return {
+      auth: {
+        getUser: jest.fn().mockResolvedValue({
+          data: { user: { id: userId, email: 'test@example.com' } },
+          error: null,
+        }),
+      },
+      from: jest.fn((tableName) => {
+        return client.from(tableName);
+      }),
+    };
+  }
+
+  // Helper function to create unauthenticated mock
+  function createUnauthenticatedMock() {
+    return {
+      auth: {
+        getUser: jest.fn().mockResolvedValue({
+          data: { user: null },
+          error: null,
+        }),
+      },
+    };
+  }
+
+  beforeAll(async () => {
+    client = await connectToTestDb();
   });
 
-  // Test case 1: Successful submission
-  it('should return 200 OK on successful bet submission for an open round', async () => {
-    // Arrange
-    const mockUserId = 'test-user-123';
-    const mockBettingRoundId = 1;
-    const mockFixtureId1 = 673;
-    const mockFixtureId2 = 675;
-    const requestBody = [
-      { fixture_id: mockFixtureId1, prediction: '1' },
-      { fixture_id: mockFixtureId2, prediction: 'X' },
+  beforeEach(async () => {
+    await resetDatabase();
+    await seedTestData();
+    testProfiles = [
+      { id: 'user-1', full_name: 'John Doe' },
+      { id: 'user-2', full_name: 'Jane Smith' },
     ];
-    const submittedFixtureIds = [mockFixtureId1, mockFixtureId2];
-    const request = new Request('http://localhost/api/bets', {
-      method: 'POST',
-      body: JSON.stringify(requestBody),
-      headers: { 'Content-Type': 'application/json' },
-    });
-    const futureKickoff = new Date();
-    futureKickoff.setDate(futureKickoff.getDate() + 1); 
-
-    mockSupabaseGetUser.mockResolvedValue({ data: { user: { id: mockUserId } }, error: null });
-    mockInRoundFixtures.mockResolvedValue({ 
-        data: [ { betting_round_id: mockBettingRoundId }, { betting_round_id: mockBettingRoundId }], 
-        error: null 
-    });
-    mockSingleRound.mockResolvedValue({ 
-        data: { status: 'open', earliest_fixture_kickoff: futureKickoff.toISOString() }, 
-        error: null 
-    });
-    mockSupabaseUpsert.mockResolvedValue({ error: null });
-
-    // Act
-    await POST(request);
-
-    // Assert
-    expect(mockSupabaseGetUser).toHaveBeenCalledTimes(1);
-    expect(mockFrom).toHaveBeenCalledWith('betting_round_fixtures');
-    expect(mockInRoundFixtures).toHaveBeenCalledWith('fixture_id', submittedFixtureIds);
-    expect(mockFrom).toHaveBeenCalledWith('betting_rounds');
-    expect(mockEqRound).toHaveBeenCalledWith('id', mockBettingRoundId);
-    expect(mockFrom).toHaveBeenCalledWith('user_bets');
-    expect(mockSupabaseUpsert).toHaveBeenCalledTimes(1);
-    expect(mockNextResponseJson).toHaveBeenCalledWith({ message: 'Bets submitted successfully!' }, { status: 200 });
+    await createTestProfiles(testProfiles);
+    
+    // Reset mock before each test
+    mockCreateServerClient.mockReset();
   });
 
-  // Test case 2: Unauthorized access
+  afterAll(async () => {
+    await disconnectDb();
+  });
+
+  it('should return 200 OK on successful bet submission for an open round', async () => {
+    const userId = testProfiles[0].id;
+    const requestBody = [
+      { fixture_id: 1, prediction: '1' },
+      { fixture_id: 2, prediction: 'X' },
+    ];
+
+    const mockSupabaseClient = createAuthenticatedMock(userId);
+    mockCreateServerClient.mockReturnValue(mockSupabaseClient as any);
+
+    const request = new NextRequest('http://localhost/api/bets', {
+      method: 'POST',
+      body: JSON.stringify(requestBody),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const response = await POST(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.message).toBe('Bets submitted successfully!');
+
+    // Verify the bets were saved to the database
+    const { data: userBets, error } = await client
+      .from('user_bets')
+      .select('*')
+      .eq('user_id', userId);
+
+    expect(error).toBeNull();
+    expect(userBets).toHaveLength(2);
+  });
+  
   it('should return 401 Unauthorized if user is not authenticated', async () => {
-    // Arrange
-    const request = new Request('http://localhost/api/bets', {
+    const mockSupabaseClient = createUnauthenticatedMock();
+    mockCreateServerClient.mockReturnValue(mockSupabaseClient as any);
+
+    const request = new NextRequest('http://localhost/api/bets', {
       method: 'POST',
-      body: JSON.stringify([{ fixture_id: 1, prediction: '1' }]),
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+      },
     });
-    mockSupabaseGetUser.mockResolvedValue({ data: { user: null }, error: null });
 
-    // Act
-    await POST(request);
+    const response = await POST(request);
+    const body = await response.json();
 
-    // Assert
-    expect(mockSupabaseGetUser).toHaveBeenCalledTimes(1);
-    expect(mockFrom).not.toHaveBeenCalled();
-    expect(mockNextResponseJson).toHaveBeenCalledWith({ error: 'Unauthorized' }, { status: 401 });
+    expect(response.status).toBe(401);
+    expect(body.error).toBe('Unauthorized');
   });
 
-  // Test case 3: Invalid request body
   it('should return 400 Bad Request if request body is not a valid array', async () => {
-      const request = new Request('http://localhost/api/bets', {
-        method: 'POST',
-        body: JSON.stringify({}),
-        headers: { 'Content-Type': 'application/json' },
-      });
-      mockSupabaseGetUser.mockResolvedValue({ data: { user: { id: 'test-user' } }, error: null });
-      await POST(request);
-      expect(mockNextResponseJson).toHaveBeenCalledWith({ error: 'Invalid request body. Expected a non-empty array of bets.' }, { status: 400 });
-  });
+    const userId = testProfiles[0].id;
 
-  // Test case: Kickoff time is in the past
-  it('should return 403 Forbidden if kickoff time is in the past', async () => {
-    const mockUserId = 'test-user-123';
-    const mockBettingRoundId = 3;
-    const requestBody = [{ fixture_id: 710, prediction: 'X' }];
-    const request = new Request('http://localhost/api/bets', {
+    const mockSupabaseClient = createAuthenticatedMock(userId);
+    mockCreateServerClient.mockReturnValue(mockSupabaseClient as any);
+
+    const request = new NextRequest('http://localhost/api/bets', {
       method: 'POST',
-      body: JSON.stringify(requestBody),
-      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ "not": "an-array" }),
+      headers: {
+        'Content-Type': 'application/json',
+      },
     });
+
+    const response = await POST(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe('Invalid request body. Expected a non-empty array of bets.');
+  });
+  
+  it('should return 403 Forbidden if kickoff time is in the past', async () => {
+    const userId = testProfiles[0].id;
+    const fixtureIdInPast = 1;
+
+    // Manually set a fixture's kickoff to the past and update the betting round
     const pastKickoff = new Date();
     pastKickoff.setDate(pastKickoff.getDate() - 1);
-    mockSupabaseGetUser.mockResolvedValue({ data: { user: { id: mockUserId } }, error: null });
-    mockInRoundFixtures.mockResolvedValue({ data: [{ betting_round_id: mockBettingRoundId }], error: null });
-    mockSingleRound.mockResolvedValue({ data: { status: 'open', earliest_fixture_kickoff: pastKickoff.toISOString() }, error: null });
+    await client
+      .from('fixtures')
+      .update({ kickoff_time: pastKickoff.toISOString() })
+      .eq('id', fixtureIdInPast);
 
-    await POST(request);
+    // Also update the betting round's earliest_fixture_kickoff to be in the past
+    await client
+      .from('betting_rounds')
+      .update({ earliest_fixture_kickoff: pastKickoff.toISOString() })
+      .eq('id', 1);
 
-    expect(mockNextResponseJson).toHaveBeenCalledWith({ error: 'Cannot submit bets, the betting deadline has passed.' }, { status: 403 });
+    const requestBody = [{ fixture_id: fixtureIdInPast, prediction: '1' }];
+
+    const mockSupabaseClient = createAuthenticatedMock(userId);
+    mockCreateServerClient.mockReturnValue(mockSupabaseClient as any);
+
+    const request = new NextRequest('http://localhost/api/bets', {
+      method: 'POST',
+      body: JSON.stringify(requestBody),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const response = await POST(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body.error).toBe('Cannot submit bets, the betting deadline has passed.');
   });
 
-  // Test case: Fixture not in a betting round
   it('should return 400 Bad Request if any submitted fixture is not in a betting round', async () => {
-      const mockUserId = 'test-user-123';
-      const invalidFixtureId = 9999;
-      const requestBody = [{ fixture_id: invalidFixtureId, prediction: '1' }];
-      const request = new Request('http://localhost/api/bets', {
-        method: 'POST',
-        body: JSON.stringify(requestBody),
-        headers: { 'Content-Type': 'application/json' },
-      });
-      mockSupabaseGetUser.mockResolvedValue({ data: { user: { id: mockUserId } }, error: null });
-      mockInRoundFixtures.mockResolvedValue({ data: [], error: null }); 
-      await POST(request);
-      expect(mockNextResponseJson).toHaveBeenCalledWith({ error: 'Invalid submission: Fixtures do not belong to a betting round.' }, { status: 400 });
+    const userId = testProfiles[0].id;
+    const invalidFixtureId = 9999; // An ID that doesn't exist in our seeded data
+    const requestBody = [{ fixture_id: invalidFixtureId, prediction: '1' }];
+
+    const mockSupabaseClient = createAuthenticatedMock(userId);
+    mockCreateServerClient.mockReturnValue(mockSupabaseClient as any);
+
+    const request = new NextRequest('http://localhost/api/bets', {
+      method: 'POST',
+      body: JSON.stringify(requestBody),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const response = await POST(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe('Invalid submission: Fixtures do not belong to a betting round.');
   });
 }); 
