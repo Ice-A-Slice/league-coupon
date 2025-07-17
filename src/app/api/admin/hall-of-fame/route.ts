@@ -295,6 +295,7 @@ export async function POST(request: NextRequest) {
       total_points, 
       game_points, 
       dynamic_points, 
+      competition_type = 'league',
       override_existing = false 
     } = body;
 
@@ -373,6 +374,7 @@ export async function POST(request: NextRequest) {
       total_points,
       game_points: game_points || 0,
       dynamic_points: dynamic_points || 0,
+      competition_type,
       created_at: new Date().toISOString()
     };
 
