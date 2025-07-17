@@ -20,7 +20,7 @@ const mockLogger = logger as jest.Mocked<typeof logger>;
 const originalEnv = process.env;
 
 // TODO: Re-enable once dev database is set up - these tests need real DB integration
-describe.skip('/api/admin/hall-of-fame - Admin Hall of Fame Management API', () => {
+describe('/api/admin/hall-of-fame - Admin Hall of Fame Management API', () => {
   const mockSupabase = {
     from: jest.fn(),
   };

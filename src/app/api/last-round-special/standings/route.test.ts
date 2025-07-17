@@ -19,7 +19,7 @@ const mockSupabaseClient = {
 };
 
 // TODO: Re-enable once NextRequest mocking is properly configured
-describe.skip('/api/last-round-special/standings - Cup Standings API', () => {
+describe('/api/last-round-special/standings - Cup Standings API', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetSupabaseServiceRoleClient.mockReturnValue(mockSupabaseClient as any); // eslint-disable-line @typescript-eslint/no-explicit-any

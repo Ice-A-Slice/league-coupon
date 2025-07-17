@@ -54,51 +54,160 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // TEMPORARY: Return static data for now to get API working
-    // TODO: Replace with real database queries once dev database is available
-    const mockData = [
-      {
-        id: 1,
-        season_id: 1,
-        user_id: 'user-1',
-        league_id: 39,
-        total_points: 150,
-        game_points: 120,
-        dynamic_points: 30,
-        created_at: '2023-01-01T00:00:00Z',
-        season: {
-          id: 1,
-          name: 'Premier League 2022/23',
-          api_season_year: 2022,
-          start_date: '2022-08-01',
-          end_date: '2023-05-31',
-          completed_at: '2023-05-31T23:59:59Z',
-          winner_determined_at: '2023-06-01T00:00:00Z',
-          competition: {
-            id: 39,
-            name: 'Premier League',
-            country_name: 'England',
-            logo_url: 'https://example.com/logo.png'
-          }
-        },
-        user: {
-          id: 'user-1',
-          full_name: 'John Doe',
-          avatar_url: null,
-          updated_at: '2023-01-01T00:00:00Z'
-        }
+    // Get URL parameters for filtering and pagination
+    const { searchParams } = new URL(request.url);
+    const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 200);
+    const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0);
+    const competitionId = searchParams.get('competition_id');
+    const competitionType = searchParams.get('competition_type') || 'all';
+    const seasonId = searchParams.get('season_id');
+    const userId = searchParams.get('user_id');
+    const sort = searchParams.get('sort') || 'newest';
+
+    // Create Supabase client
+    const supabase = getSupabaseServiceRoleClient();
+
+    // Build the query with proper joins
+    let query = supabase
+      .from('season_winners')
+      .select(`
+        id,
+        season_id,
+        user_id,
+        league_id,
+        total_points,
+        game_points,
+        dynamic_points,
+        created_at,
+        competition_type,
+        season:seasons!inner(
+          id,
+          name,
+          api_season_year,
+          start_date,
+          end_date,
+          completed_at,
+          winner_determined_at,
+          competition:competitions!inner(
+            id,
+            name,
+            country_name,
+            logo_url
+          )
+        ),
+        user:profiles!inner(
+          id,
+          full_name,
+          avatar_url,
+          updated_at
+        )
+      `);
+
+    // Apply filters
+    if (competitionType !== 'all') {
+      if (competitionType === 'league') {
+        query = query.or('competition_type.eq.league,competition_type.is.null');
+      } else {
+        query = query.eq('competition_type', competitionType);
       }
-    ];
+    }
+
+    if (competitionId) {
+      query = query.eq('league_id', parseInt(competitionId));
+    }
+
+    if (seasonId) {
+      query = query.eq('season_id', parseInt(seasonId));
+    }
+
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    // Apply sorting
+    switch (sort) {
+      case 'oldest':
+        query = query.order('created_at', { ascending: true });
+        break;
+      case 'points_desc':
+        query = query.order('total_points', { ascending: false });
+        break;
+      case 'points_asc':
+        query = query.order('total_points', { ascending: true });
+        break;
+      case 'newest':
+      default:
+        query = query.order('created_at', { ascending: false });
+        break;
+    }
+
+    // Get total count for pagination
+    let countQuery = supabase
+      .from('season_winners')
+      .select('*', { count: 'exact', head: true });
+
+    // Apply same filters to count query
+    if (competitionType !== 'all') {
+      if (competitionType === 'league') {
+        countQuery = countQuery.or('competition_type.eq.league,competition_type.is.null');
+      } else {
+        countQuery = countQuery.eq('competition_type', competitionType);
+      }
+    }
+
+    if (competitionId) {
+      countQuery = countQuery.eq('league_id', parseInt(competitionId));
+    }
+
+    if (seasonId) {
+      countQuery = countQuery.eq('season_id', parseInt(seasonId));
+    }
+
+    if (userId) {
+      countQuery = countQuery.eq('user_id', userId);
+    }
+
+    // Execute queries
+    const [{ data: hallOfFameData, error: dataError }, { count, error: countError }] = await Promise.all([
+      query.range(offset, offset + limit - 1),
+      countQuery
+    ]);
+
+    if (dataError) {
+      logger.error('Admin HallOfFame API: Database error fetching data', {
+        requestId,
+        error: dataError.message,
+        code: dataError.code
+      });
+      return NextResponse.json(
+        { error: 'Database error', details: dataError.message },
+        { status: 500 }
+      );
+    }
+
+    if (countError) {
+      logger.error('Admin HallOfFame API: Database error fetching count', {
+        requestId,
+        error: countError.message,
+        code: countError.code
+      });
+      return NextResponse.json(
+        { error: 'Database error', details: countError.message },
+        { status: 500 }
+      );
+    }
+
+    const total = count || 0;
+    const resultCount = hallOfFameData?.length || 0;
 
     const processingTime = Date.now() - startTime;
-    const count = mockData.length;
-    const total = mockData.length;
-    const _limit = 20;
-    const _offset = 0;
+    const totalPages = Math.ceil(total / limit);
+    const currentPage = Math.floor(offset / limit) + 1;
+    const hasMore = offset + resultCount < total;
 
     logger.info('Admin HallOfFame API: Successfully retrieved data', {
       requestId,
-      resultCount: count,
+      resultCount,
       totalCount: total,
       processingTime
     });
@@ -107,18 +216,17 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: mockData,
+      data: hallOfFameData || [],
       pagination: {
-        total_items: mockData.length,
-        total_pages: 1,
-        current_page: 1,
-        page_size: mockData.length,
-        has_more: false
+        offset,
+        limit,
+        total,
+        count: resultCount
       },
       metadata: {
         timestamp,
         processing_time_ms: processingTime,
-        environment: 'development'
+        environment: process.env.NODE_ENV || 'development'
       }
     }, {
       headers: {
