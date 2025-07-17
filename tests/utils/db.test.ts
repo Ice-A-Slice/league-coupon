@@ -102,7 +102,7 @@ describe('Database Test Utilities', () => {
       // Check fixtures
       const { data: fixtures } = await client.from('fixtures').select('*');
       expect(fixtures?.length).toBe(3);
-      expect(fixtures?.[0].status_short).toBe('FT');
+      expect(fixtures?.[0].status_short).toBe('NS'); // Not Started, as seeded
     });
   });
 

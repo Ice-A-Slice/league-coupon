@@ -96,51 +96,75 @@ export async function truncateAllTables(): Promise<void> {
 
     console.log('[TEST_DB] Starting database truncation...');
 
-    // List of tables to truncate in dependency order (children first, then parents)
-    const tablesToTruncate = [
-      'user_bets',
-      'user_season_answers',
-      'user_round_dynamic_points',
-      'user_last_round_special_points',
-      'season_winners',
-      'betting_round_fixtures',
-      'betting_rounds',
-      'fixtures',
-      'rounds',
-      'seasons',
-      'teams',
-      'competitions',
-      'profiles',
-      'players',
-      'player_statistics'
-    ];
+    // IMPROVED: Multiple passes to handle foreign key dependencies properly
+    const maxAttempts = 3;
+    
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      console.log(`[TEST_DB] Cleanup attempt ${attempt}/${maxAttempts}...`);
+      
+      // List of tables to truncate in dependency order (children first, then parents)
+      const tablesToTruncate = [
+        'user_bets',
+        'user_season_answers', 
+        'user_round_dynamic_points',
+        'user_last_round_special_points',
+        'season_winners',
+        'betting_round_fixtures',
+        'betting_rounds',
+        'fixtures',
+        'rounds',
+        'seasons',
+        'teams',
+        'competitions',
+        'profiles',
+        'players',
+        'player_statistics'
+      ];
 
-    // Truncate each table using DELETE with different strategies based on table
-    for (const table of tablesToTruncate) {
-      try {
-        let deleteQuery;
-        
-        // Use different delete strategies based on table structure
-        if (['profiles', 'user_bets', 'user_season_answers'].includes(table)) {
-          // For UUID primary keys, use a condition that matches all
-          deleteQuery = client.from(table as any).delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        } else if (table === 'betting_round_fixtures') {
-          // Junction table without id column - delete by betting_round_id
-          deleteQuery = client.from(table as any).delete().gte('betting_round_id', 0);
-        } else {
-          // For integer primary keys, use a condition that matches all
-          deleteQuery = client.from(table as any).delete().gte('id', 0);
+      let allTablesEmpty = true;
+      
+      for (const table of tablesToTruncate) {
+        try {
+          // Use unconditional DELETE to remove ALL records regardless of constraints
+          let result;
+          
+          if (['profiles', 'user_bets', 'user_season_answers', 'user_round_dynamic_points', 'user_last_round_special_points'].includes(table)) {
+            // For UUID primary keys - delete everything
+            result = await client.from(table as any).delete().not('id', 'is', null);
+          } else if (table === 'betting_round_fixtures') {
+            // Junction table - delete everything  
+            result = await client.from(table as any).delete().not('betting_round_id', 'is', null);
+          } else {
+            // For integer primary keys - delete everything
+            result = await client.from(table as any).delete().not('id', 'is', null);
+          }
+          
+          if (result.error) {
+            console.warn(`[TEST_DB] Warning: Could not clean ${table}: ${result.error.message}`);
+            allTablesEmpty = false;
+          } else {
+            console.log(`[TEST_DB] Cleaned table: ${table} (deleted ${result.count || 'unknown'} records)`);
+          }
+          
+          // Verify table is actually empty
+          const { data: remainingData, error: checkError } = await client.from(table as any).select('*').limit(1);
+          if (!checkError && remainingData && remainingData.length > 0) {
+            console.warn(`[TEST_DB] WARNING: Table ${table} still contains ${remainingData.length} record(s) after cleanup`);
+            allTablesEmpty = false;
+          }
+          
+        } catch (tableError) {
+          console.warn(`[TEST_DB] Error cleaning ${table}:`, tableError);
+          allTablesEmpty = false;
         }
-        
-        const { error } = await deleteQuery;
-        
-        if (error) {
-          console.warn(`[TEST_DB] Warning: Could not truncate ${table}: ${error.message}`);
-        } else {
-          console.log(`[TEST_DB] Truncated table: ${table}`);
-        }
-      } catch (tableError) {
-        console.warn(`[TEST_DB] Warning: Could not truncate ${table}:`, tableError);
+      }
+      
+      // If all tables are empty, we're done
+      if (allTablesEmpty) {
+        console.log(`[TEST_DB] All tables successfully emptied on attempt ${attempt}`);
+        break;
+      } else if (attempt === maxAttempts) {
+        console.warn(`[TEST_DB] Some tables may still contain data after ${maxAttempts} attempts`);
       }
     }
 
