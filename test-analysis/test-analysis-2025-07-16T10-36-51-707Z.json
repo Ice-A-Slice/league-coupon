@@ -1,0 +1,827 @@
+{
+  "summary": {
+    "total_tests": 937,
+    "failing_tests": 26,
+    "skipped_tests": 33,
+    "passing_tests": 877,
+    "success_rate": "93.60%",
+    "generation_time": "2025-07-16T10:36:33.754Z"
+  },
+  "by_type": {
+    "integration": {
+      "failing": 21,
+      "skipped": 33,
+      "passing": 419
+    },
+    "unit": {
+      "failing": 5,
+      "skipped": 0,
+      "passing": 458
+    }
+  },
+  "by_component": {
+    "api-hall-of-fame-stats-route": {
+      "failing": 1,
+      "skipped": 0,
+      "passing": 0
+    },
+    "api-hall-of-fame-route": {
+      "failing": 1,
+      "skipped": 0,
+      "passing": 0
+    },
+    "api-bets-route": {
+      "failing": 5,
+      "skipped": 0,
+      "passing": 0
+    },
+    "db": {
+      "failing": 5,
+      "skipped": 0,
+      "passing": 4
+    },
+    "winnerDeterminationService": {
+      "failing": 7,
+      "skipped": 0,
+      "passing": 1
+    },
+    "cup-__tests__-cupWinnerDeterminationService": {
+      "failing": 7,
+      "skipped": 0,
+      "passing": 16
+    },
+    "api-admin-hall-of-fame-route": {
+      "failing": 0,
+      "skipped": 22,
+      "passing": 0
+    },
+    "api-last-round-special-standings-route": {
+      "failing": 0,
+      "skipped": 11,
+      "passing": 0
+    },
+    "standingsService": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 15
+    },
+    "ui-__tests__-combobox-accessibilityx": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 8
+    },
+    "Questionnaire-__tests__-Questionnairex": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 16
+    },
+    "emails-__tests__-SummaryEmailx": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 29
+    },
+    "storyGenerationService": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 17
+    },
+    "ui-__tests__-combobox-responsivex": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 6
+    },
+    "api-players-route": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 9
+    },
+    "api-standings-route": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 11
+    },
+    "BettingCoupon-__tests__-BettingCouponx": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 7
+    },
+    "BettingCoupon-__tests__-BettingCouponRefx": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 3
+    },
+    "api-cron-season-completion-route": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 12
+    },
+    "useQuestionnaireData": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 5
+    },
+    "useFixtures": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 6
+    },
+    "emailDataService": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 19
+    },
+    "sync-__tests__-syncFixtures": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 4
+    },
+    "emails-__tests__-ReminderEmailx": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 45
+    },
+    "cup-__tests__-cupActivationStatusChecker": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 18
+    },
+    "useAuth": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 6
+    },
+    "emailScheduler": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 24
+    },
+    "cup-__tests__-activationConditionCalculator": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 16
+    },
+    "api-hall-of-fame-season-[id]-route": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 15
+    },
+    "api-cron-winner-determination-route": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 15
+    },
+    "cup-__tests__-idempotentActivationService": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 20
+    },
+    "cup-__tests__-cupActivationDetectionService": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 18
+    },
+    "submissionService": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 3
+    },
+    "bettingCouponSchema": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 9
+    },
+    "api-season-answers-route": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 9
+    },
+    "scoring": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 13
+    },
+    "queries": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 9
+    },
+    "dynamicPointsCalculator-integration": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 8
+    },
+    "cup-__tests__-cupActivationLogger": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 24
+    },
+    "schedule": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 26
+    },
+    "matchAnalysisService": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 14
+    },
+    "football-api-__tests__-client": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 11
+    },
+    "dynamicPointsCalculator-types": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 25
+    },
+    "api-cron-cup-activation-route": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 13
+    },
+    "promptTemplateService": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 8
+    },
+    "api-teams-route": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 9
+    },
+    "leagueDataService-topScorers": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 20
+    },
+    "combobox-state": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 13
+    },
+    "leagueDataService-goalDifference": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 21
+    },
+    "cup-__tests__-fixtureDataService": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 7
+    },
+    "cupScoringIntegration": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 1
+    },
+    "dynamicPointsCalculator-normalization": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 36
+    },
+    "rounds": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 5
+    },
+    "roundManagementService": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 5
+    },
+    "userDataAggregationService": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 12
+    },
+    "useLocalStorage": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 13
+    },
+    "api-fixtures-route": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 6
+    },
+    "alerts": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 20
+    },
+    "userPerformanceAnalysisService": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 18
+    },
+    "dynamicPointsCalculator-logging": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 13
+    },
+    "roundCompletionDetectorService": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 7
+    },
+    "questionnaireSchema": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 5
+    },
+    "dynamicPointsCalculator-comparison": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 24
+    },
+    "submissionHelpers": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 12
+    },
+    "openai": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 15
+    },
+    "seasonCompletionDetectorService": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 11
+    },
+    "cup-__tests__-cupScoringService": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 4
+    },
+    "resend": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 21
+    },
+    "seasons": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 5
+    },
+    "api-hall-of-fame-season-[id]-complete-route": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 11
+    },
+    "ai": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 20
+    },
+    "utils": {
+      "failing": 0,
+      "skipped": 0,
+      "passing": 6
+    }
+  },
+  "failing_tests": [
+    {
+      "file": "/src/app/api/hall-of-fame/stats/route.test.ts",
+      "test": "should return aggregated stats with default parameters",
+      "component": "api-hall-of-fame-stats-route",
+      "type": "integration",
+      "error": "Error: Failed to seed test data: Failed to seed betting round fixtures: insert or update on table \"betting_round_fixtures\" violates foreign key constr...",
+      "full_error": "Error: Failed to seed test data: Failed to seed betting round fixtures: insert or update on table \"betting_round_fixtures\" violates foreign key constraint \"betting_round_fixtures_betting_round_id_fkey\"\n    at seedTestData (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:415:11)\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at /Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:646:9"
+    },
+    {
+      "file": "/src/app/api/hall-of-fame/route.test.ts",
+      "test": "should return Hall of Fame data with default parameters",
+      "component": "api-hall-of-fame-route",
+      "type": "integration",
+      "error": "Error: Failed to create test profiles: Failed to create test profiles: insert or update on table \"profiles\" violates foreign key constraint \"profiles_...",
+      "full_error": "Error: Failed to create test profiles: Failed to create test profiles: insert or update on table \"profiles\" violates foreign key constraint \"profiles_id_fkey\"\n    at createTestProfiles (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:604:11)\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at Object.<anonymous> (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/src/app/api/hall-of-fame/route.test.ts:25:5)"
+    },
+    {
+      "file": "/src/app/api/bets/route.test.ts",
+      "test": "should return 200 OK on successful bet submission for an open round",
+      "component": "api-bets-route",
+      "type": "integration",
+      "error": "Error: Failed to create test profiles: Failed to create test profiles: insert or update on table \"profiles\" violates foreign key constraint \"profiles_...",
+      "full_error": "Error: Failed to create test profiles: Failed to create test profiles: insert or update on table \"profiles\" violates foreign key constraint \"profiles_id_fkey\"\n    at createTestProfiles (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:604:11)\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at Object.<anonymous> (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/src/app/api/bets/route.test.ts:68:5)"
+    },
+    {
+      "file": "/src/app/api/bets/route.test.ts",
+      "test": "should return 401 Unauthorized if user is not authenticated",
+      "component": "api-bets-route",
+      "type": "integration",
+      "error": "Error: Failed to create test profiles: Failed to create test profiles: insert or update on table \"profiles\" violates foreign key constraint \"profiles_...",
+      "full_error": "Error: Failed to create test profiles: Failed to create test profiles: insert or update on table \"profiles\" violates foreign key constraint \"profiles_id_fkey\"\n    at createTestProfiles (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:604:11)\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at Object.<anonymous> (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/src/app/api/bets/route.test.ts:68:5)"
+    },
+    {
+      "file": "/src/app/api/bets/route.test.ts",
+      "test": "should return 400 Bad Request if request body is not a valid array",
+      "component": "api-bets-route",
+      "type": "integration",
+      "error": "Error: Failed to seed test data: Failed to seed betting round fixtures: insert or update on table \"betting_round_fixtures\" violates foreign key constr...",
+      "full_error": "Error: Failed to seed test data: Failed to seed betting round fixtures: insert or update on table \"betting_round_fixtures\" violates foreign key constraint \"betting_round_fixtures_fixture_id_fkey\"\n    at seedTestData (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:415:11)\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at Object.<anonymous> (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/src/app/api/bets/route.test.ts:63:5)"
+    },
+    {
+      "file": "/src/app/api/bets/route.test.ts",
+      "test": "should return 403 Forbidden if kickoff time is in the past",
+      "component": "api-bets-route",
+      "type": "integration",
+      "error": "Error: Failed to seed test data: Failed to seed betting round fixtures: insert or update on table \"betting_round_fixtures\" violates foreign key constr...",
+      "full_error": "Error: Failed to seed test data: Failed to seed betting round fixtures: insert or update on table \"betting_round_fixtures\" violates foreign key constraint \"betting_round_fixtures_fixture_id_fkey\"\n    at seedTestData (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:415:11)\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at /Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:646:9"
+    },
+    {
+      "file": "/src/app/api/bets/route.test.ts",
+      "test": "should return 400 Bad Request if any submitted fixture is not in a betting round",
+      "component": "api-bets-route",
+      "type": "integration",
+      "error": "Error: Failed to seed test data: Failed to seed betting round fixtures: insert or update on table \"betting_round_fixtures\" violates foreign key constr...",
+      "full_error": "Error: Failed to seed test data: Failed to seed betting round fixtures: insert or update on table \"betting_round_fixtures\" violates foreign key constraint \"betting_round_fixtures_betting_round_id_fkey\"\n    at seedTestData (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:415:11)\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at Object.<anonymous> (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/src/app/api/bets/route.test.ts:63:5)"
+    },
+    {
+      "file": "/tests/utils/db.test.ts",
+      "test": "should result in empty tables after truncation",
+      "component": "db",
+      "type": "unit",
+      "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m...",
+      "full_error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at Object.toBe (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.test.ts:70:36)"
+    },
+    {
+      "file": "/tests/utils/db.test.ts",
+      "test": "should seed test data successfully",
+      "component": "db",
+      "type": "unit",
+      "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mresolves\u001b[2m.\u001b[22mnot\u001b[2m.\u001b[22mtoThrow\u001b[2m()\u001b[22m...",
+      "full_error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mresolves\u001b[2m.\u001b[22mnot\u001b[2m.\u001b[22mtoThrow\u001b[2m()\u001b[22m\n\nReceived promise rejected instead of resolved\nRejected to value: \u001b[31m[Error: Failed to seed test data: Failed to seed fixtures: insert or update on table \"fixtures\" violates foreign key constraint \"fixtures_away_team_id_fkey\"]\u001b[39m\n    at expect (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/expect/build/index.js:113:15)\n    at Object.expect (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.test.ts:83:13)\n    at Promise.then.completed (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-circus/build/utils.js:298:28)\n    at new Promise (<anonymous>)\n    at callAsyncCircusFn (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-circus/build/utils.js:231:10)\n    at _callCircusTest (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-circus/build/run.js:316:40)\n    at _runTest (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-circus/build/run.js:252:3)\n    at _runTestsForDescribeBlock (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-circus/build/run.js:126:9)\n    at _runTestsForDescribeBlock (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-circus/build/run.js:121:9)\n    at _runTestsForDescribeBlock (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-circus/build/run.js:121:9)\n    at run (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-circus/build/run.js:71:3)\n    at runAndTransformResultsToJestFormat (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)\n    at jestAdapter (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)\n    at runTestInternal (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-runner/build/runTest.js:367:16)\n    at runTest (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-runner/build/runTest.js:444:34)\n    at Object.worker (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-runner/build/testWorker.js:106:12)"
+    },
+    {
+      "file": "/tests/utils/db.test.ts",
+      "test": "should create expected test data",
+      "component": "db",
+      "type": "unit",
+      "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m...",
+      "full_error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m\"FT\"\u001b[39m\nReceived: \u001b[31m\"NS\"\u001b[39m\n    at Object.toBe (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.test.ts:105:42)"
+    },
+    {
+      "file": "/tests/utils/db.test.ts",
+      "test": "should reset database with seeding by default",
+      "component": "db",
+      "type": "unit",
+      "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mresolves\u001b[2m.\u001b[22mnot\u001b[2m.\u001b[22mtoThrow\u001b[2m()\u001b[22m...",
+      "full_error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mresolves\u001b[2m.\u001b[22mnot\u001b[2m.\u001b[22mtoThrow\u001b[2m()\u001b[22m\n\nReceived promise rejected instead of resolved\nRejected to value: \u001b[31m[Error: Failed to seed test data: Failed to seed betting round fixtures: insert or update on table \"betting_round_fixtures\" violates foreign key constraint \"betting_round_fixtures_fixture_id_fkey\"]\u001b[39m\n    at expect (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/expect/build/index.js:113:15)\n    at Object.expect (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.test.ts:115:13)\n    at Promise.then.completed (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-circus/build/utils.js:298:28)\n    at new Promise (<anonymous>)\n    at callAsyncCircusFn (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-circus/build/utils.js:231:10)\n    at _callCircusTest (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-circus/build/run.js:316:40)\n    at _runTest (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-circus/build/run.js:252:3)\n    at _runTestsForDescribeBlock (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-circus/build/run.js:126:9)\n    at _runTestsForDescribeBlock (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-circus/build/run.js:121:9)\n    at _runTestsForDescribeBlock (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-circus/build/run.js:121:9)\n    at run (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-circus/build/run.js:71:3)\n    at runAndTransformResultsToJestFormat (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)\n    at jestAdapter (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)\n    at runTestInternal (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-runner/build/runTest.js:367:16)\n    at runTest (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-runner/build/runTest.js:444:34)\n    at Object.worker (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/node_modules/jest-runner/build/testWorker.js:106:12)"
+    },
+    {
+      "file": "/tests/utils/db.test.ts",
+      "test": "should reset database without seeding when seed=false",
+      "component": "db",
+      "type": "unit",
+      "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m...",
+      "full_error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at Object.toBe (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.test.ts:130:36)"
+    },
+    {
+      "file": "/src/services/winnerDeterminationService.test.ts",
+      "test": "should return existing winners if already determined integration",
+      "component": "winnerDeterminationService",
+      "type": "integration",
+      "error": "Error: Failed to seed test data: Failed to seed fixtures: insert or update on table \"fixtures\" violates foreign key constraint \"fixtures_round_id_fkey...",
+      "full_error": "Error: Failed to seed test data: Failed to seed fixtures: insert or update on table \"fixtures\" violates foreign key constraint \"fixtures_round_id_fkey\"\n    at seedTestData (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:415:11)\n    at /Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:646:9"
+    },
+    {
+      "file": "/src/services/winnerDeterminationService.test.ts",
+      "test": "should determine single winner successfully integration",
+      "component": "winnerDeterminationService",
+      "type": "integration",
+      "error": "Error: Failed to create test profiles: Failed to create test profiles: insert or update on table \"profiles\" violates foreign key constraint \"profiles_...",
+      "full_error": "Error: Failed to create test profiles: Failed to create test profiles: insert or update on table \"profiles\" violates foreign key constraint \"profiles_id_fkey\"\n    at createTestProfiles (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:604:11)\n    at setupStandingsTestData (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/src/services/winnerDeterminationService.test.ts:54:5)\n    at Object.<anonymous> (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/src/services/winnerDeterminationService.test.ts:147:28)"
+    },
+    {
+      "file": "/src/services/winnerDeterminationService.test.ts",
+      "test": "should handle tied winners correctly integration",
+      "component": "winnerDeterminationService",
+      "type": "integration",
+      "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoHaveLength\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m...",
+      "full_error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoHaveLength\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected length: \u001b[32m2\u001b[39m\nReceived length: \u001b[31m0\u001b[39m\nReceived array:  \u001b[31m[]\u001b[39m\n    at Object.toHaveLength (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/src/services/winnerDeterminationService.test.ts:221:30)"
+    },
+    {
+      "file": "/src/services/winnerDeterminationService.test.ts",
+      "test": "should handle season with existing winners that have null profile names integration",
+      "component": "winnerDeterminationService",
+      "type": "integration",
+      "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m...",
+      "full_error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32mtrue\u001b[39m\nReceived: \u001b[31mfalse\u001b[39m\n    at Object.toBe (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/src/services/winnerDeterminationService.test.ts:279:48)"
+    },
+    {
+      "file": "/src/services/winnerDeterminationService.test.ts",
+      "test": "should process multiple completed seasons successfully integration",
+      "component": "winnerDeterminationService",
+      "type": "integration",
+      "error": "Error: Failed to create test profiles: Failed to create test profiles: insert or update on table \"profiles\" violates foreign key constraint \"profiles_...",
+      "full_error": "Error: Failed to create test profiles: Failed to create test profiles: insert or update on table \"profiles\" violates foreign key constraint \"profiles_id_fkey\"\n    at createTestProfiles (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:604:11)\n    at setupStandingsTestData (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/src/services/winnerDeterminationService.test.ts:54:5)\n    at Object.<anonymous> (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/src/services/winnerDeterminationService.test.ts:304:7)"
+    },
+    {
+      "file": "/src/services/winnerDeterminationService.test.ts",
+      "test": "should return empty array when no completed seasons found integration",
+      "component": "winnerDeterminationService",
+      "type": "integration",
+      "error": "Error: Failed to seed test data: Failed to seed betting round fixtures: insert or update on table \"betting_round_fixtures\" violates foreign key constr...",
+      "full_error": "Error: Failed to seed test data: Failed to seed betting round fixtures: insert or update on table \"betting_round_fixtures\" violates foreign key constraint \"betting_round_fixtures_fixture_id_fkey\"\n    at seedTestData (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:415:11)\n    at /Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:646:9"
+    },
+    {
+      "file": "/src/services/winnerDeterminationService.test.ts",
+      "test": "should handle individual season processing errors and continue with others integration",
+      "component": "winnerDeterminationService",
+      "type": "integration",
+      "error": "Error: Failed to create test profiles: Failed to create test profiles: insert or update on table \"profiles\" violates foreign key constraint \"profiles_...",
+      "full_error": "Error: Failed to create test profiles: Failed to create test profiles: insert or update on table \"profiles\" violates foreign key constraint \"profiles_id_fkey\"\n    at createTestProfiles (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:604:11)\n    at setupStandingsTestData (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/src/services/winnerDeterminationService.test.ts:54:5)\n    at Object.<anonymous> (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/src/services/winnerDeterminationService.test.ts:353:7)"
+    },
+    {
+      "file": "/src/services/cup/__tests__/cupWinnerDeterminationService.test.ts",
+      "test": "should calculate standings with proper ranking and tie handling",
+      "component": "cup-__tests__-cupWinnerDeterminationService",
+      "type": "integration",
+      "error": "Error: Failed to create test profiles: Failed to create test profiles: insert or update on table \"profiles\" violates foreign key constraint \"profiles_...",
+      "full_error": "Error: Failed to create test profiles: Failed to create test profiles: insert or update on table \"profiles\" violates foreign key constraint \"profiles_id_fkey\"\n    at createTestProfiles (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:604:11)\n    at setupCupStandingsTestData (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/src/services/cup/__tests__/cupWinnerDeterminationService.test.ts:55:5)\n    at Object.<anonymous> (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/src/services/cup/__tests__/cupWinnerDeterminationService.test.ts:98:28)"
+    },
+    {
+      "file": "/src/services/cup/__tests__/cupWinnerDeterminationService.test.ts",
+      "test": "should handle invalid season ID gracefully",
+      "component": "cup-__tests__-cupWinnerDeterminationService",
+      "type": "integration",
+      "error": "Error: Failed to create test profiles: Failed to create test profiles: insert or update on table \"profiles\" violates foreign key constraint \"profiles_...",
+      "full_error": "Error: Failed to create test profiles: Failed to create test profiles: insert or update on table \"profiles\" violates foreign key constraint \"profiles_id_fkey\"\n    at createTestProfiles (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:604:11)\n    at setupCupStandingsTestData (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/src/services/cup/__tests__/cupWinnerDeterminationService.test.ts:55:5)\n    at Object.<anonymous> (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/src/services/cup/__tests__/cupWinnerDeterminationService.test.ts:138:7)"
+    },
+    {
+      "file": "/src/services/cup/__tests__/cupWinnerDeterminationService.test.ts",
+      "test": "should handle missing profile information",
+      "component": "cup-__tests__-cupWinnerDeterminationService",
+      "type": "integration",
+      "error": "Error: Failed to create test profiles: Failed to create test profiles: insert or update on table \"profiles\" violates foreign key constraint \"profiles_...",
+      "full_error": "Error: Failed to create test profiles: Failed to create test profiles: insert or update on table \"profiles\" violates foreign key constraint \"profiles_id_fkey\"\n    at createTestProfiles (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:604:11)\n    at Object.<anonymous> (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/src/services/cup/__tests__/cupWinnerDeterminationService.test.ts:173:7)"
+    },
+    {
+      "file": "/src/services/cup/__tests__/cupWinnerDeterminationService.test.ts",
+      "test": "should sort users with same points consistently by username",
+      "component": "cup-__tests__-cupWinnerDeterminationService",
+      "type": "integration",
+      "error": "Error: Failed to create test profiles: Failed to create test profiles: insert or update on table \"profiles\" violates foreign key constraint \"profiles_...",
+      "full_error": "Error: Failed to create test profiles: Failed to create test profiles: insert or update on table \"profiles\" violates foreign key constraint \"profiles_id_fkey\"\n    at createTestProfiles (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:604:11)\n    at Object.<anonymous> (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/src/services/cup/__tests__/cupWinnerDeterminationService.test.ts:200:7)"
+    },
+    {
+      "file": "/src/services/cup/__tests__/cupWinnerDeterminationService.test.ts",
+      "test": "should identify single winner correctly",
+      "component": "cup-__tests__-cupWinnerDeterminationService",
+      "type": "integration",
+      "error": "Error: Failed to seed test data: Failed to seed betting round fixtures: insert or update on table \"betting_round_fixtures\" violates foreign key constr...",
+      "full_error": "Error: Failed to seed test data: Failed to seed betting round fixtures: insert or update on table \"betting_round_fixtures\" violates foreign key constraint \"betting_round_fixtures_fixture_id_fkey\"\n    at seedTestData (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:415:11)\n    at /Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:646:9"
+    },
+    {
+      "file": "/src/services/cup/__tests__/cupWinnerDeterminationService.test.ts",
+      "test": "should return existing winners if already determined (idempotency)",
+      "component": "cup-__tests__-cupWinnerDeterminationService",
+      "type": "integration",
+      "error": "Error: Failed to seed test data: Failed to seed rounds: insert or update on table \"rounds\" violates foreign key constraint \"rounds_season_id_fkey\"...",
+      "full_error": "Error: Failed to seed test data: Failed to seed rounds: insert or update on table \"rounds\" violates foreign key constraint \"rounds_season_id_fkey\"\n    at seedTestData (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:415:11)\n    at /Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:646:9"
+    },
+    {
+      "file": "/src/services/cup/__tests__/cupWinnerDeterminationService.test.ts",
+      "test": "should determine new winners successfully",
+      "component": "cup-__tests__-cupWinnerDeterminationService",
+      "type": "integration",
+      "error": "Error: Failed to create test profiles: Failed to create test profiles: insert or update on table \"profiles\" violates foreign key constraint \"profiles_...",
+      "full_error": "Error: Failed to create test profiles: Failed to create test profiles: insert or update on table \"profiles\" violates foreign key constraint \"profiles_id_fkey\"\n    at createTestProfiles (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/tests/utils/db.ts:604:11)\n    at setupCupStandingsTestData (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/src/services/cup/__tests__/cupWinnerDeterminationService.test.ts:55:5)\n    at Object.<anonymous> (/Users/arnarjohannsson/Code/TippSlottet/league-coupon/src/services/cup/__tests__/cupWinnerDeterminationService.test.ts:324:28)"
+    }
+  ],
+  "skipped_tests": [
+    {
+      "file": "/src/app/api/admin/hall-of-fame/route.test.ts",
+      "test": "should reject requests without authentication",
+      "component": "api-admin-hall-of-fame-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/admin/hall-of-fame/route.test.ts",
+      "test": "should accept Bearer token authentication",
+      "component": "api-admin-hall-of-fame-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/admin/hall-of-fame/route.test.ts",
+      "test": "should accept X-Cron-Secret header authentication",
+      "component": "api-admin-hall-of-fame-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/admin/hall-of-fame/route.test.ts",
+      "test": "should reject invalid authentication tokens",
+      "component": "api-admin-hall-of-fame-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/admin/hall-of-fame/route.test.ts",
+      "test": "should handle missing CRON_SECRET configuration",
+      "component": "api-admin-hall-of-fame-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/admin/hall-of-fame/route.test.ts",
+      "test": "should return Hall of Fame data with default parameters",
+      "component": "api-admin-hall-of-fame-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/admin/hall-of-fame/route.test.ts",
+      "test": "should handle filters correctly",
+      "component": "api-admin-hall-of-fame-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/admin/hall-of-fame/route.test.ts",
+      "test": "should enforce maximum limit",
+      "component": "api-admin-hall-of-fame-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/admin/hall-of-fame/route.test.ts",
+      "test": "should create a new Hall of Fame entry",
+      "component": "api-admin-hall-of-fame-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/admin/hall-of-fame/route.test.ts",
+      "test": "should update existing winner when override_existing is true",
+      "component": "api-admin-hall-of-fame-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/admin/hall-of-fame/route.test.ts",
+      "test": "should reject when winner already exists without override",
+      "component": "api-admin-hall-of-fame-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/admin/hall-of-fame/route.test.ts",
+      "test": "should validate required fields",
+      "component": "api-admin-hall-of-fame-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/admin/hall-of-fame/route.test.ts",
+      "test": "should handle non-existent season",
+      "component": "api-admin-hall-of-fame-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/admin/hall-of-fame/route.test.ts",
+      "test": "should handle non-existent user",
+      "component": "api-admin-hall-of-fame-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/admin/hall-of-fame/route.test.ts",
+      "test": "should delete winner by winner_id",
+      "component": "api-admin-hall-of-fame-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/admin/hall-of-fame/route.test.ts",
+      "test": "should delete winner by season_id",
+      "component": "api-admin-hall-of-fame-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/admin/hall-of-fame/route.test.ts",
+      "test": "should require either winner_id or season_id",
+      "component": "api-admin-hall-of-fame-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/admin/hall-of-fame/route.test.ts",
+      "test": "should handle non-existent winner",
+      "component": "api-admin-hall-of-fame-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/admin/hall-of-fame/route.test.ts",
+      "test": "should handle delete errors",
+      "component": "api-admin-hall-of-fame-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/admin/hall-of-fame/route.test.ts",
+      "test": "should handle database errors in GET",
+      "component": "api-admin-hall-of-fame-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/admin/hall-of-fame/route.test.ts",
+      "test": "should handle unexpected errors",
+      "component": "api-admin-hall-of-fame-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/admin/hall-of-fame/route.test.ts",
+      "test": "should log successful operations",
+      "component": "api-admin-hall-of-fame-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/last-round-special/standings/route.test.ts",
+      "test": "should return cup standings with default pagination",
+      "component": "api-last-round-special-standings-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/last-round-special/standings/route.test.ts",
+      "test": "should return cup standings with custom pagination",
+      "component": "api-last-round-special-standings-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/last-round-special/standings/route.test.ts",
+      "test": "should handle custom sorting by points descending",
+      "component": "api-last-round-special-standings-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/last-round-special/standings/route.test.ts",
+      "test": "should handle specific season filter",
+      "component": "api-last-round-special-standings-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/last-round-special/standings/route.test.ts",
+      "test": "should return empty results when no standings data exists",
+      "component": "api-last-round-special-standings-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/last-round-special/standings/route.test.ts",
+      "test": "should handle profile fetch errors gracefully",
+      "component": "api-last-round-special-standings-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/last-round-special/standings/route.test.ts",
+      "test": "should handle invalid sort parameter",
+      "component": "api-last-round-special-standings-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/last-round-special/standings/route.test.ts",
+      "test": "should handle cup scoring service errors",
+      "component": "api-last-round-special-standings-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/last-round-special/standings/route.test.ts",
+      "test": "should include proper cache headers",
+      "component": "api-last-round-special-standings-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/last-round-special/standings/route.test.ts",
+      "test": "should validate pagination limits",
+      "component": "api-last-round-special-standings-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    },
+    {
+      "file": "/src/app/api/last-round-special/standings/route.test.ts",
+      "test": "should include metadata and query info in response",
+      "component": "api-last-round-special-standings-route",
+      "type": "integration",
+      "reason": "Test skipped or not implemented"
+    }
+  ]
+}
