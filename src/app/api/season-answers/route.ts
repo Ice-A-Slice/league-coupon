@@ -246,7 +246,7 @@ export async function GET(_request: NextRequest) {
                     .select('name')
                     .eq('api_player_id', playerId)
                     .single();
-                return data?.name || `Player ${playerId}`;
+                return data?.name || `Unknown Player`;
             })),
             Promise.all(bestGoalDifferenceTeams.map(async (teamId) => {
                 const { data } = await serviceRoleClient
@@ -254,7 +254,7 @@ export async function GET(_request: NextRequest) {
                     .select('name')
                     .eq('api_team_id', teamId)
                     .single();
-                return data?.name || `Team ${teamId}`;
+                return data?.name || `Unknown Team`;
             })),
             // Get current league winner name
             currentLeagueWinnerTeamId ? (async () => {
@@ -263,7 +263,7 @@ export async function GET(_request: NextRequest) {
                     .select('name')
                     .eq('api_team_id', currentLeagueWinnerTeamId)
                     .single();
-                return data?.name || `Team ${currentLeagueWinnerTeamId}`;
+                return data?.name || `Unknown Team`;
             })() : Promise.resolve('TBD'),
             // Get current last place team name
             lastPlaceTeam?.team_id ? (async () => {
@@ -272,7 +272,7 @@ export async function GET(_request: NextRequest) {
                     .select('name')
                     .eq('api_team_id', lastPlaceTeam.team_id)
                     .single();
-                return data?.name || `Team ${lastPlaceTeam.team_id}`;
+                return data?.name || `Unknown Team`;
             })() : Promise.resolve('TBD')
         ]);
 
@@ -387,8 +387,8 @@ async function transformUserPredictionsWithNames(
     ]);
 
     // Create lookup maps with proper typing (handle null names)
-    const teamNameMap = new Map(teamsData.data?.map((team: TeamData) => [team.id, team.name || `Team ${team.id}`]) || []);
-    const playerNameMap = new Map(playersData.data?.map((player: PlayerData) => [player.id, player.name || `Player ${player.id}`]) || []);
+    const teamNameMap = new Map(teamsData.data?.map((team: TeamData) => [team.id, team.name || `Unknown Team`]) || []);
+    const playerNameMap = new Map(playersData.data?.map((player: PlayerData) => [player.id, player.name || `Unknown Player`]) || []);
 
     // Populate user answers with resolved names
     userAnswers.forEach(answer => {
@@ -399,9 +399,9 @@ async function transformUserPredictionsWithNames(
             let answerName = 'Unknown';
             
             if (answer.answered_team_id) {
-                answerName = teamNameMap.get(answer.answered_team_id) || `Team ${answer.answered_team_id}`;
+                answerName = teamNameMap.get(answer.answered_team_id) || `Unknown Team`;
             } else if (answer.answered_player_id) {
-                answerName = playerNameMap.get(answer.answered_player_id) || `Player ${answer.answered_player_id}`;
+                answerName = playerNameMap.get(answer.answered_player_id) || `Unknown Player`;
             }
             
             // Map question types to user object properties

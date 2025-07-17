@@ -420,6 +420,30 @@ export async function seedTestData(): Promise<void> {
       throw new Error(`Failed to seed betting rounds: ${bettingRoundsError.message}`);
     }
 
+    // DEBUGGING: Verify betting rounds exist before creating junction table
+    const { data: existingBettingRounds, error: checkBettingRoundsError } = await client
+      .from('betting_rounds')
+      .select('id')
+      .in('id', [1, 2]);
+      
+    if (checkBettingRoundsError) {
+      console.error('[TEST_DB] Error checking betting rounds:', checkBettingRoundsError);
+    } else {
+      console.log(`[TEST_DB] Found ${existingBettingRounds?.length || 0} betting rounds before junction table creation`);
+    }
+    
+    // DEBUGGING: Verify fixtures exist before creating junction table  
+    const { data: existingFixtures, error: checkFixturesError } = await client
+      .from('fixtures')
+      .select('id')
+      .in('id', [1, 2, 3]);
+      
+    if (checkFixturesError) {
+      console.error('[TEST_DB] Error checking fixtures:', checkFixturesError);
+    } else {
+      console.log(`[TEST_DB] Found ${existingFixtures?.length || 0} fixtures before junction table creation`);
+    }
+
     // Seed betting round fixtures (junction table)
     const { error: bettingRoundFixturesError } = await client
       .from('betting_round_fixtures')

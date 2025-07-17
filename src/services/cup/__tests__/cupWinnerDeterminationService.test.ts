@@ -135,7 +135,7 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
     });
 
     it('should handle invalid season ID gracefully', async () => {
-      const { profiles } = await setupCupStandingsTestData();
+      await setupCupStandingsTestData();
       
       const result = await service.calculateCupStandings(999); // Invalid season ID
       expect(result.standings).toHaveLength(0);
@@ -300,7 +300,7 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
 
     it('should return existing winners if already determined (idempotency)', async () => {
       // Set up test data and determine winners first time
-      const { profiles } = await setupCupStandingsTestData();
+      await setupCupStandingsTestData();
       
       // First call - should determine winners
       const firstResult = await service.determineCupWinners(seasonId);
@@ -356,7 +356,7 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
     it('should handle database error during winner recording', async () => {
       // Instead of trying to force a database error, we'll test that the method
       // completes successfully and handles the normal flow properly
-      const { profiles } = await setupCupStandingsTestData();
+      await setupCupStandingsTestData();
 
       const result = await service.determineCupWinners(seasonId);
       
@@ -443,7 +443,7 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
         .eq('id', 1);
 
       // Setup test data and determine winners
-      const { profiles } = await setupCupStandingsTestData();
+      await setupCupStandingsTestData();
       await service.determineCupWinners(1);
 
       // Run batch processing
@@ -536,7 +536,7 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
     });
 
     it('should maintain data consistency across standings calculation and winner determination', async () => {
-      const { profiles } = await setupCupStandingsTestData();
+      await setupCupStandingsTestData();
       const seasonId = 1;
 
       // Test calculateCupStandings independently

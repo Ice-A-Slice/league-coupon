@@ -14,6 +14,8 @@ import { Database } from '@/types/supabase';
 import { NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
+type MockSupabaseClient = ReturnType<typeof createServerClient>;
+
 // Mock the createServerClient function to control authentication
 jest.mock('@supabase/ssr', () => ({
   createServerClient: jest.fn(),
@@ -81,7 +83,7 @@ describe('POST /api/bets', () => {
     ];
 
     const mockSupabaseClient = createAuthenticatedMock(userId);
-    mockCreateServerClient.mockReturnValue(mockSupabaseClient as any);
+    mockCreateServerClient.mockReturnValue(mockSupabaseClient as MockSupabaseClient);
 
     const request = new NextRequest('http://localhost/api/bets', {
       method: 'POST',
@@ -109,7 +111,7 @@ describe('POST /api/bets', () => {
   
   it('should return 401 Unauthorized if user is not authenticated', async () => {
     const mockSupabaseClient = createUnauthenticatedMock();
-    mockCreateServerClient.mockReturnValue(mockSupabaseClient as any);
+    mockCreateServerClient.mockReturnValue(mockSupabaseClient as MockSupabaseClient);
 
     const request = new NextRequest('http://localhost/api/bets', {
       method: 'POST',
@@ -129,7 +131,7 @@ describe('POST /api/bets', () => {
     const userId = testProfiles[0].id;
 
     const mockSupabaseClient = createAuthenticatedMock(userId);
-    mockCreateServerClient.mockReturnValue(mockSupabaseClient as any);
+    mockCreateServerClient.mockReturnValue(mockSupabaseClient as MockSupabaseClient);
 
     const request = new NextRequest('http://localhost/api/bets', {
       method: 'POST',
@@ -167,7 +169,7 @@ describe('POST /api/bets', () => {
     const requestBody = [{ fixture_id: fixtureIdInPast, prediction: '1' }];
 
     const mockSupabaseClient = createAuthenticatedMock(userId);
-    mockCreateServerClient.mockReturnValue(mockSupabaseClient as any);
+    mockCreateServerClient.mockReturnValue(mockSupabaseClient as MockSupabaseClient);
 
     const request = new NextRequest('http://localhost/api/bets', {
       method: 'POST',
@@ -190,7 +192,7 @@ describe('POST /api/bets', () => {
     const requestBody = [{ fixture_id: invalidFixtureId, prediction: '1' }];
 
     const mockSupabaseClient = createAuthenticatedMock(userId);
-    mockCreateServerClient.mockReturnValue(mockSupabaseClient as any);
+    mockCreateServerClient.mockReturnValue(mockSupabaseClient as MockSupabaseClient);
 
     const request = new NextRequest('http://localhost/api/bets', {
       method: 'POST',

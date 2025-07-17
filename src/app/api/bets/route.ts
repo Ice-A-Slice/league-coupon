@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
 
@@ -50,10 +50,10 @@ type BetSubmissionPayload = BetSubmission[];
  */
 export async function POST(request: Request) {
   // Use a try-catch block to handle potential errors from cookie parsing
-  let cookieStore;
+  let cookieStore: Awaited<ReturnType<typeof cookies>> | undefined;
   try {
-    cookieStore = cookies();
-  } catch (error) {
+    cookieStore = await cookies();
+  } catch (_error) {
     // This happens in test environments where there is no request scope.
     // The auth check below will handle returning the 401.
   }
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     {
       cookies: {
         get(name: string) {
-          return cookieStore?.get(name)?.value;
+          return cookieStore ? cookieStore.get(name)?.value : undefined;
         },
       },
     }

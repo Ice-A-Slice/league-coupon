@@ -64,6 +64,8 @@ export interface HallOfFameResponse {
 export interface PlayerStats {
   user: User;
   total_wins: number;
+  league_wins: number;
+  cup_wins: number;
   total_points: number;
   average_points: number;
   best_points: number;
@@ -87,6 +89,8 @@ export interface OverallStats {
   total_seasons_completed: number;
   total_points_awarded: number;
   average_points_per_season: number;
+  total_league_wins: number;
+  total_cup_wins: number;
   top_player: {
     user: User;
     total_wins: number;
