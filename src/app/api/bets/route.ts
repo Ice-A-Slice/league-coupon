@@ -184,9 +184,7 @@ export async function POST(request: Request) {
     console.log(`Upserting ${upsertData.length} bets for user ${user.id}, round ${bettingRoundId}...`);
     const { error: upsertError } = await supabase
       .from('user_bets')
-      .upsert(upsertData, {
-        onConflict: 'user_id, fixture_id' // Explicitly tell Supabase which columns cause the conflict
-      });
+      .insert(upsertData);
       // Supabase handles conflict on UNIQUE(user_id, fixture_id) automatically
 
     if (upsertError) {

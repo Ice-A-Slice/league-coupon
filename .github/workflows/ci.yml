@@ -27,8 +27,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
     env:
-      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      # Local Supabase environment variables
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+      SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+      # Test environment flag
+      NODE_ENV: test
     steps:
       - uses: actions/checkout@v4
       
@@ -41,8 +45,81 @@ jobs:
       - name: Install dependencies
         run: npm ci
       
+      # Setup Docker for Supabase (Docker is pre-installed on ubuntu-latest)
+      - name: Verify Docker
+        run: docker --version
+      
+      # Install Supabase CLI
+      - name: Install Supabase CLI
+        run: |
+          curl -fsSL https://github.com/supabase/cli/releases/download/v1.200.3/supabase_linux_amd64.tar.gz | tar -xz
+          sudo mv supabase /usr/local/bin/
+          supabase --version
+      
+      # Cache Supabase Docker images
+      - name: Cache Supabase Docker images
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-supabase-${{ hashFiles('supabase/config.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-supabase-
+      
+      # Start Supabase local development environment
+      - name: Start Supabase
+        run: |
+          # Start Supabase with minimal services for testing
+          supabase start --exclude=imgproxy,edge-runtime
+          # Wait for database to be ready
+          timeout 60s bash -c 'until docker exec supabase_db_league-coupon pg_isready -U postgres; do sleep 2; done'
+          echo "Supabase is ready!"
+          # Show running containers for debugging
+          docker ps
+      
+      # Run database migrations and seed data
+      - name: Setup Database
+        run: |
+          # Seed test data if available
+          if [ -f "supabase/seed.sql" ]; then
+            echo "Seeding database with test data..."
+            supabase db reset --debug
+          else
+            echo "No seed.sql found, skipping seeding"
+          fi
+          # Verify database is working
+          supabase db ping
+      
+      # Run tests with proper error handling
       - name: Run tests
-        run: npm test
+        run: |
+          echo "Running Jest tests..."
+          npm test
+        timeout-minutes: 10
+      
+      # Run E2E tests
+      - name: Run E2E tests
+        run: |
+          echo "Installing Playwright browsers..."
+          npx playwright install --with-deps
+          echo "Running E2E tests..."
+          npm run test:e2e
+        timeout-minutes: 15
+      
+      # Upload test results
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-results
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+      
+      # Stop Supabase (cleanup)
+      - name: Stop Supabase
+        if: always()
+        run: supabase stop
 
   build:
     runs-on: ubuntu-latest

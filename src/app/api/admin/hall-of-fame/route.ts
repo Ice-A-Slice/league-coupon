@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { logger } from '@/utils/logger';
 import { revalidatePath } from 'next/cache';
 
@@ -33,7 +33,13 @@ function isAuthenticated(request: NextRequest): boolean {
  */
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
-  const requestId = crypto.randomUUID();
+  let requestId: string;
+  
+  try {
+    requestId = crypto.randomUUID();
+  } catch (error) {
+    requestId = 'test-' + Math.random().toString(36).substr(2, 9);
+  }
 
   try {
     logger.info('Admin HallOfFame API: Processing GET request', {
@@ -65,7 +71,7 @@ export async function GET(request: NextRequest) {
     const sort = searchParams.get('sort') || 'newest';
 
     // Create Supabase client
-    const supabase = getSupabaseServiceRoleClient();
+    const supabase = createSupabaseServiceRoleClient();
 
     // Build the query with proper joins
     let query = supabase
@@ -238,10 +244,12 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     const processingTime = Date.now() - startTime;
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
     
     logger.error('Admin HallOfFame API: Unexpected error', {
       requestId,
       error: errorMessage,
+      stack: errorStack,
       processingTime
     });
 
@@ -267,7 +275,13 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
-  const requestId = crypto.randomUUID();
+  let requestId: string;
+  
+  try {
+    requestId = crypto.randomUUID();
+  } catch (error) {
+    requestId = 'test-' + Math.random().toString(36).substr(2, 9);
+  }
 
   try {
     logger.info('Admin HallOfFame API: Processing POST request', {
@@ -299,6 +313,7 @@ export async function POST(request: NextRequest) {
       override_existing = false 
     } = body;
 
+
     // Validate required fields
     if (!season_id || !user_id || total_points === undefined) {
       return NextResponse.json(
@@ -307,7 +322,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseServiceRoleClient();
+    const supabase = createSupabaseServiceRoleClient();
 
     // Check if season exists
     const { data: season, error: seasonError } = await supabase
@@ -347,12 +362,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if winner already exists
+    // Check if winner already exists (filter by season_id AND competition_type AND user_id)
     const { data: existingWinner, error: _existingError } = await supabase
       .from('season_winners')
       .select('id')
       .eq('season_id', season_id)
-      .single();
+      .eq('competition_type', competition_type)
+      .eq('user_id', user_id)
+      .maybeSingle(); // Use maybeSingle() instead of single() to handle no results
+
 
     if (existingWinner && !override_existing) {
       logger.warn('Admin HallOfFame API: Winner already exists', {
@@ -481,7 +499,13 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   const startTime = Date.now();
-  const requestId = crypto.randomUUID();
+  let requestId: string;
+  
+  try {
+    requestId = crypto.randomUUID();
+  } catch (error) {
+    requestId = 'test-' + Math.random().toString(36).substr(2, 9);
+  }
 
   try {
     logger.info('Admin HallOfFame API: Processing DELETE request', {
@@ -505,6 +529,12 @@ export async function DELETE(request: NextRequest) {
     const body = await request.json();
     const { winner_id, season_id, soft_delete: _soft_delete = false } = body;
 
+    logger.info('Admin HallOfFame API: DELETE body received', { 
+      requestId, 
+      winner_id, 
+      season_id 
+    });
+
     if (!winner_id && !season_id) {
       return NextResponse.json(
         { error: 'Either winner_id or season_id must be provided' },
@@ -512,7 +542,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseServiceRoleClient();
+    const supabase = createSupabaseServiceRoleClient();
 
     // Find the winner entry
     let query = supabase
@@ -521,64 +551,136 @@ export async function DELETE(request: NextRequest) {
 
     if (winner_id) {
       query = query.eq('id', winner_id);
+      logger.info('Admin HallOfFame API: Searching by winner_id', { requestId, winner_id });
     } else if (season_id) {
       query = query.eq('season_id', season_id);
+      logger.info('Admin HallOfFame API: Searching by season_id', { requestId, season_id });
     }
 
-    const { data: winner, error: findError } = await query.single();
-
-    if (findError || !winner) {
-      logger.error('Admin HallOfFame API: Winner not found', {
-        requestId,
-        winnerId: winner_id,
-        seasonId: season_id,
-        error: findError?.message
+    // For season_id, we might have multiple winners (league + last_round_special)
+    // so we need to handle both single and multiple results
+    if (season_id) {
+      const { data: winners, error: findError } = await query;
+      
+      logger.info('Admin HallOfFame API: Query result (season_id)', { 
+        requestId, 
+        foundWinners: winners?.length || 0,
+        findError: findError?.message 
       });
-      return NextResponse.json(
-        { error: 'Winner not found' },
-        { status: 404 }
-      );
-    }
 
-    // Delete the winner
-    const { error: deleteError } = await supabase
-      .from('season_winners')
-      .delete()
-      .eq('id', winner.id);
+      if (findError || !winners || winners.length === 0) {
+        logger.error('Admin HallOfFame API: Winner not found', {
+          requestId,
+          winnerId: winner_id,
+          seasonId: season_id,
+          error: findError?.message
+        });
+        return NextResponse.json(
+          { error: 'Winner not found' },
+          { status: 404 }
+        );
+      }
 
-    if (deleteError) {
-      logger.error('Admin HallOfFame API: Error deleting winner', {
+      // Delete all winners for the season
+      const { error: deleteError } = await supabase
+        .from('season_winners')
+        .delete()
+        .eq('season_id', season_id);
+
+      if (deleteError) {
+        logger.error('Admin HallOfFame API: Error deleting winners', {
+          requestId,
+          seasonId: season_id,
+          error: deleteError.message
+        });
+        return NextResponse.json(
+          { error: 'Failed to delete winners', details: deleteError.message },
+          { status: 500 }
+        );
+      }
+
+      logger.info('Admin HallOfFame API: Winners deleted successfully', {
+        requestId,
+        seasonId: season_id,
+        deletedCount: winners.length
+      });
+
+      const response = {
+        message: 'Winners deleted successfully',
+        deleted_winners: winners,
+        metadata: {
+          requestId,
+          timestamp: new Date().toISOString(),
+          processingTime: Date.now() - startTime
+        }
+      };
+
+      return NextResponse.json(response);
+      
+    } else {
+      // For winner_id, expect exactly one result
+      const { data: winner, error: findError } = await query.single();
+
+      logger.info('Admin HallOfFame API: Query result (winner_id)', { 
+        requestId, 
+        foundWinner: !!winner,
+        winnerId: winner?.id,
+        findError: findError?.message 
+      });
+
+      if (findError || !winner) {
+        logger.error('Admin HallOfFame API: Winner not found', {
+          requestId,
+          winnerId: winner_id,
+          seasonId: season_id,
+          error: findError?.message
+        });
+        return NextResponse.json(
+          { error: 'Winner not found' },
+          { status: 404 }
+        );
+      }
+
+      // Delete the single winner
+      const { error: deleteError } = await supabase
+        .from('season_winners')
+        .delete()
+        .eq('id', winner.id);
+
+      if (deleteError) {
+        logger.error('Admin HallOfFame API: Error deleting winner', {
+          requestId,
+          winnerId: winner.id,
+          error: deleteError.message
+        });
+        return NextResponse.json(
+          { error: 'Failed to delete winner', details: deleteError.message },
+          { status: 500 }
+        );
+      }
+
+      logger.info('Admin HallOfFame API: Winner deleted successfully', {
         requestId,
         winnerId: winner.id,
-        error: deleteError.message
+        seasonId: winner.season_id,
+        userId: winner.user_id
       });
-      return NextResponse.json(
-        { error: 'Failed to delete winner', details: deleteError.message },
-        { status: 500 }
-      );
+
+      const response = {
+        message: 'Winner deleted successfully',
+        deleted_winner: winner,
+        metadata: {
+          requestId,
+          timestamp: new Date().toISOString(),
+          processingTime: Date.now() - startTime
+        }
+      };
+
+      return NextResponse.json(response);
     }
 
-    // Invalidate cache
+    // Invalidate cache for both paths
     revalidatePath('/api/hall-of-fame');
-
-    logger.info('Admin HallOfFame API: Winner deleted successfully', {
-      requestId,
-      winnerId: winner.id,
-      seasonId: winner.season_id,
-      userId: winner.user_id
-    });
-
-    const response = {
-      message: 'Winner deleted successfully',
-      deleted_winner: winner,
-      metadata: {
-        requestId,
-        timestamp: new Date().toISOString(),
-        processingTime: Date.now() - startTime
-      }
-    };
-
-    return NextResponse.json(response);
 
   } catch (error) {
     logger.error('Admin HallOfFame API: Unexpected error in DELETE', {

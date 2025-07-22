@@ -2,7 +2,7 @@ import 'server-only';
 
 import { logger } from '@/utils/logger';
 import { roundCompletionDetectorService } from '@/services/roundCompletionDetectorService';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 // Removed unused import
 
 /**
@@ -267,7 +267,7 @@ export class EmailSchedulerService {
     logger.debug('EmailScheduler: Fetching timing information for open rounds...');
     
     try {
-      const supabase = getSupabaseServiceRoleClient();
+      const supabase = createSupabaseServiceRoleClient();
       const now = new Date();
 
       const { data: openRounds, error } = await supabase
@@ -415,7 +415,7 @@ export class EmailSchedulerService {
    */
   async wasReminderAlreadySent(roundId: number): Promise<boolean> {
     try {
-      const supabase = getSupabaseServiceRoleClient();
+      const supabase = createSupabaseServiceRoleClient();
       
       logger.debug(`EmailScheduler: Checking reminder status for round ${roundId}`);
       
@@ -448,7 +448,7 @@ export class EmailSchedulerService {
    */
   async markReminderAsSent(roundId: number): Promise<void> {
     try {
-      const supabase = getSupabaseServiceRoleClient();
+      const supabase = createSupabaseServiceRoleClient();
       
       const timestamp = new Date().toISOString();
       logger.debug(`EmailScheduler: Marking reminder as sent for round ${roundId} at ${timestamp}`);
@@ -634,7 +634,7 @@ export class EmailSchedulerService {
    */
   async wasTransparencyAlreadySent(roundId: number): Promise<boolean> {
     try {
-      const supabase = getSupabaseServiceRoleClient();
+      const supabase = createSupabaseServiceRoleClient();
       
       logger.debug(`EmailScheduler: Checking transparency status for round ${roundId}`);
       
@@ -667,7 +667,7 @@ export class EmailSchedulerService {
    */
   async markTransparencyAsSent(roundId: number): Promise<void> {
     try {
-      const supabase = getSupabaseServiceRoleClient();
+      const supabase = createSupabaseServiceRoleClient();
       
       const timestamp = new Date().toISOString();
       logger.debug(`EmailScheduler: Marking transparency as sent for round ${roundId} at ${timestamp}`);

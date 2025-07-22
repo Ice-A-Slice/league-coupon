@@ -1,8 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Database } from '@/types/supabase';
 
-let testClient: SupabaseClient<Database> | null = null;
-let serviceRoleClient: SupabaseClient<Database> | null = null;
+// Removed singleton clients - using factory pattern instead
 
 // Global mutex to ensure database operations don't interfere with each other
 let dbOperationMutex: Promise<void> = Promise.resolve();
@@ -34,10 +33,8 @@ export async function connectToTestDb(): Promise<SupabaseClient<Database>> {
       );
     }
 
-    // Create client if it doesn't exist
-    if (!testClient) {
-      testClient = createClient<Database>(supabaseUrl, supabaseAnonKey);
-    }
+    // Always create a fresh client (factory pattern)
+    const testClient = createClient<Database>(supabaseUrl, supabaseAnonKey);
 
     // Test the connection by making a simple query
     const { error } = await testClient.from('profiles').select('count').limit(1);
@@ -54,10 +51,11 @@ export async function connectToTestDb(): Promise<SupabaseClient<Database>> {
 }
 
 /**
- * Gets a service role client for operations that need to bypass RLS.
+ * Creates a fresh service role client for operations that need to bypass RLS.
  * Used for database setup, seeding, and cleanup operations.
+ * Uses factory pattern to avoid stale client issues.
  *
- * @returns Promise<SupabaseClient<Database>> - The service role client
+ * @returns Promise<SupabaseClient<Database>> - A fresh service role client
  * @throws Error if connection fails or environment variables are missing
  */
 async function getServiceRoleClient(): Promise<SupabaseClient<Database>> {
@@ -71,12 +69,8 @@ async function getServiceRoleClient(): Promise<SupabaseClient<Database>> {
       );
     }
 
-    // Create service role client if it doesn't exist
-    if (!serviceRoleClient) {
-      serviceRoleClient = createClient<Database>(supabaseUrl, serviceRoleKey);
-    }
-
-    return serviceRoleClient;
+    // Always create a fresh client (factory pattern)
+    return createClient<Database>(supabaseUrl, serviceRoleKey);
   } catch (error) {
     console.error('[TEST_DB] Service role client creation failed:', error);
     throw new Error(`Failed to create service role client: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -258,10 +252,21 @@ export async function truncateAllTables(): Promise<void> {
   }
 }
 
+// Store created IDs for use across tests
+export const testIds = {
+  competition: null as number | null,
+  season: null as number | null,
+  teams: [] as number[],
+  rounds: [] as number[],
+  fixtures: [] as number[],
+  bettingRounds: [] as number[],
+  profiles: [] as string[]
+};
+
 /**
  * Seeds the database with predefined test data.
  * Uses service role client to bypass RLS policies.
- * Inserts data in the correct order to satisfy foreign key constraints.
+ * This version works with both empty and populated databases.
  *
  * @returns Promise<void>
  * @throws Error if seeding fails
@@ -270,194 +275,196 @@ export async function seedTestData(): Promise<void> {
   try {
     const client = await getServiceRoleClient();
 
-    console.log('[TEST_DB] Starting database seeding...');
+    console.log('[TEST_DB] Starting intelligent database seeding...');
 
-    // Seed competitions
-    const { error: competitionsError } = await client
+    // 1. Get or create competition
+    let { data: competition } = await client
       .from('competitions')
-      .upsert([
-        {
-          id: 1,
+      .select('*')
+      .eq('name', 'Premier League')
+      .single();
+
+    if (!competition) {
+      const { data: newComp, error: compError } = await client
+        .from('competitions')
+        .insert({
           name: 'Premier League',
           api_league_id: 39
-        }
-      ], { onConflict: 'id' });
+        })
+        .select()
+        .single();
 
-    if (competitionsError) {
-      throw new Error(`Failed to seed competitions: ${competitionsError.message}`);
+      if (compError) throw new Error(`Failed to create competition: ${compError.message}`);
+      competition = newComp;
     }
+    testIds.competition = competition!.id;
+    console.log(`[TEST_DB] Using competition ID: ${testIds.competition}`);
 
-    // Seed seasons
-    const { error: seasonsError } = await client
+    // 2. Get or create season
+    let { data: season } = await client
       .from('seasons')
-      .upsert([
-        {
-          id: 1,
+      .select('*')
+      .eq('api_season_year', 2024)
+      .eq('competition_id', testIds.competition)
+      .single();
+
+    if (!season) {
+      const { data: newSeason, error: seasonError } = await client
+        .from('seasons')
+        .insert({
           api_season_year: 2024,
-          competition_id: 1,
+          competition_id: testIds.competition,
           name: '2024 Season',
           is_current: true
-        }
-      ], { onConflict: 'id' });
+        })
+        .select()
+        .single();
 
-    if (seasonsError) {
-      throw new Error(`Failed to seed seasons: ${seasonsError.message}`);
+      if (seasonError) throw new Error(`Failed to create season: ${seasonError.message}`);
+      season = newSeason;
     }
+    testIds.season = season!.id;
+    console.log(`[TEST_DB] Using season ID: ${testIds.season}`);
 
-    // Seed teams
-    const { error: teamsError } = await client
-      .from('teams')
-      .upsert([
-        { id: 1, name: 'Arsenal', api_team_id: 42 },
-        { id: 2, name: 'Chelsea', api_team_id: 49 },
-        { id: 3, name: 'Liverpool', api_team_id: 40 },
-        { id: 4, name: 'Manchester City', api_team_id: 50 }
-      ], { onConflict: 'id' });
+    // 3. Get or create teams
+    const teamNames = ['Arsenal', 'Chelsea', 'Liverpool', 'Manchester City'];
+    const teamApiIds = [42, 49, 40, 50];
+    testIds.teams = [];
 
-    if (teamsError) {
-      throw new Error(`Failed to seed teams: ${teamsError.message}`);
+    for (let i = 0; i < teamNames.length; i++) {
+      let { data: team } = await client
+        .from('teams')
+        .select('*')
+        .eq('name', teamNames[i])
+        .single();
+
+      if (!team) {
+        const { data: newTeam, error: teamError } = await client
+          .from('teams')
+          .insert({
+            name: teamNames[i],
+            api_team_id: teamApiIds[i]
+          })
+          .select()
+          .single();
+
+        if (teamError) throw new Error(`Failed to create team ${teamNames[i]}: ${teamError.message}`);
+        team = newTeam;
+      }
+      testIds.teams.push(team!.id);
     }
+    console.log(`[TEST_DB] Using team IDs: ${testIds.teams.join(', ')}`);
 
-    // Note: Profiles are not seeded here because they have foreign key constraints to auth.users
-    // Individual tests should create profiles as needed using the service role client
-
-    // Seed rounds
-    const { error: roundsError } = await client
+    // 4. Create rounds (always create new ones for test isolation)
+    const timestamp = Date.now();
+    const { data: rounds, error: roundsError } = await client
       .from('rounds')
-      .upsert([
-        {
-          id: 1,
-          name: 'Round 1',
-          season_id: 1
-        },
-        {
-          id: 2,
-          name: 'Round 2',
-          season_id: 1
-        }
-      ], { onConflict: 'id' });
+      .insert([
+        { name: `Test Round 1 - ${timestamp}`, season_id: testIds.season },
+        { name: `Test Round 2 - ${timestamp}`, season_id: testIds.season }
+      ])
+      .select();
 
-    if (roundsError) {
-      throw new Error(`Failed to seed rounds: ${roundsError.message}`);
-    }
+    if (roundsError) throw new Error(`Failed to create rounds: ${roundsError.message}`);
+    testIds.rounds = rounds!.map(r => r.id);
+    console.log(`[TEST_DB] Created round IDs: ${testIds.rounds.join(', ')}`);
 
-    // Seed fixtures (use future dates for testing)
+    // 5. Create fixtures
     const futureDate1 = new Date();
-    futureDate1.setDate(futureDate1.getDate() + 7); // 1 week from now
-    const futureDate2 = new Date();
-    futureDate2.setDate(futureDate2.getDate() + 7);
-    futureDate2.setHours(futureDate2.getHours() + 2); // 2 hours later
-    const futureDate3 = new Date();
-    futureDate3.setDate(futureDate3.getDate() + 14); // 2 weeks from now
+    futureDate1.setDate(futureDate1.getDate() + 7);
+    const futureDate2 = new Date(futureDate1);
+    futureDate2.setHours(futureDate2.getHours() + 2);
+    const futureDate3 = new Date(futureDate1);
+    futureDate3.setDate(futureDate3.getDate() + 7);
 
-    const { error: fixturesError } = await client
+    const { data: fixtures, error: fixturesError } = await client
       .from('fixtures')
-      .upsert([
+      .insert([
         {
-          id: 1,
-          api_fixture_id: 1001,
-          round_id: 1,
-          home_team_id: 1,
-          away_team_id: 2,
+          api_fixture_id: 10000 + Math.floor(Math.random() * 90000), // Random 5-digit number
+          round_id: testIds.rounds[0],
+          home_team_id: testIds.teams[0],
+          away_team_id: testIds.teams[1],
           kickoff: futureDate1.toISOString(),
-          status_short: 'NS', // Not Started
-          home_goals: null,
-          away_goals: null
+          status_short: 'NS',
+          status_long: 'Not Started'
         },
         {
-          id: 2,
-          api_fixture_id: 1002,
-          round_id: 1,
-          home_team_id: 3,
-          away_team_id: 4,
+          api_fixture_id: 10000 + Math.floor(Math.random() * 90000),
+          round_id: testIds.rounds[0],
+          home_team_id: testIds.teams[2],
+          away_team_id: testIds.teams[3],
           kickoff: futureDate2.toISOString(),
-          status_short: 'NS', // Not Started
-          home_goals: null,
-          away_goals: null
+          status_short: 'NS',
+          status_long: 'Not Started'
         },
         {
-          id: 3,
-          api_fixture_id: 1003,
-          round_id: 2,
-          home_team_id: 2,
-          away_team_id: 3,
+          api_fixture_id: 10000 + Math.floor(Math.random() * 90000),
+          round_id: testIds.rounds[1],
+          home_team_id: testIds.teams[0],
+          away_team_id: testIds.teams[2],
           kickoff: futureDate3.toISOString(),
-          status_short: 'NS', // Not Started
-          home_goals: null,
-          away_goals: null
-        }
-      ], { onConflict: 'id' });
-
-    if (fixturesError) {
-      throw new Error(`Failed to seed fixtures: ${fixturesError.message}`);
-    }
-
-    // Seed betting rounds
-    const { error: bettingRoundsError } = await client
-      .from('betting_rounds')
-      .upsert([
+          status_short: 'NS',
+          status_long: 'Not Started'
+        },
         {
-          id: 1,
-          name: 'Betting Round 1',
-          competition_id: 1,
+          api_fixture_id: 10000 + Math.floor(Math.random() * 90000),
+          round_id: testIds.rounds[0],
+          home_team_id: testIds.teams[1],
+          away_team_id: testIds.teams[3],
+          kickoff: futureDate1.toISOString(),
+          status_short: 'FT',
+          status_long: 'Match Finished',
+          home_goals: 2,
+          away_goals: 1,
+          result: '1'
+        }
+      ])
+      .select();
+
+    if (fixturesError) throw new Error(`Failed to create fixtures: ${fixturesError.message}`);
+    testIds.fixtures = fixtures!.map(f => f.id);
+    console.log(`[TEST_DB] Created fixture IDs: ${testIds.fixtures.join(', ')}`);
+
+    // 6. Create betting rounds
+    const { data: bettingRounds, error: bettingRoundsError } = await client
+      .from('betting_rounds')
+      .insert([
+        {
+          name: `Test Betting Round 1 - ${timestamp}`,
+          competition_id: testIds.competition,
           status: 'open',
-          scored_at: null, // Will be set by tests when needed
           earliest_fixture_kickoff: futureDate1.toISOString(),
           latest_fixture_kickoff: futureDate2.toISOString()
         },
         {
-          id: 2,
-          name: 'Betting Round 2',
-          competition_id: 1,
+          name: `Test Betting Round 2 - ${timestamp}`,
+          competition_id: testIds.competition,
           status: 'open',
-          scored_at: null,
           earliest_fixture_kickoff: futureDate3.toISOString(),
           latest_fixture_kickoff: futureDate3.toISOString()
         }
-      ], { onConflict: 'id' });
+      ])
+      .select();
 
-    if (bettingRoundsError) {
-      throw new Error(`Failed to seed betting rounds: ${bettingRoundsError.message}`);
-    }
+    if (bettingRoundsError) throw new Error(`Failed to create betting rounds: ${bettingRoundsError.message}`);
+    testIds.bettingRounds = bettingRounds!.map(br => br.id);
+    console.log(`[TEST_DB] Created betting round IDs: ${testIds.bettingRounds.join(', ')}`);
 
-    // DEBUGGING: Verify betting rounds exist before creating junction table
-    const { data: existingBettingRounds, error: checkBettingRoundsError } = await client
-      .from('betting_rounds')
-      .select('id')
-      .in('id', [1, 2]);
-      
-    if (checkBettingRoundsError) {
-      console.error('[TEST_DB] Error checking betting rounds:', checkBettingRoundsError);
-    } else {
-      console.log(`[TEST_DB] Found ${existingBettingRounds?.length || 0} betting rounds before junction table creation`);
-    }
-    
-    // DEBUGGING: Verify fixtures exist before creating junction table  
-    const { data: existingFixtures, error: checkFixturesError } = await client
-      .from('fixtures')
-      .select('id')
-      .in('id', [1, 2, 3]);
-      
-    if (checkFixturesError) {
-      console.error('[TEST_DB] Error checking fixtures:', checkFixturesError);
-    } else {
-      console.log(`[TEST_DB] Found ${existingFixtures?.length || 0} fixtures before junction table creation`);
-    }
-
-    // Seed betting round fixtures (junction table)
-    const { error: bettingRoundFixturesError } = await client
+    // 7. Create betting round fixtures relationships
+    const { error: brfError } = await client
       .from('betting_round_fixtures')
-      .upsert([
-        { betting_round_id: 1, fixture_id: 1 },
-        { betting_round_id: 1, fixture_id: 2 },
-        { betting_round_id: 2, fixture_id: 3 }
-      ], { onConflict: 'betting_round_id,fixture_id' });
+      .insert([
+        { betting_round_id: testIds.bettingRounds[0], fixture_id: testIds.fixtures[0] },
+        { betting_round_id: testIds.bettingRounds[0], fixture_id: testIds.fixtures[1] },
+        { betting_round_id: testIds.bettingRounds[1], fixture_id: testIds.fixtures[2] }
+      ]);
 
-    if (bettingRoundFixturesError) {
-      throw new Error(`Failed to seed betting round fixtures: ${bettingRoundFixturesError.message}`);
-    }
+    if (brfError) throw new Error(`Failed to create betting round fixtures: ${brfError.message}`);
 
-    console.log('[TEST_DB] Database seeding completed successfully');
+    console.log('[TEST_DB] Test data seeded successfully!');
+    console.log('[TEST_DB] Available test IDs:', testIds);
+
   } catch (error) {
     console.error('[TEST_DB] Seeding failed:', error);
     throw new Error(`Failed to seed test data: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -477,21 +484,21 @@ export async function seedHallOfFameData(client: SupabaseClient<Database>, profi
     console.log('[TEST_DB] Seeding Hall of Fame data...');
 
     const winners = [
-      // Season 1 winner
+      // Season winner
       {
-        season_id: 1,
+        season_id: testIds.season!,
         user_id: profiles[0].id,
-        league_id: 1, // Premier League
+        league_id: testIds.competition, // Use actual competition ID
         total_points: 150,
         game_points: 120,
         dynamic_points: 30,
         competition_type: 'league',
       },
-      // Another winner for a different user
+      // Last round special winner
       {
-        season_id: 1,
+        season_id: testIds.season!,
         user_id: profiles[1].id,
-        league_id: 1,
+        league_id: testIds.competition, // Use actual competition ID
         total_points: 145,
         game_points: 115,
         dynamic_points: 30,
@@ -524,11 +531,9 @@ export async function seedHallOfFameData(client: SupabaseClient<Database>, profi
 export async function createTestProfiles(profiles: Array<{ id: string; full_name: string | null }>): Promise<void> {
   try {
     const client = await getServiceRoleClient();
-    
     console.log(`[TEST_DB] Creating ${profiles.length} test profiles...`);
     
-    // Map of original profile ID to actual created user ID
-    const profileIdMap = new Map<string, string>();
+    testIds.profiles = [];
     
     // Check auth users before creation to handle conflicts
     const { data: existingAuthUsers } = await client.auth.admin.listUsers();
@@ -576,7 +581,8 @@ export async function createTestProfiles(profiles: Array<{ id: string; full_name
           
           if (existingUser) {
             console.log(`[TEST_DB] Found existing auth user: ${existingUser.id} for profile ${profile.id}`);
-            profileIdMap.set(profile.id, existingUser.id);
+            testIds.profiles.push(existingUser.id);
+            profile.id = existingUser.id;
           } else {
             console.error(`[TEST_DB] Could not find existing auth user for ${profile.id}`);
             throw new Error(`Failed to create or find auth user for ${profile.id}: ${authError.message}`);
@@ -587,7 +593,8 @@ export async function createTestProfiles(profiles: Array<{ id: string; full_name
         }
       } else if (authUser?.user) {
         console.log(`[TEST_DB] Created auth user: ${authUser.user.id} (requested: ${profile.id})`);
-        profileIdMap.set(profile.id, authUser.user.id);
+        testIds.profiles.push(authUser.user.id);
+        profile.id = authUser.user.id;
       } else {
         console.error(`[TEST_DB] No user data returned from auth.admin.createUser for ${profile.id}`);
         throw new Error(`No user data returned from auth.admin.createUser for ${profile.id}`);
@@ -597,9 +604,9 @@ export async function createTestProfiles(profiles: Array<{ id: string; full_name
     // Give the trigger a moment to work
     await new Promise(resolve => setTimeout(resolve, 100));
     
-    // Create profile objects with the actual user IDs
+    // At this point, profiles array has been updated with actual user IDs
     const actualProfiles = profiles.map(p => ({
-      id: profileIdMap.get(p.id) || p.id,
+      id: p.id,
       full_name: p.full_name
     }));
     
@@ -638,14 +645,8 @@ export async function createTestProfiles(profiles: Array<{ id: string; full_name
     
     console.log(`[TEST_DB] Successfully created/updated ${profiles.length} test profiles`);
     
-    // Update the original profiles array with the actual user IDs for caller convenience
-    for (let i = 0; i < profiles.length; i++) {
-      const actualId = profileIdMap.get(profiles[i].id);
-      if (actualId && actualId !== profiles[i].id) {
-        console.log(`[TEST_DB] Updated profile ID ${profiles[i].id} -> ${actualId}`);
-        profiles[i].id = actualId;
-      }
-    }
+    // Profile IDs have already been updated in the loop above
+    console.log(`[TEST_DB] Profile IDs updated: ${profiles.map(p => p.id).join(', ')}`);
     
   } catch (error) {
     console.error('[TEST_DB] Profile creation failed:', error);
@@ -663,13 +664,9 @@ export async function createTestProfiles(profiles: Array<{ id: string; full_name
  */
 export async function disconnectDb(): Promise<void> {
   try {
-    if (testClient || serviceRoleClient) {
-      // Supabase client doesn't have an explicit disconnect method
-      // but we can reset our references to allow garbage collection
-      testClient = null;
-      serviceRoleClient = null;
-      console.log('[TEST_DB] Disconnected from test database');
-    }
+    // With factory pattern, there are no persistent client references to clean up
+    // Supabase clients are garbage collected automatically when they go out of scope
+    console.log('[TEST_DB] Disconnected from test database (factory pattern - no cleanup needed)');
   } catch (error) {
     console.error('[TEST_DB] Error during disconnection:', error);
     throw new Error(`Failed to disconnect from database: ${error instanceof Error ? error.message : 'Unknown error'}`);

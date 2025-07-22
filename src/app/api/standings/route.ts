@@ -3,7 +3,7 @@ import { calculateStandings, UserStandingEntry } from '@/services/standingsServi
 import { cupActivationStatusChecker } from '@/services/cup/cupActivationStatusChecker';
 import { getCupStandings, CupStandingsRow } from '@/services/cup/cupScoringService';
 import { logger } from '@/utils/logger';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 
 // Ensure the route is treated as dynamic to prevent caching issues
 export const dynamic = 'force-dynamic';
@@ -171,7 +171,7 @@ async function enhanceStandingsWithUserProfiles(standings: CupStandingsRow[]): P
     const userIds = standings.map(standing => standing.user_id);
 
     // Fetch user profiles
-    const supabase = getSupabaseServiceRoleClient();
+    const supabase = createSupabaseServiceRoleClient();
     const { data: profiles, error } = await supabase
       .from('profiles')
       .select('id, full_name, avatar_url')

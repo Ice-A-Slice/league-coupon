@@ -1,6 +1,6 @@
 import 'server-only';
 import { logger } from '@/utils/logger';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { Database } from '@/types/supabase';
 import { calculateStandings } from './standingsService';
@@ -40,7 +40,7 @@ export class WinnerDeterminationService {
   private client: DatabaseClient;
 
   constructor(client?: DatabaseClient) {
-    this.client = client || getSupabaseServiceRoleClient();
+    this.client = client || createSupabaseServiceRoleClient();
   }
 
   /**
@@ -239,12 +239,12 @@ export class WinnerDeterminationService {
         total_points: winner.total_points
       }));
 
-      // Use upsert to handle idempotency
+      // Use upsert with correct constraint name from test database
       const { error } = await this.client
         .from('season_winners')
         .upsert(winnerRecords, {
-          onConflict: 'season_id,user_id',
-          ignoreDuplicates: false // Update existing records with new data
+          onConflict: 'season_id, user_id, competition_type',
+          ignoreDuplicates: false
         });
 
       if (error) {

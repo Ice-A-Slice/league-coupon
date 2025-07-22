@@ -76,10 +76,42 @@ describe('POST /api/bets', () => {
   });
 
   it('should return 200 OK on successful bet submission for an open round', async () => {
+    // Get fixtures that are part of a betting round
+    const { data: bettingRounds } = await client
+      .from('betting_rounds')
+      .select('*, betting_round_fixtures(fixture_id)')
+      .eq('status', 'open')
+      .limit(1)
+      .single();
+    
+    console.log('[DEBUG] Betting round:', bettingRounds);
+    
+    if (!bettingRounds || !bettingRounds.betting_round_fixtures || bettingRounds.betting_round_fixtures.length < 2) {
+      // If no betting round fixtures, get fixtures and create the link
+      const { data: fixtures } = await client.from('fixtures').select('id').limit(2);
+      if (fixtures && fixtures.length >= 2 && bettingRounds) {
+        await client.from('betting_round_fixtures').insert([
+          { betting_round_id: bettingRounds.id, fixture_id: fixtures[0].id },
+          { betting_round_id: bettingRounds.id, fixture_id: fixtures[1].id }
+        ]);
+      }
+    }
+    
+    // Get the fixtures again
+    const { data: updatedRound } = await client
+      .from('betting_rounds')
+      .select('*, betting_round_fixtures(fixture_id)')
+      .eq('status', 'open')
+      .limit(1)
+      .single();
+    
+    const fixtureIds = updatedRound?.betting_round_fixtures?.map(bf => bf.fixture_id) || [];
+    console.log('[DEBUG] Fixture IDs in betting round:', fixtureIds);
+    
     const userId = testProfiles[0].id;
     const requestBody = [
-      { fixture_id: 1, prediction: '1' },
-      { fixture_id: 2, prediction: 'X' },
+      { fixture_id: fixtureIds[0], prediction: '1' },
+      { fixture_id: fixtureIds[1], prediction: 'X' },
     ];
 
     const mockSupabaseClient = createAuthenticatedMock(userId);
@@ -95,6 +127,10 @@ describe('POST /api/bets', () => {
 
     const response = await POST(request);
     const body = await response.json();
+    
+    // DEBUG: Log the response for debugging
+    console.log('[DEBUG] Response status:', response.status);
+    console.log('[DEBUG] Response body:', body);
 
     expect(response.status).toBe(200);
     expect(body.message).toBe('Bets submitted successfully!');
@@ -150,7 +186,12 @@ describe('POST /api/bets', () => {
   
   it('should return 403 Forbidden if kickoff time is in the past', async () => {
     const userId = testProfiles[0].id;
-    const fixtureIdInPast = 1;
+    
+    // Get the first fixture from the seeded data
+    const { data: fixture } = await client.from('fixtures').select('id').limit(1).single();
+    if (!fixture) throw new Error('No fixtures found in test data');
+    
+    const fixtureIdInPast = fixture.id;
 
     // Manually set a fixture's kickoff to the past and update the betting round
     const pastKickoff = new Date();
@@ -160,11 +201,19 @@ describe('POST /api/bets', () => {
       .update({ kickoff_time: pastKickoff.toISOString() })
       .eq('id', fixtureIdInPast);
 
-    // Also update the betting round's earliest_fixture_kickoff to be in the past
+    // Get the betting round that contains this fixture and update its earliest_fixture_kickoff
+    const { data: bettingRound } = await client
+      .from('betting_round_fixtures')
+      .select('betting_round_id')
+      .eq('fixture_id', fixtureIdInPast)
+      .single();
+    
+    if (!bettingRound) throw new Error('No betting round found for fixture');
+    
     await client
       .from('betting_rounds')
       .update({ earliest_fixture_kickoff: pastKickoff.toISOString() })
-      .eq('id', 1);
+      .eq('id', bettingRound.betting_round_id);
 
     const requestBody = [{ fixture_id: fixtureIdInPast, prediction: '1' }];
 

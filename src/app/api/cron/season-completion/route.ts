@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { SeasonCompletionDetectorService } from '@/services/seasonCompletionDetectorService';
 import { WinnerDeterminationService, WinnerDeterminationResult } from '@/services/winnerDeterminationService';
 import { logger } from '@/utils/logger';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { revalidatePath } from 'next/cache';
 import { startCronExecution, completeCronExecution } from '@/utils/cron/alerts';
 
@@ -52,7 +52,7 @@ export async function GET(request: Request) {
 
   try {
     // Initialize Supabase service role client for both services
-    const serviceRoleClient = getSupabaseServiceRoleClient();
+    const serviceRoleClient = createSupabaseServiceRoleClient();
     
     // Initialize the season completion detector service
     const detectorService = new SeasonCompletionDetectorService(serviceRoleClient);

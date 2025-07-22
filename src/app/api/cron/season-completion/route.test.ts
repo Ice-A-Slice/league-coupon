@@ -26,7 +26,7 @@ import { GET } from './route';
 import { SeasonCompletionDetectorService } from '@/services/seasonCompletionDetectorService';
 import { WinnerDeterminationService } from '@/services/winnerDeterminationService';
 import { logger } from '@/utils/logger';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 
 const mockSeasonCompletionDetectorService = {
   detectAndMarkCompletedSeasons: jest.fn(),
@@ -56,7 +56,7 @@ describe('/api/cron/season-completion', () => {
     jest.mocked(logger).warn = mockLogger.warn;
     
     // Mock service role client
-    (getSupabaseServiceRoleClient as jest.Mock).mockReturnValue({});
+    (createSupabaseServiceRoleClient as jest.Mock).mockReturnValue({});
     
     // Default mock for winner determination (no completed seasons to process)
     mockWinnerDeterminationService.determineWinnersForCompletedSeasons.mockResolvedValue([]);

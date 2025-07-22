@@ -1,6 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { Database } from '@/types/supabase';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { logger } from '@/utils/logger';
 
 /**
@@ -71,7 +71,7 @@ export class CupWinnerDeterminationService {
   private client: DatabaseClient;
 
   constructor(client?: DatabaseClient) {
-    this.client = client || getSupabaseServiceRoleClient();
+    this.client = client || createSupabaseServiceRoleClient();
   }
 
   // --- Subtask 1: Cup Standings Calculator ---
@@ -483,11 +483,11 @@ export class CupWinnerDeterminationService {
         competition_type: 'last_round_special' as const
       }));
 
-      // Use upsert to handle idempotency
+      // Use upsert with correct constraint name from test database
       const { error } = await this.client
         .from('season_winners')
         .upsert(winnerRecords, {
-          onConflict: 'season_id,user_id',
+          onConflict: 'season_id, user_id, competition_type',
           ignoreDuplicates: false
         });
 

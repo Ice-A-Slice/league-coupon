@@ -1,5 +1,6 @@
 import { CupWinnerDeterminationService } from '../cupWinnerDeterminationService';
-import { connectToTestDb, resetDatabase, disconnectDb, createTestProfiles } from '../../../../tests/utils/db';
+import { connectToTestDb, resetDatabase, disconnectDb, createTestProfiles, testIds } from '../../../../tests/utils/db';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { Database } from '@/types/supabase';
 
@@ -35,7 +36,9 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
   beforeEach(async () => {
     // Reset database and seed with test data before each test
     await resetDatabase(true);
-    service = new CupWinnerDeterminationService(client);
+    // Use service role client for the service to match production behavior
+    const serviceRoleClient = createSupabaseServiceRoleClient();
+    service = new CupWinnerDeterminationService(serviceRoleClient);
     jest.clearAllMocks();
   });
 
@@ -45,6 +48,9 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
 
   // Helper function to set up test data for cup standings calculation
   async function setupCupStandingsTestData() {
+    // Use service role client for data insertion to match service expectations
+    const serviceRoleClient = createSupabaseServiceRoleClient();
+    
     // Create test profiles
     const profilesToCreate = [
       { id: '550e8400-e29b-41d4-a716-446655440001', full_name: 'Alice' },
@@ -57,9 +63,10 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
     // Get the actual user IDs (they get updated in the array)
     const profiles = profilesToCreate;
 
-    // Create cup points data in user_last_round_special_points table
-    const { data: round } = await client.from('betting_rounds').select('id').limit(1).single();
-    if (!round) throw new Error('No betting round found in test data');
+    // Use the actual IDs from testIds instead of hardcoded values
+    if (!testIds.season || testIds.bettingRounds.length < 2) {
+      throw new Error('Test data not properly seeded - missing season or betting rounds');
+    }
 
     // Set up cup points for test scenario:
     // Alice: 30 points (2 rounds) - winner
@@ -68,19 +75,19 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
     // Diana: 10 points (1 round)
     const cupPointsData = [
       // Alice: 15 + 15 = 30 points
-      { user_id: profiles[0].id, points: 15, betting_round_id: 1, season_id: 1 },
-      { user_id: profiles[0].id, points: 15, betting_round_id: 2, season_id: 1 },
+      { user_id: profiles[0].id, points: 15, betting_round_id: testIds.bettingRounds[0], season_id: testIds.season },
+      { user_id: profiles[0].id, points: 15, betting_round_id: testIds.bettingRounds[1], season_id: testIds.season },
       // Bob: 10 + 15 = 25 points
-      { user_id: profiles[1].id, points: 10, betting_round_id: 1, season_id: 1 },
-      { user_id: profiles[1].id, points: 15, betting_round_id: 2, season_id: 1 },
+      { user_id: profiles[1].id, points: 10, betting_round_id: testIds.bettingRounds[0], season_id: testIds.season },
+      { user_id: profiles[1].id, points: 15, betting_round_id: testIds.bettingRounds[1], season_id: testIds.season },
       // Charlie: 25 points (1 round)
-      { user_id: profiles[2].id, points: 25, betting_round_id: 2, season_id: 1 },
+      { user_id: profiles[2].id, points: 25, betting_round_id: testIds.bettingRounds[1], season_id: testIds.season },
       // Diana: 10 points (1 round)
-      { user_id: profiles[3].id, points: 10, betting_round_id: 1, season_id: 1 },
+      { user_id: profiles[3].id, points: 10, betting_round_id: testIds.bettingRounds[0], season_id: testIds.season },
     ];
 
-    // Insert cup points
-    const { error: cupError } = await client
+    // Insert cup points using service role client to ensure visibility
+    const { error: cupError } = await serviceRoleClient
       .from('user_last_round_special_points')
       .insert(cupPointsData);
     
@@ -92,10 +99,11 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
   }
 
   describe('calculateCupStandings', () => {
-    const seasonId = 1;
+    let seasonId: number;
 
     it('should calculate standings with proper ranking and tie handling', async () => {
       const { profiles } = await setupCupStandingsTestData();
+      seasonId = testIds.season!;
 
       const result = await service.calculateCupStandings(seasonId);
 
@@ -128,6 +136,7 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
     });
 
     it('should handle no participants scenario', async () => {
+      seasonId = testIds.season!;
       // Don't create any test data - empty scenario
       const result = await service.calculateCupStandings(seasonId);
       expect(result.standings).toHaveLength(0);
@@ -135,6 +144,7 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
     });
 
     it('should handle invalid season ID gracefully', async () => {
+      seasonId = testIds.season!;
       await setupCupStandingsTestData();
       
       const result = await service.calculateCupStandings(999); // Invalid season ID
@@ -143,6 +153,7 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
     });
 
     it('should handle null points values', async () => {
+      seasonId = testIds.season!;
       // Create test profiles
       const profilesToCreate = [
         { id: '550e8400-e29b-41d4-a716-446655440001', full_name: 'Alice' }
@@ -153,7 +164,7 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
       const { error: cupError } = await client
         .from('user_last_round_special_points')
         .insert([
-          { user_id: profilesToCreate[0].id, points: 0, betting_round_id: 1, season_id: seasonId }
+          { user_id: profilesToCreate[0].id, points: 0, betting_round_id: testIds.bettingRounds[0], season_id: seasonId }
         ]);
       
       if (cupError) {
@@ -167,6 +178,7 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
     });
 
     it('should handle missing profile information', async () => {
+      seasonId = testIds.season!;
       const profilesToCreate = [
         { id: '550e8400-e29b-41d4-a716-446655440001', full_name: null } // null name
       ];
@@ -176,7 +188,7 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
       const { error: cupError } = await client
         .from('user_last_round_special_points')
         .insert([
-          { user_id: profilesToCreate[0].id, points: 15, betting_round_id: 1, season_id: seasonId }
+          { user_id: profilesToCreate[0].id, points: 15, betting_round_id: testIds.bettingRounds[0], season_id: seasonId }
         ]);
       
       if (cupError) {
@@ -191,6 +203,7 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
     });
 
     it('should sort users with same points consistently by username', async () => {
+      seasonId = testIds.season!;
       // Create test profiles with names that will test alphabetical sorting
       const profilesToCreate = [
         { id: '550e8400-e29b-41d4-a716-446655440001', full_name: 'Zara' },
@@ -201,9 +214,9 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
       
       // Give all users the same points
       const cupPointsData = [
-        { user_id: profilesToCreate[0].id, points: 25, betting_round_id: 1, season_id: seasonId },
-        { user_id: profilesToCreate[1].id, points: 25, betting_round_id: 1, season_id: seasonId },
-        { user_id: profilesToCreate[2].id, points: 25, betting_round_id: 1, season_id: seasonId }
+        { user_id: profilesToCreate[0].id, points: 25, betting_round_id: testIds.bettingRounds[0], season_id: seasonId },
+        { user_id: profilesToCreate[1].id, points: 25, betting_round_id: testIds.bettingRounds[0], season_id: seasonId },
+        { user_id: profilesToCreate[2].id, points: 25, betting_round_id: testIds.bettingRounds[0], season_id: seasonId }
       ];
 
       const { error: cupError } = await client
@@ -296,9 +309,10 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
   });
 
   describe('determineCupWinners', () => {
-    const seasonId = 1;
+    let seasonId: number;
 
     it('should return existing winners if already determined (idempotency)', async () => {
+      seasonId = testIds.season!;
       // Set up test data and determine winners first time
       await setupCupStandingsTestData();
       
@@ -322,6 +336,7 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
 
     it('should determine new winners successfully', async () => {
       const { profiles } = await setupCupStandingsTestData();
+      seasonId = testIds.season!;
 
       const result = await service.determineCupWinners(seasonId);
 
@@ -344,6 +359,7 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
     });
 
     it('should handle no participants scenario (edge case)', async () => {
+      seasonId = testIds.season!;
       // Don't create any test data
       const result = await service.determineCupWinners(seasonId);
 
@@ -357,6 +373,7 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
       // Instead of trying to force a database error, we'll test that the method
       // completes successfully and handles the normal flow properly
       await setupCupStandingsTestData();
+      seasonId = testIds.season!;
 
       const result = await service.determineCupWinners(seasonId);
       
@@ -366,6 +383,7 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
     });
 
     it('should handle all zero scores scenario (edge case)', async () => {
+      seasonId = testIds.season!;
       // Create profiles with zero points
       const profilesToCreate = [
         { id: '550e8400-e29b-41d4-a716-446655440001', full_name: 'Alice' },
@@ -375,8 +393,8 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
       
       // Insert zero points
       const cupPointsData = [
-        { user_id: profilesToCreate[0].id, points: 0, betting_round_id: 1, season_id: seasonId },
-        { user_id: profilesToCreate[1].id, points: 0, betting_round_id: 1, season_id: seasonId }
+        { user_id: profilesToCreate[0].id, points: 0, betting_round_id: testIds.bettingRounds[0], season_id: seasonId },
+        { user_id: profilesToCreate[1].id, points: 0, betting_round_id: testIds.bettingRounds[0], season_id: seasonId }
       ];
 
       await client.from('user_last_round_special_points').insert(cupPointsData);
@@ -398,16 +416,21 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
 
   describe('determineCupWinnersForCompletedSeasons', () => {
     it('should process multiple eligible seasons', async () => {
-      // Mark season 1 as completed and cup-activated
+      // Get the seeded season ID and mark as completed and cup-activated
+      const { data: season } = await client.from('seasons').select('id').limit(1).single();
+      if (!season) throw new Error('No season found in test data');
+      
+      const seasonId = season.id;
+      
       await client
         .from('seasons')
         .update({ 
           completed_at: new Date().toISOString(),
           last_round_special_activated: true 
         })
-        .eq('id', 1);
+        .eq('id', seasonId);
 
-      // Setup test data for season 1
+      // Setup test data for the actual season
       await setupCupStandingsTestData();
 
       // Check if we can find the season we just updated
@@ -421,7 +444,7 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
       const results = await service.determineCupWinnersForCompletedSeasons();
 
       expect(results).toHaveLength(1);
-      expect(results[0].seasonId).toBe(1);
+      expect(results[0].seasonId).toBe(seasonId);
       expect(results[0].errors).toHaveLength(0);
       expect(results[0].winners).toHaveLength(1);
     });
@@ -433,18 +456,23 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
     });
 
     it('should skip seasons that already have winners', async () => {
-      // Mark season as completed and cup-activated
+      // Get the seeded season ID and mark as completed and cup-activated
+      const { data: season } = await client.from('seasons').select('id').limit(1).single();
+      if (!season) throw new Error('No season found in test data');
+      
+      const seasonId = season.id;
+      
       await client
         .from('seasons')
         .update({ 
           completed_at: new Date().toISOString(),
           last_round_special_activated: true 
         })
-        .eq('id', 1);
+        .eq('id', seasonId);
 
       // Setup test data and determine winners
       await setupCupStandingsTestData();
-      await service.determineCupWinners(1);
+      await service.determineCupWinners(seasonId);
 
       // Run batch processing
       const results = await service.determineCupWinnersForCompletedSeasons();
@@ -461,27 +489,39 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
     });
 
     it('should continue processing other seasons if one fails', async () => {
-      // Mark multiple seasons as completed
+      // Get existing season from test data  
+      const { data: existingSeasons } = await client.from('seasons').select('*');
+      
+      if (!existingSeasons || existingSeasons.length === 0) {
+        throw new Error('No seasons found in test data');
+      }
+      
+      const firstSeasonId = existingSeasons[0].id;
+      const competitionId = existingSeasons[0].competition_id;
+      
+      // Mark first season as completed
       await client
         .from('seasons')
         .update({ 
           completed_at: new Date().toISOString(),
           last_round_special_activated: true 
         })
-        .eq('id', 1);
+        .eq('id', firstSeasonId);
 
-      await client
+      // Insert a second season with proper competition_id
+      const { data: newSeason } = await client
         .from('seasons')
         .insert({
-          id: 2,
           api_season_year: 2025,
-          competition_id: 1,
+          competition_id: competitionId,
           name: '2025 Season',
           completed_at: new Date().toISOString(),
           last_round_special_activated: true
-        });
+        })
+        .select()
+        .single();
 
-      // Setup valid data for season 1
+      // Setup valid data for first season
       await setupCupStandingsTestData();
 
       // Don't setup data for season 2 - it should still process but with no participants
@@ -489,10 +529,10 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
       const results = await service.determineCupWinnersForCompletedSeasons();
 
       expect(results).toHaveLength(2);
-      expect(results[0].seasonId).toBe(1);
+      expect(results[0].seasonId).toBe(firstSeasonId);
       expect(results[0].winners).toHaveLength(1);
       
-      expect(results[1].seasonId).toBe(2);
+      expect(results[1].seasonId).toBe(newSeason!.id);
       expect(results[1].winners).toHaveLength(0); // No participants
     });
   });
@@ -514,16 +554,16 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
       // Charlie: 25 points (3rd)
       // Diana & Eve: 20 points (tied for 4th)
       const cupPointsData = [
-        { user_id: profilesToCreate[0].id, points: 30, betting_round_id: 1, season_id: 1 },
-        { user_id: profilesToCreate[1].id, points: 30, betting_round_id: 1, season_id: 1 },
-        { user_id: profilesToCreate[2].id, points: 25, betting_round_id: 1, season_id: 1 },
-        { user_id: profilesToCreate[3].id, points: 20, betting_round_id: 1, season_id: 1 },
-        { user_id: profilesToCreate[4].id, points: 20, betting_round_id: 1, season_id: 1 }
+        { user_id: profilesToCreate[0].id, points: 30, betting_round_id: testIds.bettingRounds[0], season_id: testIds.season! },
+        { user_id: profilesToCreate[1].id, points: 30, betting_round_id: testIds.bettingRounds[0], season_id: testIds.season! },
+        { user_id: profilesToCreate[2].id, points: 25, betting_round_id: testIds.bettingRounds[0], season_id: testIds.season! },
+        { user_id: profilesToCreate[3].id, points: 20, betting_round_id: testIds.bettingRounds[0], season_id: testIds.season! },
+        { user_id: profilesToCreate[4].id, points: 20, betting_round_id: testIds.bettingRounds[0], season_id: testIds.season! }
       ];
 
       await client.from('user_last_round_special_points').insert(cupPointsData);
 
-      const result = await service.determineCupWinners(1);
+      const result = await service.determineCupWinners(testIds.season!);
 
       expect(result.winners).toHaveLength(2); // Both tied winners
       expect(result.totalParticipants).toBe(5);
@@ -537,7 +577,7 @@ describe('CupWinnerDeterminationService Integration Tests', () => {
 
     it('should maintain data consistency across standings calculation and winner determination', async () => {
       await setupCupStandingsTestData();
-      const seasonId = 1;
+      const seasonId = testIds.season!;
 
       // Test calculateCupStandings independently
       const standings = await service.calculateCupStandings(seasonId);

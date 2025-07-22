@@ -1,7 +1,7 @@
 import { type SupabaseClient } from '@supabase/supabase-js';
 import { calculateStandings } from '@/services/standingsService';
 import { logger } from '@/utils/logger';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import type { Database } from '@/types/supabase';
 
 // ===== TYPE DEFINITIONS =====
@@ -111,7 +111,7 @@ export class UserDataAggregationService {
   private client: SupabaseClient<Database>;
 
   constructor(client?: SupabaseClient<Database>) {
-    this.client = client || getSupabaseServiceRoleClient();
+    this.client = client || createSupabaseServiceRoleClient();
   }
 
   /**

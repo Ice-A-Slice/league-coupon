@@ -99,10 +99,12 @@ describe('Database Test Utilities', () => {
       // Note: Profiles are not seeded automatically due to RLS constraints
       // Individual tests should create profiles as needed
 
-      // Check fixtures
+      // Check fixtures - seedTestData creates 4 fixtures
       const { data: fixtures } = await client.from('fixtures').select('*');
-      expect(fixtures?.length).toBe(3);
-      expect(fixtures?.[0].status_short).toBe('NS'); // Not Started, as seeded
+      expect(fixtures?.length).toBe(4);
+      // Three fixtures are 'NS' (Not Started) and one is 'FT' (Match Finished)
+      const notStartedFixtures = fixtures?.filter(f => f.status_short === 'NS');
+      expect(notStartedFixtures?.length).toBe(3);
     });
   });
 

@@ -67,6 +67,7 @@
     "gradient-string": "^3.0.0",
     "helmet": "^8.1.0",
     "inquirer": "^12.5.0",
+    "jsonwebtoken": "^9.0.2",
     "lodash.debounce": "^4.0.8",
     "lru-cache": "^10.2.0",
     "lucide-react": "^0.488.0",
@@ -81,7 +82,8 @@
     "sonner": "^2.0.3",
     "tailwind-merge": "^3.2.0",
     "tailwindcss-animate": "^1.0.7",
-    "tw-animate-css": "^1.2.5"
+    "tw-animate-css": "^1.2.5",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

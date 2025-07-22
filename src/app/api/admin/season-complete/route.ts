@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { SeasonCompletionDetectorService } from '@/services/seasonCompletionDetectorService';
 import { WinnerDeterminationService } from '@/services/winnerDeterminationService';
 import { logger } from '@/utils/logger';
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create Supabase client
-    const supabase = getSupabaseServiceRoleClient();
+    const supabase = createSupabaseServiceRoleClient();
 
     // Check if season exists and get its current status
     const { data: season, error: seasonError } = await supabase

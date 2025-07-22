@@ -1,4 +1,4 @@
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { logger } from '@/utils/logger';
 
 // Define the structure for the aggregated points data
@@ -17,7 +17,7 @@ export interface UserPoints {
  */
 export async function aggregateUserPoints(): Promise<UserPoints[] | null> {
   logger.info('Aggregating total points per user via RPC and joining with profiles...');
-  const serviceRoleClient = getSupabaseServiceRoleClient();
+  const serviceRoleClient = createSupabaseServiceRoleClient();
 
   try {
     // 1. Fetch game points from the RPC
@@ -185,7 +185,7 @@ export async function getUserDynamicQuestionnairePoints(): Promise<Map<string, n
   const loggerContext = { service: 'StandingsService', function: 'getUserDynamicQuestionnairePoints' };
   logger.info(loggerContext, 'Attempting to fetch dynamic questionnaire points...');
   // console.log('[INFO]', loggerContext, 'Attempting to fetch dynamic questionnaire points...');
-  const client = getSupabaseServiceRoleClient();
+  const client = createSupabaseServiceRoleClient();
 
   try {
     // Step 1: Find the most recently scored round_id

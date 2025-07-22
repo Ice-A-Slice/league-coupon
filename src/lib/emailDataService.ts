@@ -25,7 +25,7 @@ import { promptTemplateService } from '@/lib/promptTemplateService';
 // Import cup-related services for season finale detection
 import { cupActivationStatusChecker, type CupActivationStatus } from '@/services/cup/cupActivationStatusChecker';
 import { CupWinnerDeterminationService } from '@/services/cup/cupWinnerDeterminationService';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 
 // Re-export types for external use
 export type { SummaryEmailProps };
@@ -450,7 +450,7 @@ export class EmailDataService {
 
     // Check if the season containing this round is completed
     try {
-      const supabase = getSupabaseServiceRoleClient();
+      const supabase = createSupabaseServiceRoleClient();
       const { data: roundLink } = await supabase
         .from('betting_round_fixtures')
         .select(`
@@ -501,7 +501,7 @@ export class EmailDataService {
       }
 
       // Get cup standings and winners for activated cups
-      const cupService = new CupWinnerDeterminationService(getSupabaseServiceRoleClient());
+      const cupService = new CupWinnerDeterminationService(createSupabaseServiceRoleClient());
       
       // Get cup standings
       const standingsResult = await cupService.calculateCupStandings(cupStatus.seasonId);
@@ -516,7 +516,7 @@ export class EmailDataService {
       cupData.totalParticipants = standingsResult.standings.length;
 
       // Check if season is completed and get winners
-      const supabase = getSupabaseServiceRoleClient();
+      const supabase = createSupabaseServiceRoleClient();
       const { data: season } = await supabase
         .from('seasons')
         .select('completed_at')
@@ -594,7 +594,7 @@ export class EmailDataService {
       let seasonId: number | undefined;
       if (isSeasonFinale && roundId) {
         try {
-          const supabase = getSupabaseServiceRoleClient();
+          const supabase = createSupabaseServiceRoleClient();
           const { data: roundLink } = await supabase
             .from('betting_round_fixtures')
             .select(`

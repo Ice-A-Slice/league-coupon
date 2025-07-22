@@ -112,7 +112,19 @@ describe('WinnerDeterminationService Integration Tests', () => {
   }
 
   describe('determineSeasonWinners', () => {
-    const seasonId = 1;
+    let seasonId: number;
+    
+    beforeEach(async () => {
+      // Get the actual season ID from the seeded data
+      const { data: season } = await client
+        .from('seasons')
+        .select('id')
+        .eq('is_current', true)
+        .single();
+      
+      if (!season) throw new Error('No current season found in test data');
+      seasonId = season.id;
+    });
 
     it('should return existing winners if already determined integration', async () => {
       // Setup: Insert an existing winner
@@ -283,35 +295,46 @@ describe('WinnerDeterminationService Integration Tests', () => {
 
   describe('determineWinnersForCompletedSeasons', () => {
     it('should process multiple completed seasons successfully integration', async () => {
-      // Setup: Mark seasons as completed
+      // Get existing season from test data
+      const { data: existingSeasons } = await client.from('seasons').select('*');
+      
+      if (!existingSeasons || existingSeasons.length === 0) {
+        throw new Error('No seasons found in test data');
+      }
+      
+      const firstSeasonId = existingSeasons[0].id;
+      const competitionId = existingSeasons[0].competition_id;
+      
+      // Setup: Mark first season as completed
       await client
         .from('seasons')
         .update({ completed_at: new Date().toISOString() })
-        .eq('id', 1);
+        .eq('id', firstSeasonId);
 
-      // Insert a second season
-      await client
+      // Insert a second season with proper competition_id
+      const { data: newSeason } = await client
         .from('seasons')
         .insert({
-          id: 2,
           api_season_year: 2025,
-          competition_id: 1,
+          competition_id: competitionId,
           name: '2025 Season',
           completed_at: new Date().toISOString()
-        });
+        })
+        .select()
+        .single();
 
-      // Setup test data for season 1
+      // Setup test data for first season
       await setupStandingsTestData();
 
       const results = await service.determineWinnersForCompletedSeasons();
 
       expect(results).toHaveLength(2);
-      expect(results[0].seasonId).toBe(1);
+      expect(results[0].seasonId).toBe(firstSeasonId);
       expect(results[0].errors).toHaveLength(0);
       expect(results[0].winners).toHaveLength(1);
       
       // Season 2 gets the same global standings as Season 1 (calculateStandings doesn't filter by season)
-      expect(results[1].seasonId).toBe(2);
+      expect(results[1].seasonId).toBe(newSeason!.id);
       expect(results[1].errors).toHaveLength(0); // No error because global standings are returned
       expect(results[1].winners).toHaveLength(1); // Same winner as Season 1
 
@@ -322,8 +345,8 @@ describe('WinnerDeterminationService Integration Tests', () => {
         .order('season_id');
 
       expect(allWinners).toHaveLength(2);
-      expect(allWinners![0].season_id).toBe(1);
-      expect(allWinners![1].season_id).toBe(2);
+      expect(allWinners![0].season_id).toBe(firstSeasonId);
+      expect(allWinners![1].season_id).toBe(newSeason!.id);
     });
 
     it('should return empty array when no completed seasons found integration', async () => {
@@ -333,23 +356,35 @@ describe('WinnerDeterminationService Integration Tests', () => {
     });
 
     it('should handle individual season processing errors and continue with others integration', async () => {
-      // Setup: Mark seasons as completed
+      // Get existing season from test data
+      const { data: existingSeasons } = await client.from('seasons').select('*');
+      
+      if (!existingSeasons || existingSeasons.length === 0) {
+        throw new Error('No seasons found in test data');
+      }
+      
+      const firstSeasonId = existingSeasons[0].id;
+      const competitionId = existingSeasons[0].competition_id;
+      
+      // Setup: Mark first season as completed
       await client
         .from('seasons')
         .update({ completed_at: new Date().toISOString() })
-        .eq('id', 1);
+        .eq('id', firstSeasonId);
 
-      await client
+      // Insert a second season with proper competition_id
+      const { data: newSeason } = await client
         .from('seasons')
         .insert({
-          id: 2,
           api_season_year: 2025,
-          competition_id: 1,
+          competition_id: competitionId,
           name: '2025 Season',
           completed_at: new Date().toISOString()
-        });
+        })
+        .select()
+        .single();
 
-      // Setup data for season 2 (both seasons will get the same global standings)
+      // Setup data for seasons (both seasons will get the same global standings)
       await setupStandingsTestData();
 
       const results = await service.determineWinnersForCompletedSeasons();
@@ -357,23 +392,24 @@ describe('WinnerDeterminationService Integration Tests', () => {
       expect(results).toHaveLength(2);
       
       // Both seasons get the same global standings (calculateStandings doesn't filter by season)
-      expect(results[0].seasonId).toBe(1);
+      expect(results[0].seasonId).toBe(firstSeasonId);
       expect(results[0].errors).toHaveLength(0); // No error because global standings are returned
       expect(results[0].winners).toHaveLength(1); // Same winner as Season 2
       
       // Second season gets the same global standings
-      expect(results[1].seasonId).toBe(2);
+      expect(results[1].seasonId).toBe(newSeason!.id);
       expect(results[1].errors).toHaveLength(0);
       expect(results[1].winners).toHaveLength(1);
 
       // Verify both seasons have winners (same winner for both)
       const { data: winners } = await client
         .from('season_winners')
-        .select('*');
+        .select('*')
+        .order('season_id');
 
       expect(winners).toHaveLength(2);
-      expect(winners![0].season_id).toBe(1);
-      expect(winners![1].season_id).toBe(2);
+      expect(winners![0].season_id).toBe(firstSeasonId);
+      expect(winners![1].season_id).toBe(newSeason!.id);
     });
   });
 }); 

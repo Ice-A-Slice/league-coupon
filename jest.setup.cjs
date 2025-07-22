@@ -35,6 +35,39 @@ jest.mock('next/navigation', () => ({
   usePathname: () => '/',
 }));
 
+// Add Response.json polyfill for Node.js test environment
+if (!global.Response || !global.Response.json) {
+  global.Response = class Response {
+    constructor(body, init = {}) {
+      this.body = body;
+      this.status = init.status || 200;
+      this.statusText = init.statusText || 'OK';
+      this.headers = new Map(Object.entries(init.headers || {}));
+      this.ok = this.status >= 200 && this.status < 300;
+    }
+
+    static json(data, init = {}) {
+      return new Response(JSON.stringify(data), {
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          'Content-Type': 'application/json',
+          ...init.headers,
+        },
+        ...init,
+      });
+    }
+
+    async json() {
+      return JSON.parse(this.body);
+    }
+
+    async text() {
+      return this.body;
+    }
+  };
+}
+
 // Mock ResizeObserver which is not available in the jsdom environment
 global.ResizeObserver = class ResizeObserver {
   constructor(callback) {

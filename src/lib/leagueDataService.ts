@@ -632,8 +632,8 @@ export class LeagueDataServiceImpl implements ILeagueDataService {
       
       // TEST OVERRIDE: Return both Salah and Haaland as tied top scorers for testing multiple correct answers
       if (competitionApiId === 39 && seasonYear === 2024) {
-        console.log('🧪 TEST OVERRIDE: Returning both Salah (306) and Haaland (307) as tied top scorers');
-        return [306, 307]; // Salah and Haaland API IDs
+        console.log('🧪 TEST OVERRIDE: Returning both Salah (184) and Haaland (276) as tied top scorers');
+        return [184, 276]; // Salah and Haaland API IDs that exist in our database
       }
       
       // Use existing API client to fetch all top scorers data

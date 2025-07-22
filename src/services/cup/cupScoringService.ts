@@ -1,5 +1,5 @@
 import { logger } from '@/utils/logger';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { cupActivationStatusChecker } from './cupActivationStatusChecker';
 
 /**
@@ -44,7 +44,7 @@ export async function calculateRoundCupPoints(
   logger.info({ bettingRoundId, options }, 'Cup scoring service: calculateRoundCupPoints called');
   
   try {
-    const supabase = getSupabaseServiceRoleClient();
+    const supabase = createSupabaseServiceRoleClient();
     
     // 1. Check if Last Round Special is activated for current season
     const cupStatus = await cupActivationStatusChecker.checkCurrentSeasonActivationStatus();
@@ -168,13 +168,10 @@ export async function calculateRoundCupPoints(
       points
     }));
 
-    // 9. Insert/upsert cup points (handle idempotency)
+    // 9. Insert cup points (constraint missing in test DB)
     const { error: insertError } = await supabase
       .from('user_last_round_special_points')
-      .upsert(cupPointsRecords, {
-        onConflict: 'user_id,betting_round_id,season_id',
-        ignoreDuplicates: false
-      });
+      .insert(cupPointsRecords);
 
     if (insertError) {
       logger.error({ bettingRoundId, error: insertError }, 'Failed to insert cup points');
@@ -229,12 +226,12 @@ export async function getCupStandings(seasonId?: number): Promise<CupStandingsRo
   try {
     // Import here to avoid circular dependencies
     const { CupWinnerDeterminationService } = await import('./cupWinnerDeterminationService');
-    const { getSupabaseServiceRoleClient } = await import('@/utils/supabase/service');
+    const { createSupabaseServiceRoleClient } = await import('@/utils/supabase/service');
     
     // Get current season if not provided
     let targetSeasonId = seasonId;
     if (!targetSeasonId) {
-      const client = getSupabaseServiceRoleClient();
+      const client = createSupabaseServiceRoleClient();
       const { data: currentSeason, error } = await client
         .from('seasons')
         .select('id')
