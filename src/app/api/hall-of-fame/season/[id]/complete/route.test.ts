@@ -1,359 +1,256 @@
+/**
+ * @jest-environment node
+ */
+import { NextRequest } from 'next/server';
 import { GET } from './route';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import {
+  connectToTestDb,
+  resetDatabase,
+  disconnectDb,
+  createTestProfiles,
+  testIds,
+} from '../../../../../../../tests/utils/db';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { Database } from '@/types/supabase';
 
-// Mock the dependencies
-jest.mock('@/utils/supabase/service');
-jest.mock('@/utils/logger', () => ({
-  logger: {
-    info: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
-    warn: jest.fn(),
-  },
+// Mock next/cache since we don't need it for testing
+jest.mock('next/cache', () => ({
+  revalidatePath: jest.fn()
 }));
 
-// Mock NextResponse
-jest.mock('next/server', () => ({
-  NextResponse: {
-    json: jest.fn((body: unknown, init?: { status?: number; headers?: Record<string, string> }) => ({
-      status: init?.status ?? 200,
-      body,
-      headers: {
-        get: jest.fn((name: string) => {
-          if (name === 'Cache-Control' && init?.headers?.['Cache-Control']) {
-            return init.headers['Cache-Control'];
-          }
-          return null;
-        }),
-      },
-      json: async () => body,
-    })),
-  },
-}));
-
-// Mock crypto.randomUUID properly
+// Mock crypto.randomUUID for consistent test output
 Object.defineProperty(global, 'crypto', {
   value: {
     randomUUID: jest.fn(() => 'test-uuid-123'),
   },
 });
 
-const mockSupabaseClient = {
-  from: jest.fn(() => ({
-    select: jest.fn(() => ({
-      eq: jest.fn(() => ({
-        single: jest.fn(),
-      })),
-    })),
-  })),
-};
+describe('/api/hall-of-fame/season/[id]/complete - Hall of Fame Season Complete API Integration Tests', () => {
+  let client: SupabaseClient<Database>;
+  let testProfiles: Array<{ id: string; full_name: string | null }>;
 
-beforeEach(() => {
-  jest.clearAllMocks();
-  (getSupabaseServiceRoleClient as jest.Mock).mockReturnValue(mockSupabaseClient);
-});
+  beforeAll(async () => {
+    client = await connectToTestDb();
+  });
 
-describe('/api/hall-of-fame/season/[id]/complete', () => {
-  const createMockRequest = (seasonId = '1') => {
+  beforeEach(async () => {
+    await resetDatabase(true);
+    
+    // Create test profiles for winners
+    testProfiles = [
+      { id: 'winner-user-1', full_name: 'John League Winner' },
+      { id: 'winner-user-2', full_name: 'Jane Cup Winner' },
+      { id: 'winner-user-3', full_name: 'Alex Legacy Winner' },
+    ];
+    await createTestProfiles(testProfiles);
+  });
+
+  afterAll(async () => {
+    await disconnectDb();
+  });
+
+  const createMockRequest = (seasonId: string) => {
     const url = `http://localhost/api/hall-of-fame/season/${seasonId}/complete`;
-    return new Request(url);
+    return new NextRequest(url, { method: 'GET' });
   };
 
   const createMockParams = (id: string) => Promise.resolve({ id });
 
-  describe('GET /api/hall-of-fame/season/[id]/complete', () => {
-    it('should return complete season data with both league and cup winners', async () => {
-      // Mock season data
-      const mockSeasonData = {
-        id: 1,
-        name: 'Premier League 2021/22',
-        api_season_year: 2021,
-        start_date: '2021-08-01',
-        end_date: '2022-05-31',
-        completed_at: '2022-05-31T23:59:59Z',
-        winner_determined_at: '2022-06-01T00:00:00Z',
-        last_round_special_activated: true,
-        last_round_special_activated_at: '2022-04-01T00:00:00Z',
-        competition: {
-          id: 7,
-          name: 'Premier League',
-          country_name: 'England',
-          logo_url: 'https://example.com/logo.png'
-        }
-      };
+  const createSeasonWinners = async (seasonId: number, scenarios: 'both' | 'league-only' | 'cup-only' | 'none' | 'legacy') => {
+    const winners = [];
 
-      // Mock winners data
-      const mockWinnersData = [
+    if (scenarios === 'both') {
+      winners.push(
         {
-          id: 1,
-          season_id: 1,
-          user_id: 'user-1',
-          league_id: 7,
+          season_id: seasonId,
+          user_id: testProfiles[0].id,
+          league_id: testIds.competition!,
           total_points: 167,
           game_points: 137,
           dynamic_points: 30,
-          created_at: '2022-06-01T00:00:00Z',
           competition_type: 'league',
-          profile: {
-            id: 'user-1',
-            full_name: 'Heimir Þorsteinsson',
-            avatar_url: null,
-            updated_at: '2022-06-01T00:00:00Z'
-          }
         },
         {
-          id: 2,
-          season_id: 1,
-          user_id: 'user-1',
-          league_id: 7,
+          season_id: seasonId,
+          user_id: testProfiles[1].id,
+          league_id: testIds.competition!,
           total_points: 45,
           game_points: 45,
           dynamic_points: 0,
-          created_at: '2022-06-01T00:00:00Z',
           competition_type: 'last_round_special',
-          profile: {
-            id: 'user-1',
-            full_name: 'Heimir Þorsteinsson',
-            avatar_url: null,
-            updated_at: '2022-06-01T00:00:00Z'
-          }
         }
-      ];
-
-      // Setup mocks
-      mockSupabaseClient.from.mockImplementation((table: string) => {
-        if (table === 'seasons') {
-          return {
-            select: jest.fn(() => ({
-              eq: jest.fn(() => ({
-                single: jest.fn(() => Promise.resolve({ data: mockSeasonData, error: null }))
-              }))
-            }))
-          };
-        } else if (table === 'season_winners') {
-          return {
-            select: jest.fn(() => ({
-              eq: jest.fn(() => Promise.resolve({ data: mockWinnersData, error: null }))
-            }))
-          };
-        }
-        return mockSupabaseClient;
+      );
+    } else if (scenarios === 'league-only') {
+      winners.push({
+        season_id: seasonId,
+        user_id: testProfiles[0].id,
+        league_id: testIds.competition!,
+        total_points: 165,
+        game_points: 135,
+        dynamic_points: 30,
+        competition_type: 'league',
       });
+    } else if (scenarios === 'cup-only') {
+      winners.push({
+        season_id: seasonId,
+        user_id: testProfiles[1].id,
+        league_id: testIds.competition!,
+        total_points: 50,
+        game_points: 50,
+        dynamic_points: 0,
+        competition_type: 'last_round_special',
+      });
+    } else if (scenarios === 'legacy') {
+      // Legacy data without competition_type (should default to league)
+      winners.push({
+        season_id: seasonId,
+        user_id: testProfiles[2].id,
+        league_id: testIds.competition!,
+        total_points: 150,
+        game_points: 120,
+        dynamic_points: 30,
+        competition_type: null, // Legacy data
+      });
+    }
 
-      const request = createMockRequest('1');
-      const params = createMockParams('1');
+    if (winners.length > 0) {
+      await client
+        .from('season_winners')
+        .insert(winners);
+    }
+  };
+
+  const updateSeasonCupStatus = async (seasonId: number, activated: boolean) => {
+    await client
+      .from('seasons')
+      .update({
+        last_round_special_activated: activated,
+        last_round_special_activated_at: activated ? '2024-04-01T00:00:00Z' : null,
+      })
+      .eq('id', seasonId);
+  };
+
+  const markSeasonCompleted = async (seasonId: number, completed = true) => {
+    await client
+      .from('seasons')
+      .update({
+        completed_at: completed ? '2024-05-31T23:59:59Z' : null,
+        winner_determined_at: completed ? '2024-06-01T00:00:00Z' : null,
+      })
+      .eq('id', seasonId);
+  };
+
+  describe('GET /api/hall-of-fame/season/[id]/complete', () => {
+    it('should return complete season data with both league and cup winners', async () => {
+      const seasonId = testIds.season!;
+      
+      // Setup: Mark season completed, activate cup, create both winners
+      await markSeasonCompleted(seasonId, true);
+      await updateSeasonCupStatus(seasonId, true);
+      await createSeasonWinners(seasonId, 'both');
+
+      const request = createMockRequest(seasonId.toString());
+      const params = createMockParams(seasonId.toString());
 
       const response = await GET(request, { params });
       const responseData = await response.json();
 
       expect(response.status).toBe(200);
-      expect(responseData.data.season_id).toBe(1);
-      expect(responseData.data.league_winner).not.toBeNull();
-      expect(responseData.data.cup_winner).not.toBeNull();
-      expect(responseData.data.league_winner?.competition_type).toBe('league');
-      expect(responseData.data.cup_winner?.competition_type).toBe('last_round_special');
+      expect(responseData.data.season_id).toBe(seasonId);
+      expect(responseData.data.league_winners).toHaveLength(1);
+      expect(responseData.data.cup_winners).toHaveLength(1);
+      
+      // Check league winner
+      expect(responseData.data.league_winners[0].competition_type).toBe('league');
+      expect(responseData.data.league_winners[0].profile.full_name).toBe('John League Winner');
+      expect(responseData.data.league_winners[0].total_points).toBe(167);
+      
+      // Check cup winner
+      expect(responseData.data.cup_winners[0].competition_type).toBe('last_round_special');
+      expect(responseData.data.cup_winners[0].profile.full_name).toBe('Jane Cup Winner');
+      expect(responseData.data.cup_winners[0].total_points).toBe(45);
+      
+      // Check season data
       expect(responseData.data.season.last_round_special_activated).toBe(true);
-      expect(responseData.metadata.has_league_winner).toBe(true);
-      expect(responseData.metadata.has_cup_winner).toBe(true);
+      expect(responseData.data.season.completed_at).toBeTruthy();
+      
+      // Check metadata
+      expect(responseData.metadata.has_league_winners).toBe(true);
+      expect(responseData.metadata.has_cup_winners).toBe(true);
+      expect(responseData.metadata.league_winners_count).toBe(1);
+      expect(responseData.metadata.cup_winners_count).toBe(1);
       expect(responseData.metadata.cup_was_activated).toBe(true);
     });
 
     it('should return season with only league winner when cup was not activated', async () => {
-      const mockSeasonData = {
-        id: 2,
-        name: 'Premier League 2020/21',
-        api_season_year: 2020,
-        start_date: '2020-08-01',
-        end_date: '2021-05-31',
-        completed_at: '2021-05-31T23:59:59Z',
-        winner_determined_at: '2021-06-01T00:00:00Z',
-        last_round_special_activated: false,
-        last_round_special_activated_at: null,
-        competition: {
-          id: 7,
-          name: 'Premier League',
-          country_name: 'England',
-          logo_url: 'https://example.com/logo.png'
-        }
-      };
+      const seasonId = testIds.season!;
+      
+      // Setup: Mark season completed, no cup activation, create league winner only
+      await markSeasonCompleted(seasonId, true);
+      await updateSeasonCupStatus(seasonId, false);
+      await createSeasonWinners(seasonId, 'league-only');
 
-      const mockWinnersData = [
-        {
-          id: 3,
-          season_id: 2,
-          user_id: 'user-2',
-          league_id: 7,
-          total_points: 165,
-          game_points: 135,
-          dynamic_points: 30,
-          created_at: '2021-06-01T00:00:00Z',
-          competition_type: 'league',
-          profile: {
-            id: 'user-2',
-            full_name: 'Róbert Wessman',
-            avatar_url: null,
-            updated_at: '2021-06-01T00:00:00Z'
-          }
-        }
-      ];
-
-      mockSupabaseClient.from.mockImplementation((table: string) => {
-        if (table === 'seasons') {
-          return {
-            select: jest.fn(() => ({
-              eq: jest.fn(() => ({
-                single: jest.fn(() => Promise.resolve({ data: mockSeasonData, error: null }))
-              }))
-            }))
-          };
-        } else if (table === 'season_winners') {
-          return {
-            select: jest.fn(() => ({
-              eq: jest.fn(() => Promise.resolve({ data: mockWinnersData, error: null }))
-            }))
-          };
-        }
-        return mockSupabaseClient;
-      });
-
-      const request = createMockRequest('2');
-      const params = createMockParams('2');
+      const request = createMockRequest(seasonId.toString());
+      const params = createMockParams(seasonId.toString());
 
       const response = await GET(request, { params });
       const responseData = await response.json();
 
       expect(response.status).toBe(200);
-      expect(responseData.data.season_id).toBe(2);
-      expect(responseData.data.league_winner).not.toBeNull();
-      expect(responseData.data.cup_winner).toBeNull();
+      expect(responseData.data.season_id).toBe(seasonId);
+      expect(responseData.data.league_winners).toHaveLength(1);
+      expect(responseData.data.cup_winners).toHaveLength(0);
       expect(responseData.data.season.last_round_special_activated).toBe(false);
-      expect(responseData.metadata.has_league_winner).toBe(true);
-      expect(responseData.metadata.has_cup_winner).toBe(false);
+      
+      expect(responseData.metadata.has_league_winners).toBe(true);
+      expect(responseData.metadata.has_cup_winners).toBe(false);
       expect(responseData.metadata.cup_was_activated).toBe(false);
     });
 
     it('should return season with no winners when season is not completed', async () => {
-      const mockSeasonData = {
-        id: 3,
-        name: 'Premier League 2024/25',
-        api_season_year: 2024,
-        start_date: '2024-08-01',
-        end_date: '2025-05-31',
-        completed_at: null,
-        winner_determined_at: null,
-        last_round_special_activated: false,
-        last_round_special_activated_at: null,
-        competition: {
-          id: 7,
-          name: 'Premier League',
-          country_name: 'England',
-          logo_url: 'https://example.com/logo.png'
-        }
-      };
+      const seasonId = testIds.season!;
+      
+      // Setup: Season not completed (default state), no winners
+      await updateSeasonCupStatus(seasonId, false);
+      await createSeasonWinners(seasonId, 'none');
 
-      mockSupabaseClient.from.mockImplementation((table: string) => {
-        if (table === 'seasons') {
-          return {
-            select: jest.fn(() => ({
-              eq: jest.fn(() => ({
-                single: jest.fn(() => Promise.resolve({ data: mockSeasonData, error: null }))
-              }))
-            }))
-          };
-        } else if (table === 'season_winners') {
-          return {
-            select: jest.fn(() => ({
-              eq: jest.fn(() => Promise.resolve({ data: [], error: null }))
-            }))
-          };
-        }
-        return mockSupabaseClient;
-      });
-
-      const request = createMockRequest('3');
-      const params = createMockParams('3');
+      const request = createMockRequest(seasonId.toString());
+      const params = createMockParams(seasonId.toString());
 
       const response = await GET(request, { params });
       const responseData = await response.json();
 
       expect(response.status).toBe(200);
-      expect(responseData.data.season_id).toBe(3);
-      expect(responseData.data.league_winner).toBeNull();
-      expect(responseData.data.cup_winner).toBeNull();
+      expect(responseData.data.season_id).toBe(seasonId);
+      expect(responseData.data.league_winners).toHaveLength(0);
+      expect(responseData.data.cup_winners).toHaveLength(0);
       expect(responseData.data.season.completed_at).toBeNull();
-      expect(responseData.metadata.has_league_winner).toBe(false);
-      expect(responseData.metadata.has_cup_winner).toBe(false);
+      
+      expect(responseData.metadata.has_league_winners).toBe(false);
+      expect(responseData.metadata.has_cup_winners).toBe(false);
     });
 
     it('should handle legacy data without competition_type correctly', async () => {
-      const mockSeasonData = {
-        id: 4,
-        name: 'Premier League 2018/19',
-        api_season_year: 2018,
-        start_date: '2018-08-01',
-        end_date: '2019-05-31',
-        completed_at: '2019-05-31T23:59:59Z',
-        winner_determined_at: '2019-06-01T00:00:00Z',
-        last_round_special_activated: false,
-        last_round_special_activated_at: null,
-        competition: {
-          id: 7,
-          name: 'Premier League',
-          country_name: 'England',
-          logo_url: 'https://example.com/logo.png'
-        }
-      };
+      const seasonId = testIds.season!;
+      
+      // Setup: Legacy winner without competition_type
+      await markSeasonCompleted(seasonId, true);
+      await updateSeasonCupStatus(seasonId, false);
+      await createSeasonWinners(seasonId, 'legacy');
 
-      // Legacy data without competition_type (should default to league)
-      const mockWinnersData = [
-        {
-          id: 4,
-          season_id: 4,
-          user_id: 'user-3',
-          league_id: 7,
-          total_points: 150,
-          game_points: 120,
-          dynamic_points: 30,
-          created_at: '2019-06-01T00:00:00Z',
-          competition_type: null, // Legacy data
-          profile: {
-            id: 'user-3',
-            full_name: 'Alex Thompson',
-            avatar_url: null,
-            updated_at: '2019-06-01T00:00:00Z'
-          }
-        }
-      ];
-
-      mockSupabaseClient.from.mockImplementation((table: string) => {
-        if (table === 'seasons') {
-          return {
-            select: jest.fn(() => ({
-              eq: jest.fn(() => ({
-                single: jest.fn(() => Promise.resolve({ data: mockSeasonData, error: null }))
-              }))
-            }))
-          };
-        } else if (table === 'season_winners') {
-          return {
-            select: jest.fn(() => ({
-              eq: jest.fn(() => Promise.resolve({ data: mockWinnersData, error: null }))
-            }))
-          };
-        }
-        return mockSupabaseClient;
-      });
-
-      const request = createMockRequest('4');
-      const params = createMockParams('4');
+      const request = createMockRequest(seasonId.toString());
+      const params = createMockParams(seasonId.toString());
 
       const response = await GET(request, { params });
       const responseData = await response.json();
 
       expect(response.status).toBe(200);
-      expect(responseData.data.league_winner).not.toBeNull();
-      expect(responseData.data.cup_winner).toBeNull();
-      expect(responseData.data.league_winner?.competition_type).toBe('league');
+      expect(responseData.data.league_winners).toHaveLength(1);
+      expect(responseData.data.cup_winners).toHaveLength(0);
+      
+      // Legacy data should be treated as league winner
+      expect(responseData.data.league_winners[0].competition_type).toBe('league');
+      expect(responseData.data.league_winners[0].profile.full_name).toBe('Alex Legacy Winner');
     });
 
     it('should return 400 for invalid season ID', async () => {
@@ -390,24 +287,8 @@ describe('/api/hall-of-fame/season/[id]/complete', () => {
     });
 
     it('should return 404 when season does not exist', async () => {
-      mockSupabaseClient.from.mockImplementation((table: string) => {
-        if (table === 'seasons') {
-          return {
-            select: jest.fn(() => ({
-              eq: jest.fn(() => ({
-                single: jest.fn(() => Promise.resolve({ 
-                  data: null, 
-                  error: { code: 'PGRST116', message: 'No rows found' }
-                }))
-              }))
-            }))
-          };
-        }
-        return mockSupabaseClient;
-      });
-
-      const request = createMockRequest('999');
-      const params = createMockParams('999');
+      const request = createMockRequest('999999');
+      const params = createMockParams('999999');
 
       const response = await GET(request, { params });
       const responseData = await response.json();
@@ -416,130 +297,57 @@ describe('/api/hall-of-fame/season/[id]/complete', () => {
       expect(responseData.error).toBe('Season not found');
     });
 
-    it('should return 500 on database error for season fetch', async () => {
-      mockSupabaseClient.from.mockImplementation((table: string) => {
-        if (table === 'seasons') {
-          return {
-            select: jest.fn(() => ({
-              eq: jest.fn(() => ({
-                single: jest.fn(() => Promise.resolve({ 
-                  data: null, 
-                  error: { code: 'PGRST500', message: 'Database connection error' }
-                }))
-              }))
-            }))
-          };
-        }
-        return mockSupabaseClient;
-      });
-
-      const request = createMockRequest('1');
-      const params = createMockParams('1');
-
-      const response = await GET(request, { params });
-      const responseData = await response.json();
-
-      expect(response.status).toBe(500);
-      expect(responseData.error).toBe('Database error');
-      expect(responseData.details).toBe('Database connection error');
-    });
-
-    it('should return 500 on database error for winners fetch', async () => {
-      const mockSeasonData = {
-        id: 1,
-        name: 'Premier League 2021/22',
-        api_season_year: 2021,
-        start_date: '2021-08-01',
-        end_date: '2022-05-31',
-        completed_at: '2022-05-31T23:59:59Z',
-        winner_determined_at: '2022-06-01T00:00:00Z',
-        last_round_special_activated: true,
-        last_round_special_activated_at: '2022-04-01T00:00:00Z',
-        competition: {
-          id: 7,
-          name: 'Premier League',
-          country_name: 'England',
-          logo_url: 'https://example.com/logo.png'
-        }
-      };
-
-      mockSupabaseClient.from.mockImplementation((table: string) => {
-        if (table === 'seasons') {
-          return {
-            select: jest.fn(() => ({
-              eq: jest.fn(() => ({
-                single: jest.fn(() => Promise.resolve({ data: mockSeasonData, error: null }))
-              }))
-            }))
-          };
-        } else if (table === 'season_winners') {
-          return {
-            select: jest.fn(() => ({
-              eq: jest.fn(() => Promise.resolve({ 
-                data: null, 
-                error: { code: 'PGRST500', message: 'Winners fetch error' }
-              }))
-            }))
-          };
-        }
-        return mockSupabaseClient;
-      });
-
-      const request = createMockRequest('1');
-      const params = createMockParams('1');
-
-      const response = await GET(request, { params });
-      const responseData = await response.json();
-
-      expect(response.status).toBe(500);
-      expect(responseData.error).toBe('Database error');
-      expect(responseData.details).toBe('Winners fetch error');
-    });
-
     it('should include proper caching headers', async () => {
-      const mockSeasonData = {
-        id: 1,
-        name: 'Premier League 2021/22',
-        api_season_year: 2021,
-        start_date: '2021-08-01',
-        end_date: '2022-05-31',
-        completed_at: '2022-05-31T23:59:59Z',
-        winner_determined_at: '2022-06-01T00:00:00Z',
-        last_round_special_activated: false,
-        last_round_special_activated_at: null,
-        competition: {
-          id: 7,
-          name: 'Premier League',
-          country_name: 'England',
-          logo_url: 'https://example.com/logo.png'
-        }
-      };
+      const seasonId = testIds.season!;
 
-      mockSupabaseClient.from.mockImplementation((table: string) => {
-        if (table === 'seasons') {
-          return {
-            select: jest.fn(() => ({
-              eq: jest.fn(() => ({
-                single: jest.fn(() => Promise.resolve({ data: mockSeasonData, error: null }))
-              }))
-            }))
-          };
-        } else if (table === 'season_winners') {
-          return {
-            select: jest.fn(() => ({
-              eq: jest.fn(() => Promise.resolve({ data: [], error: null }))
-            }))
-          };
-        }
-        return mockSupabaseClient;
-      });
-
-      const request = createMockRequest('1');
-      const params = createMockParams('1');
+      const request = createMockRequest(seasonId.toString());
+      const params = createMockParams(seasonId.toString());
 
       const response = await GET(request, { params });
 
+      expect(response.status).toBe(200);
       expect(response.headers.get('Cache-Control')).toBe('public, max-age=300, stale-while-revalidate=600');
     });
+
+    it('should handle multiple winners of same type correctly', async () => {
+      const seasonId = testIds.season!;
+      
+      // Create multiple league winners (tied scenario)
+      await markSeasonCompleted(seasonId, true);
+      await client
+        .from('season_winners')
+        .insert([
+          {
+            season_id: seasonId,
+            user_id: testProfiles[0].id,
+            league_id: testIds.competition!,
+            total_points: 160,
+            game_points: 130,
+            dynamic_points: 30,
+            competition_type: 'league',
+          },
+          {
+            season_id: seasonId,
+            user_id: testProfiles[1].id,
+            league_id: testIds.competition!,
+            total_points: 160, // Same score - tied winners
+            game_points: 130,
+            dynamic_points: 30,
+            competition_type: 'league',
+          }
+        ]);
+
+      const request = createMockRequest(seasonId.toString());
+      const params = createMockParams(seasonId.toString());
+
+      const response = await GET(request, { params });
+      const responseData = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(responseData.data.league_winners).toHaveLength(2);
+      expect(responseData.data.cup_winners).toHaveLength(0);
+      expect(responseData.metadata.league_winners_count).toBe(2);
+      expect(responseData.metadata.cup_winners_count).toBe(0);
+    });
   });
-}); 
+});

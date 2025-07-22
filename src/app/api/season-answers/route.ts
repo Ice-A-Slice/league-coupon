@@ -3,7 +3,7 @@ import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import LeagueDataService from '@/lib/leagueDataService';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 
 // Types for transparency data
 interface UserPrediction {
@@ -42,7 +42,7 @@ interface PlayerData {
 }
 
 // Type for Supabase service role client
-type ServiceRoleClient = ReturnType<typeof getSupabaseServiceRoleClient>;
+type ServiceRoleClient = ReturnType<typeof createSupabaseServiceRoleClient>;
 
 // Zod schema for validating a single answer object in the request body.
 const answerSchema = z.object({
@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
         const { data, error: dbError } = await supabase
             .from('user_season_answers')
             .upsert(answersToUpsert, {
-                onConflict: 'user_id, season_id, question_type', // Specify conflict columns for upsert
+                onConflict: 'user_id,season_id,question_type'
             })
             .select(); // Optionally select the upserted data to return or log
 
@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
 export async function GET(_request: NextRequest) {
     try {
         // Use service role client for all database queries (bypasses RLS)
-        const serviceRoleClient = getSupabaseServiceRoleClient();
+        const serviceRoleClient = createSupabaseServiceRoleClient();
         
         // 1. Get current season
         const { data: currentSeason, error: seasonError } = await serviceRoleClient

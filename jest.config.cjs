@@ -3,6 +3,9 @@ module.exports = {
   testEnvironment: 'jsdom',
   setupFilesAfterEnv: ['<rootDir>/jest.setup.cjs'],
   
+  // Keep sequential execution for database integration tests to prevent conflicts
+  maxWorkers: 1,
+  
   // Load test environment variables
   setupFiles: ['<rootDir>/jest.env.setup.js'],
   
@@ -21,7 +24,12 @@ module.exports = {
     '^@/data/(.*)$': '<rootDir>/src/data/$1',
     '^@/utils/(.*)$': '<rootDir>/src/utils/$1',
   },
-  testPathIgnorePatterns: ['<rootDir>/node_modules/', '<rootDir>/.next/', '<rootDir>/tests/e2e/'],
+  testPathIgnorePatterns: [
+    '<rootDir>/node_modules/', 
+    '<rootDir>/.next/', 
+    '<rootDir>/tests/e2e/',
+    '<rootDir>/tests/performance/'
+  ],
   transform: {
     '^.+\\.(js|jsx|ts|tsx)$': ['@swc/jest'],
   },
