@@ -488,7 +488,7 @@ export async function seedHallOfFameData(client: SupabaseClient<Database>, profi
       {
         season_id: testIds.season!,
         user_id: profiles[0].id,
-        league_id: testIds.competition, // Use actual competition ID
+        league_id: testIds.competition!, // Use actual competition ID
         total_points: 150,
         game_points: 120,
         dynamic_points: 30,
@@ -498,7 +498,7 @@ export async function seedHallOfFameData(client: SupabaseClient<Database>, profi
       {
         season_id: testIds.season!,
         user_id: profiles[1].id,
-        league_id: testIds.competition, // Use actual competition ID
+        league_id: testIds.competition!, // Use actual competition ID
         total_points: 145,
         game_points: 115,
         dynamic_points: 30,

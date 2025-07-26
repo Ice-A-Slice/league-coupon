@@ -258,7 +258,7 @@ export async function getCupStandings(seasonId?: number): Promise<CupStandingsRo
     }
     
     // Convert to the expected format for the API
-    const standings: CupStandingsRow[] = standingsResult.standings.map((entry, index) => ({
+    const standings: CupStandingsRow[] = standingsResult.standings.map((entry, _index) => ({
       user_id: entry.user_id,
       total_points: entry.total_points,
       rounds_participated: entry.rounds_participated,

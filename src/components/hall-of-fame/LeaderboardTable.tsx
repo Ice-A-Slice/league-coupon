@@ -26,7 +26,7 @@ const calculateRankings = (players: PlayerStats[]): (PlayerStats & { rank: numbe
     return b.league_wins - a.league_wins; // Most league wins as tiebreaker
   });
 
-  const ranked = [];
+  const ranked: (PlayerStats & { rank: number })[] = [];
   let currentRank = 1;
 
   for (let i = 0; i < sorted.length; i++) {
@@ -189,7 +189,7 @@ const LeaderboardTable: React.FC<LeaderboardTableProps> = ({
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {rankedPlayers.map((player, index) => (
+              {rankedPlayers.map((player, _index) => (
                 <React.Fragment key={player.user.id}>
                   <tr 
                     className={cn(

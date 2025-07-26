@@ -47,8 +47,8 @@ describe('/api/season-answers - Season Answers API Integration Tests', () => {
   let client: SupabaseClient<Database>;
   let testProfiles: Array<{ id: string; full_name: string | null }>;
   // Variables not used in GET tests but needed for POST tests later
-  let testTeam: any;
-  let testPlayer: any;
+  let _testTeam: Database['public']['Tables']['teams']['Row'];
+  let _testPlayer: Database['public']['Tables']['players']['Row'];
 
   beforeAll(async () => {
     client = await connectToTestDb();
@@ -77,7 +77,7 @@ describe('/api/season-answers - Season Answers API Integration Tests', () => {
       .select()
       .single();
 
-    const { data: player2 } = await client
+    const { data: _player2 } = await client
       .from('players')
       .insert({
         api_player_id: 2,
@@ -100,7 +100,7 @@ describe('/api/season-answers - Season Answers API Integration Tests', () => {
       .select()
       .single();
 
-    const { data: team2 } = await client
+    const { data: _team2 } = await client
       .from('teams')
       .insert({
         api_team_id: 102,
@@ -111,8 +111,8 @@ describe('/api/season-answers - Season Answers API Integration Tests', () => {
       .single();
 
     // Set test variables for any remaining references (though GET tests don't use them)
-    testTeam = team1 || { id: testIds.teams[0], name: 'Fallback Team' };
-    testPlayer = player1 || { id: 999, name: 'Fallback Player' };
+    _testTeam = team1 || { id: testIds.teams[0], name: 'Fallback Team' };
+    _testPlayer = player1 || { id: 999, name: 'Fallback Player' };
   });
 
   afterAll(async () => {
@@ -127,7 +127,7 @@ describe('/api/season-answers - Season Answers API Integration Tests', () => {
       url.searchParams.append(key, value);
     });
 
-    const options: any = { method };
+    const options: RequestInit = { method };
     
     if (body && method === 'POST') {
       options.body = JSON.stringify(body);
@@ -139,11 +139,13 @@ describe('/api/season-answers - Season Answers API Integration Tests', () => {
     return new NextRequest(url, options);
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const mockCreateServerClient = require('@supabase/ssr').createServerClient as jest.MockedFunction<typeof import('@supabase/ssr').createServerClient>;
 
   // Helper function to create authenticated mock
   function createAuthenticatedMock(userId: string) {
     // Use service role client for database operations to bypass RLS
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const serviceRoleClient = require('@/utils/supabase/service').createSupabaseServiceRoleClient();
     
     return {
@@ -200,7 +202,7 @@ describe('/api/season-answers - Season Answers API Integration Tests', () => {
       ];
 
       const mockSupabaseClient = createAuthenticatedMock(userId);
-      mockCreateServerClient.mockReturnValue(mockSupabaseClient as any);
+      mockCreateServerClient.mockReturnValue(mockSupabaseClient as ReturnType<typeof import('@supabase/ssr').createServerClient>);
 
       const request = createMockRequest({}, requestBody, 'POST');
       const response = await POST(request);
@@ -211,6 +213,7 @@ describe('/api/season-answers - Season Answers API Integration Tests', () => {
       expect(responseData.data).toBeDefined();
 
       // Verify answers were saved to database (use service role client due to RLS)
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const serviceRoleClient = require('@/utils/supabase/service').createSupabaseServiceRoleClient();
       const { data: userAnswers, error } = await serviceRoleClient
         .from('user_season_answers')
@@ -226,7 +229,7 @@ describe('/api/season-answers - Season Answers API Integration Tests', () => {
 
     it('should return 401 Unauthorized for unauthenticated user', async () => {
       const mockSupabaseClient = createUnauthenticatedMock();
-      mockCreateServerClient.mockReturnValue(mockSupabaseClient as any);
+      mockCreateServerClient.mockReturnValue(mockSupabaseClient as ReturnType<typeof import('@supabase/ssr').createServerClient>);
 
       const requestBody = [
         { question_type: 'league_winner', answered_team_id: testIds.teams[0], answered_player_id: null },
@@ -243,7 +246,7 @@ describe('/api/season-answers - Season Answers API Integration Tests', () => {
     it('should return 400 for invalid request body', async () => {
       const userId = testProfiles[0].id;
       const mockSupabaseClient = createAuthenticatedMock(userId);
-      mockCreateServerClient.mockReturnValue(mockSupabaseClient as any);
+      mockCreateServerClient.mockReturnValue(mockSupabaseClient as ReturnType<typeof import('@supabase/ssr').createServerClient>);
 
       const invalidRequestBody = { not: 'an-array' }; // Should be array
 
@@ -259,7 +262,7 @@ describe('/api/season-answers - Season Answers API Integration Tests', () => {
     it('should return 400 for empty request body', async () => {
       const userId = testProfiles[0].id;
       const mockSupabaseClient = createAuthenticatedMock(userId);
-      mockCreateServerClient.mockReturnValue(mockSupabaseClient as any);
+      mockCreateServerClient.mockReturnValue(mockSupabaseClient as ReturnType<typeof import('@supabase/ssr').createServerClient>);
 
       const request = createMockRequest({}, [], 'POST');
       const response = await POST(request);
@@ -272,7 +275,7 @@ describe('/api/season-answers - Season Answers API Integration Tests', () => {
     it('should handle database errors gracefully', async () => {
       const userId = 'non-existent-user'; // User ID that doesn't exist in database
       const mockSupabaseClient = createAuthenticatedMock(userId);
-      mockCreateServerClient.mockReturnValue(mockSupabaseClient as any);
+      mockCreateServerClient.mockReturnValue(mockSupabaseClient as ReturnType<typeof import('@supabase/ssr').createServerClient>);
 
       const requestBody = [
         { question_type: 'league_winner', answered_team_id: 999999, answered_player_id: null }, // Invalid team ID
@@ -297,7 +300,7 @@ describe('/api/season-answers - Season Answers API Integration Tests', () => {
       ];
 
       const mockSupabaseClient = createAuthenticatedMock(userId);
-      mockCreateServerClient.mockReturnValue(mockSupabaseClient as any);
+      mockCreateServerClient.mockReturnValue(mockSupabaseClient as ReturnType<typeof import('@supabase/ssr').createServerClient>);
 
       const firstRequest = createMockRequest({}, firstRequestBody, 'POST');
       const firstResponse = await POST(firstRequest);
@@ -314,6 +317,7 @@ describe('/api/season-answers - Season Answers API Integration Tests', () => {
       expect(secondResponse.status).toBe(200);
 
       // Verify only one answer exists and it's the updated one (use service role client due to RLS)
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const serviceRoleClient = require('@/utils/supabase/service').createSupabaseServiceRoleClient();
       const { data: userAnswers, error } = await serviceRoleClient
         .from('user_season_answers')
@@ -331,6 +335,7 @@ describe('/api/season-answers - Season Answers API Integration Tests', () => {
   describe('GET /api/season-answers', () => {
     it('should return transparency data successfully', async () => {
       // Use service role client to query profiles (matches the route behavior)
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const serviceRoleClient = require('@/utils/supabase/service').createSupabaseServiceRoleClient();
       const { data: actualProfiles, error: profileError } = await serviceRoleClient
         .from('profiles')
@@ -397,7 +402,7 @@ describe('/api/season-answers - Season Answers API Integration Tests', () => {
       expect(Array.isArray(data.currentAnswers)).toBe(true);
       
       // Should have current answers for all question types
-      const questionTypes = data.currentAnswers.map((answer: any) => answer.question_type);
+      const questionTypes = data.currentAnswers.map((answer: Database['public']['Tables']['user_season_answers']['Row']) => answer.question_type);
       expect(questionTypes).toContain('league_winner');
       expect(questionTypes).toContain('top_scorer');
       expect(questionTypes).toContain('best_goal_difference');
@@ -423,7 +428,7 @@ describe('/api/season-answers - Season Answers API Integration Tests', () => {
       expect(data.userPredictions).toHaveLength(2); // Still shows all users
       
       // All answers should be null
-      data.userPredictions.forEach((prediction: any) => {
+      data.userPredictions.forEach((prediction: Record<string, unknown>) => {
         expect(prediction.league_winner).toBeNull();
         expect(prediction.top_scorer).toBeNull();
         expect(prediction.best_goal_difference).toBeNull();

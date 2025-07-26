@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
   
   try {
     requestId = crypto.randomUUID();
-  } catch (error) {
+  } catch (_error) {
     requestId = 'test-' + Math.random().toString(36).substr(2, 9);
   }
 
@@ -207,9 +207,9 @@ export async function GET(request: NextRequest) {
     const resultCount = hallOfFameData?.length || 0;
 
     const processingTime = Date.now() - startTime;
-    const totalPages = Math.ceil(total / limit);
-    const currentPage = Math.floor(offset / limit) + 1;
-    const hasMore = offset + resultCount < total;
+    const _totalPages = Math.ceil(total / limit);
+    const _currentPage = Math.floor(offset / limit) + 1;
+    const _hasMore = offset + resultCount < total;
 
     logger.info('Admin HallOfFame API: Successfully retrieved data', {
       requestId,
@@ -241,10 +241,10 @@ export async function GET(request: NextRequest) {
         'Expires': '0'
       }
     });
-  } catch (error) {
+  } catch (_error) {
     const processingTime = Date.now() - startTime;
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const errorStack = error instanceof Error ? error.stack : undefined;
+    const errorMessage = _error instanceof Error ? _error.message : 'Unknown error';
+    const errorStack = _error instanceof Error ? _error.stack : undefined;
     
     logger.error('Admin HallOfFame API: Unexpected error', {
       requestId,
@@ -279,7 +279,7 @@ export async function POST(request: NextRequest) {
   
   try {
     requestId = crypto.randomUUID();
-  } catch (error) {
+  } catch (_error) {
     requestId = 'test-' + Math.random().toString(36).substr(2, 9);
   }
 
@@ -473,11 +473,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response);
 
-  } catch (error) {
+  } catch (_error) {
     logger.error('Admin HallOfFame API: Unexpected error in POST', {
       requestId,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined
+      error: _error instanceof Error ? _error.message : 'Unknown error',
+      stack: _error instanceof Error ? _error.stack : undefined
     });
 
     return NextResponse.json(
@@ -503,7 +503,7 @@ export async function DELETE(request: NextRequest) {
   
   try {
     requestId = crypto.randomUUID();
-  } catch (error) {
+  } catch (_error) {
     requestId = 'test-' + Math.random().toString(36).substr(2, 9);
   }
 
@@ -682,11 +682,11 @@ export async function DELETE(request: NextRequest) {
     // Invalidate cache for both paths
     revalidatePath('/api/hall-of-fame');
 
-  } catch (error) {
+  } catch (_error) {
     logger.error('Admin HallOfFame API: Unexpected error in DELETE', {
       requestId,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined
+      error: _error instanceof Error ? _error.message : 'Unknown error',
+      stack: _error instanceof Error ? _error.stack : undefined
     });
 
     return NextResponse.json(
