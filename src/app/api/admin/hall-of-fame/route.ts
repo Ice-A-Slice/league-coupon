@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { logger } from '@/utils/logger';
 import { revalidatePath } from 'next/cache';
 
@@ -33,7 +33,13 @@ function isAuthenticated(request: NextRequest): boolean {
  */
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
-  const requestId = crypto.randomUUID();
+  let requestId: string;
+  
+  try {
+    requestId = crypto.randomUUID();
+  } catch (_error) {
+    requestId = 'test-' + Math.random().toString(36).substr(2, 9);
+  }
 
   try {
     logger.info('Admin HallOfFame API: Processing GET request', {
@@ -54,51 +60,160 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // TEMPORARY: Return static data for now to get API working
-    // TODO: Replace with real database queries once dev database is available
-    const mockData = [
-      {
-        id: 1,
-        season_id: 1,
-        user_id: 'user-1',
-        league_id: 39,
-        total_points: 150,
-        game_points: 120,
-        dynamic_points: 30,
-        created_at: '2023-01-01T00:00:00Z',
-        season: {
-          id: 1,
-          name: 'Premier League 2022/23',
-          api_season_year: 2022,
-          start_date: '2022-08-01',
-          end_date: '2023-05-31',
-          completed_at: '2023-05-31T23:59:59Z',
-          winner_determined_at: '2023-06-01T00:00:00Z',
-          competition: {
-            id: 39,
-            name: 'Premier League',
-            country_name: 'England',
-            logo_url: 'https://example.com/logo.png'
-          }
-        },
-        user: {
-          id: 'user-1',
-          full_name: 'John Doe',
-          avatar_url: null,
-          updated_at: '2023-01-01T00:00:00Z'
-        }
+    // Get URL parameters for filtering and pagination
+    const { searchParams } = new URL(request.url);
+    const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 200);
+    const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0);
+    const competitionId = searchParams.get('competition_id');
+    const competitionType = searchParams.get('competition_type') || 'all';
+    const seasonId = searchParams.get('season_id');
+    const userId = searchParams.get('user_id');
+    const sort = searchParams.get('sort') || 'newest';
+
+    // Create Supabase client
+    const supabase = createSupabaseServiceRoleClient();
+
+    // Build the query with proper joins
+    let query = supabase
+      .from('season_winners')
+      .select(`
+        id,
+        season_id,
+        user_id,
+        league_id,
+        total_points,
+        game_points,
+        dynamic_points,
+        created_at,
+        competition_type,
+        season:seasons!inner(
+          id,
+          name,
+          api_season_year,
+          start_date,
+          end_date,
+          completed_at,
+          winner_determined_at,
+          competition:competitions!inner(
+            id,
+            name,
+            country_name,
+            logo_url
+          )
+        ),
+        user:profiles!inner(
+          id,
+          full_name,
+          avatar_url,
+          updated_at
+        )
+      `);
+
+    // Apply filters
+    if (competitionType !== 'all') {
+      if (competitionType === 'league') {
+        query = query.or('competition_type.eq.league,competition_type.is.null');
+      } else {
+        query = query.eq('competition_type', competitionType);
       }
-    ];
+    }
+
+    if (competitionId) {
+      query = query.eq('league_id', parseInt(competitionId));
+    }
+
+    if (seasonId) {
+      query = query.eq('season_id', parseInt(seasonId));
+    }
+
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    // Apply sorting
+    switch (sort) {
+      case 'oldest':
+        query = query.order('created_at', { ascending: true });
+        break;
+      case 'points_desc':
+        query = query.order('total_points', { ascending: false });
+        break;
+      case 'points_asc':
+        query = query.order('total_points', { ascending: true });
+        break;
+      case 'newest':
+      default:
+        query = query.order('created_at', { ascending: false });
+        break;
+    }
+
+    // Get total count for pagination
+    let countQuery = supabase
+      .from('season_winners')
+      .select('*', { count: 'exact', head: true });
+
+    // Apply same filters to count query
+    if (competitionType !== 'all') {
+      if (competitionType === 'league') {
+        countQuery = countQuery.or('competition_type.eq.league,competition_type.is.null');
+      } else {
+        countQuery = countQuery.eq('competition_type', competitionType);
+      }
+    }
+
+    if (competitionId) {
+      countQuery = countQuery.eq('league_id', parseInt(competitionId));
+    }
+
+    if (seasonId) {
+      countQuery = countQuery.eq('season_id', parseInt(seasonId));
+    }
+
+    if (userId) {
+      countQuery = countQuery.eq('user_id', userId);
+    }
+
+    // Execute queries
+    const [{ data: hallOfFameData, error: dataError }, { count, error: countError }] = await Promise.all([
+      query.range(offset, offset + limit - 1),
+      countQuery
+    ]);
+
+    if (dataError) {
+      logger.error('Admin HallOfFame API: Database error fetching data', {
+        requestId,
+        error: dataError.message,
+        code: dataError.code
+      });
+      return NextResponse.json(
+        { error: 'Database error', details: dataError.message },
+        { status: 500 }
+      );
+    }
+
+    if (countError) {
+      logger.error('Admin HallOfFame API: Database error fetching count', {
+        requestId,
+        error: countError.message,
+        code: countError.code
+      });
+      return NextResponse.json(
+        { error: 'Database error', details: countError.message },
+        { status: 500 }
+      );
+    }
+
+    const total = count || 0;
+    const resultCount = hallOfFameData?.length || 0;
 
     const processingTime = Date.now() - startTime;
-    const count = mockData.length;
-    const total = mockData.length;
-    const _limit = 20;
-    const _offset = 0;
+    const _totalPages = Math.ceil(total / limit);
+    const _currentPage = Math.floor(offset / limit) + 1;
+    const _hasMore = offset + resultCount < total;
 
     logger.info('Admin HallOfFame API: Successfully retrieved data', {
       requestId,
-      resultCount: count,
+      resultCount,
       totalCount: total,
       processingTime
     });
@@ -107,18 +222,17 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: mockData,
+      data: hallOfFameData || [],
       pagination: {
-        total_items: mockData.length,
-        total_pages: 1,
-        current_page: 1,
-        page_size: mockData.length,
-        has_more: false
+        offset,
+        limit,
+        total,
+        count: resultCount
       },
       metadata: {
         timestamp,
         processing_time_ms: processingTime,
-        environment: 'development'
+        environment: process.env.NODE_ENV || 'development'
       }
     }, {
       headers: {
@@ -127,13 +241,15 @@ export async function GET(request: NextRequest) {
         'Expires': '0'
       }
     });
-  } catch (error) {
+  } catch (_error) {
     const processingTime = Date.now() - startTime;
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage = _error instanceof Error ? _error.message : 'Unknown error';
+    const errorStack = _error instanceof Error ? _error.stack : undefined;
     
     logger.error('Admin HallOfFame API: Unexpected error', {
       requestId,
       error: errorMessage,
+      stack: errorStack,
       processingTime
     });
 
@@ -159,7 +275,13 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
-  const requestId = crypto.randomUUID();
+  let requestId: string;
+  
+  try {
+    requestId = crypto.randomUUID();
+  } catch (_error) {
+    requestId = 'test-' + Math.random().toString(36).substr(2, 9);
+  }
 
   try {
     logger.info('Admin HallOfFame API: Processing POST request', {
@@ -187,8 +309,10 @@ export async function POST(request: NextRequest) {
       total_points, 
       game_points, 
       dynamic_points, 
+      competition_type = 'league',
       override_existing = false 
     } = body;
+
 
     // Validate required fields
     if (!season_id || !user_id || total_points === undefined) {
@@ -198,7 +322,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseServiceRoleClient();
+    const supabase = createSupabaseServiceRoleClient();
 
     // Check if season exists
     const { data: season, error: seasonError } = await supabase
@@ -238,12 +362,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if winner already exists
+    // Check if winner already exists (filter by season_id AND competition_type AND user_id)
     const { data: existingWinner, error: _existingError } = await supabase
       .from('season_winners')
       .select('id')
       .eq('season_id', season_id)
-      .single();
+      .eq('competition_type', competition_type)
+      .eq('user_id', user_id)
+      .maybeSingle(); // Use maybeSingle() instead of single() to handle no results
+
 
     if (existingWinner && !override_existing) {
       logger.warn('Admin HallOfFame API: Winner already exists', {
@@ -265,6 +392,7 @@ export async function POST(request: NextRequest) {
       total_points,
       game_points: game_points || 0,
       dynamic_points: dynamic_points || 0,
+      competition_type,
       created_at: new Date().toISOString()
     };
 
@@ -345,11 +473,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response);
 
-  } catch (error) {
+  } catch (_error) {
     logger.error('Admin HallOfFame API: Unexpected error in POST', {
       requestId,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined
+      error: _error instanceof Error ? _error.message : 'Unknown error',
+      stack: _error instanceof Error ? _error.stack : undefined
     });
 
     return NextResponse.json(
@@ -371,7 +499,13 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   const startTime = Date.now();
-  const requestId = crypto.randomUUID();
+  let requestId: string;
+  
+  try {
+    requestId = crypto.randomUUID();
+  } catch (_error) {
+    requestId = 'test-' + Math.random().toString(36).substr(2, 9);
+  }
 
   try {
     logger.info('Admin HallOfFame API: Processing DELETE request', {
@@ -395,6 +529,12 @@ export async function DELETE(request: NextRequest) {
     const body = await request.json();
     const { winner_id, season_id, soft_delete: _soft_delete = false } = body;
 
+    logger.info('Admin HallOfFame API: DELETE body received', { 
+      requestId, 
+      winner_id, 
+      season_id 
+    });
+
     if (!winner_id && !season_id) {
       return NextResponse.json(
         { error: 'Either winner_id or season_id must be provided' },
@@ -402,7 +542,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseServiceRoleClient();
+    const supabase = createSupabaseServiceRoleClient();
 
     // Find the winner entry
     let query = supabase
@@ -411,70 +551,142 @@ export async function DELETE(request: NextRequest) {
 
     if (winner_id) {
       query = query.eq('id', winner_id);
+      logger.info('Admin HallOfFame API: Searching by winner_id', { requestId, winner_id });
     } else if (season_id) {
       query = query.eq('season_id', season_id);
+      logger.info('Admin HallOfFame API: Searching by season_id', { requestId, season_id });
     }
 
-    const { data: winner, error: findError } = await query.single();
-
-    if (findError || !winner) {
-      logger.error('Admin HallOfFame API: Winner not found', {
-        requestId,
-        winnerId: winner_id,
-        seasonId: season_id,
-        error: findError?.message
+    // For season_id, we might have multiple winners (league + last_round_special)
+    // so we need to handle both single and multiple results
+    if (season_id) {
+      const { data: winners, error: findError } = await query;
+      
+      logger.info('Admin HallOfFame API: Query result (season_id)', { 
+        requestId, 
+        foundWinners: winners?.length || 0,
+        findError: findError?.message 
       });
-      return NextResponse.json(
-        { error: 'Winner not found' },
-        { status: 404 }
-      );
-    }
 
-    // Delete the winner
-    const { error: deleteError } = await supabase
-      .from('season_winners')
-      .delete()
-      .eq('id', winner.id);
+      if (findError || !winners || winners.length === 0) {
+        logger.error('Admin HallOfFame API: Winner not found', {
+          requestId,
+          winnerId: winner_id,
+          seasonId: season_id,
+          error: findError?.message
+        });
+        return NextResponse.json(
+          { error: 'Winner not found' },
+          { status: 404 }
+        );
+      }
 
-    if (deleteError) {
-      logger.error('Admin HallOfFame API: Error deleting winner', {
+      // Delete all winners for the season
+      const { error: deleteError } = await supabase
+        .from('season_winners')
+        .delete()
+        .eq('season_id', season_id);
+
+      if (deleteError) {
+        logger.error('Admin HallOfFame API: Error deleting winners', {
+          requestId,
+          seasonId: season_id,
+          error: deleteError.message
+        });
+        return NextResponse.json(
+          { error: 'Failed to delete winners', details: deleteError.message },
+          { status: 500 }
+        );
+      }
+
+      logger.info('Admin HallOfFame API: Winners deleted successfully', {
+        requestId,
+        seasonId: season_id,
+        deletedCount: winners.length
+      });
+
+      const response = {
+        message: 'Winners deleted successfully',
+        deleted_winners: winners,
+        metadata: {
+          requestId,
+          timestamp: new Date().toISOString(),
+          processingTime: Date.now() - startTime
+        }
+      };
+
+      return NextResponse.json(response);
+      
+    } else {
+      // For winner_id, expect exactly one result
+      const { data: winner, error: findError } = await query.single();
+
+      logger.info('Admin HallOfFame API: Query result (winner_id)', { 
+        requestId, 
+        foundWinner: !!winner,
+        winnerId: winner?.id,
+        findError: findError?.message 
+      });
+
+      if (findError || !winner) {
+        logger.error('Admin HallOfFame API: Winner not found', {
+          requestId,
+          winnerId: winner_id,
+          seasonId: season_id,
+          error: findError?.message
+        });
+        return NextResponse.json(
+          { error: 'Winner not found' },
+          { status: 404 }
+        );
+      }
+
+      // Delete the single winner
+      const { error: deleteError } = await supabase
+        .from('season_winners')
+        .delete()
+        .eq('id', winner.id);
+
+      if (deleteError) {
+        logger.error('Admin HallOfFame API: Error deleting winner', {
+          requestId,
+          winnerId: winner.id,
+          error: deleteError.message
+        });
+        return NextResponse.json(
+          { error: 'Failed to delete winner', details: deleteError.message },
+          { status: 500 }
+        );
+      }
+
+      logger.info('Admin HallOfFame API: Winner deleted successfully', {
         requestId,
         winnerId: winner.id,
-        error: deleteError.message
+        seasonId: winner.season_id,
+        userId: winner.user_id
       });
-      return NextResponse.json(
-        { error: 'Failed to delete winner', details: deleteError.message },
-        { status: 500 }
-      );
+
+      const response = {
+        message: 'Winner deleted successfully',
+        deleted_winner: winner,
+        metadata: {
+          requestId,
+          timestamp: new Date().toISOString(),
+          processingTime: Date.now() - startTime
+        }
+      };
+
+      return NextResponse.json(response);
     }
 
-    // Invalidate cache
+    // Invalidate cache for both paths
     revalidatePath('/api/hall-of-fame');
 
-    logger.info('Admin HallOfFame API: Winner deleted successfully', {
-      requestId,
-      winnerId: winner.id,
-      seasonId: winner.season_id,
-      userId: winner.user_id
-    });
-
-    const response = {
-      message: 'Winner deleted successfully',
-      deleted_winner: winner,
-      metadata: {
-        requestId,
-        timestamp: new Date().toISOString(),
-        processingTime: Date.now() - startTime
-      }
-    };
-
-    return NextResponse.json(response);
-
-  } catch (error) {
+  } catch (_error) {
     logger.error('Admin HallOfFame API: Unexpected error in DELETE', {
       requestId,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined
+      error: _error instanceof Error ? _error.message : 'Unknown error',
+      stack: _error instanceof Error ? _error.stack : undefined
     });
 
     return NextResponse.json(

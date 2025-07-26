@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/utils/logger';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 
 /**
  * GET /api/hall-of-fame/stats
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseServiceRoleClient();
+    const supabase = createSupabaseServiceRoleClient();
 
     // Use manual aggregation for comprehensive statistics
     const { data: rawWinners, error: fallbackError } = await supabase

@@ -1,6 +1,6 @@
 import 'server-only';
 import { logger } from '@/utils/logger';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { Database } from '@/types/supabase';
 
@@ -32,7 +32,7 @@ export class SeasonCompletionDetectorService {
   private supabase: DatabaseClient;
 
   constructor(supabaseClient?: DatabaseClient) {
-    this.supabase = supabaseClient || getSupabaseServiceRoleClient();
+    this.supabase = supabaseClient || createSupabaseServiceRoleClient();
   }
 
   /**

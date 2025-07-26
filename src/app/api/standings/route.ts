@@ -3,9 +3,26 @@ import { calculateStandings, UserStandingEntry } from '@/services/standingsServi
 import { cupActivationStatusChecker } from '@/services/cup/cupActivationStatusChecker';
 import { getCupStandings, CupStandingsRow } from '@/services/cup/cupScoringService';
 import { logger } from '@/utils/logger';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 
 // Ensure the route is treated as dynamic to prevent caching issues
 export const dynamic = 'force-dynamic';
+
+/**
+ * Enhanced cup standings result with user profile information
+ */
+export interface EnhancedCupStandingsRow {
+  user_id: string;
+  user: {
+    id: string;
+    full_name: string;
+    avatar_url: string | null;
+  };
+  total_points: number;
+  rounds_participated: number;
+  position: number;
+  last_updated: string;
+}
 
 /**
  * Enhanced response interface that includes both league and cup standings
@@ -20,7 +37,7 @@ export interface EnhancedStandingsResponse {
     season_id: number | null;
     season_name: string | null;
     activated_at: string | null;
-    standings?: CupStandingsRow[];
+    standings?: EnhancedCupStandingsRow[];
   };
   
   // Metadata
@@ -66,12 +83,13 @@ export async function GET() {
     const cupStatus = await cupActivationStatusChecker.checkCurrentSeasonActivationStatus();
     
     // Step 3: Get cup standings if cup is active
-    let cupStandings: CupStandingsRow[] | undefined;
+    let enhancedCupStandings: EnhancedCupStandingsRow[] | undefined;
     if (cupStatus.isActivated) {
       logger.debug(loggerContext, 'Cup is active - fetching cup standings...');
       try {
-        cupStandings = await getCupStandings();
-        logger.debug(loggerContext, `Retrieved ${cupStandings.length} cup standings entries.`);
+        const rawCupStandings = await getCupStandings();
+        enhancedCupStandings = await enhanceStandingsWithUserProfiles(rawCupStandings);
+        logger.debug(loggerContext, `Retrieved ${enhancedCupStandings.length} enhanced cup standings entries.`);
       } catch (cupError) {
         logger.warn(
           { ...loggerContext, error: cupError instanceof Error ? cupError.message : String(cupError) },
@@ -89,13 +107,13 @@ export async function GET() {
         season_id: cupStatus.seasonId,
         season_name: cupStatus.seasonName,
         activated_at: cupStatus.activatedAt,
-        ...(cupStandings && { standings: cupStandings })
+        ...(enhancedCupStandings && { standings: enhancedCupStandings })
       },
       metadata: {
         timestamp: new Date().toISOString(),
-        has_cup_data: cupStatus.isActivated && cupStandings !== undefined,
+        has_cup_data: cupStatus.isActivated && enhancedCupStandings !== undefined,
         total_league_participants: leagueStandings.length,
-        ...(cupStandings && { total_cup_participants: cupStandings.length })
+        ...(enhancedCupStandings && { total_cup_participants: enhancedCupStandings.length })
       }
     };
 
@@ -105,7 +123,7 @@ export async function GET() {
         ...loggerContext, 
         leagueParticipants: leagueStandings.length,
         cupActive: cupStatus.isActivated,
-        cupParticipants: cupStandings?.length || 0,
+        cupParticipants: enhancedCupStandings?.length || 0,
         processingTime
       },
       'Successfully compiled enhanced standings response.'
@@ -135,5 +153,90 @@ export async function GET() {
       { error: 'Internal server error.' },
       { status: 500 }
     );
+  }
+}
+
+/**
+ * Enhance cup standings with user profile information
+ * @param standings Raw cup standings data  
+ * @returns Enhanced standings with user profiles
+ */
+async function enhanceStandingsWithUserProfiles(standings: CupStandingsRow[]): Promise<EnhancedCupStandingsRow[]> {
+  if (!standings || standings.length === 0) {
+    return [];
+  }
+
+  try {
+    // Get all user IDs
+    const userIds = standings.map(standing => standing.user_id);
+
+    // Fetch user profiles
+    const supabase = createSupabaseServiceRoleClient();
+    const { data: profiles, error } = await supabase
+      .from('profiles')
+      .select('id, full_name, avatar_url')
+      .in('id', userIds);
+
+    if (error) {
+      logger.error('Failed to fetch user profiles for cup standings', { error });
+      // Fall back to basic user info without profile data
+      return standings.map(standing => ({
+        user_id: standing.user_id,
+        user: {
+          id: standing.user_id,
+          full_name: `User ${standing.user_id}`,
+          avatar_url: null
+        },
+        total_points: standing.total_points,
+        rounds_participated: standing.rounds_participated,
+        position: standing.position,
+        last_updated: standing.last_updated
+      }));
+    }
+
+    // Create profile lookup map
+    const profileMap = new Map(profiles?.map(profile => [
+      profile.id,
+      profile
+    ]) || []);
+
+    // Enhance standings with profile data
+    return standings.map(standing => {
+      const userProfile = profileMap.get(standing.user_id) || {
+        id: standing.user_id,
+        full_name: `User ${standing.user_id}`,
+        avatar_url: null
+      };
+
+      return {
+        user_id: standing.user_id,
+        user: {
+          id: userProfile.id,
+          full_name: userProfile.full_name || `User ${standing.user_id}`,
+          avatar_url: userProfile.avatar_url
+        },
+        total_points: standing.total_points,
+        rounds_participated: standing.rounds_participated,
+        position: standing.position,
+        last_updated: standing.last_updated
+      };
+    });
+
+  } catch (error) {
+    logger.error('Error enhancing cup standings with user profiles', { error });
+    
+    // Fall back to basic user info
+    return standings.map(standing => ({
+      user_id: standing.user_id,
+      user: {
+        id: standing.user_id,
+        full_name: `User ${standing.user_id}`,
+        avatar_url: null
+      },
+      total_points: standing.total_points,
+      rounds_participated: standing.rounds_participated,
+      position: standing.position,
+      last_updated: standing.last_updated
+    }));
   }
 }

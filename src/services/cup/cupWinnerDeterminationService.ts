@@ -1,6 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { Database } from '@/types/supabase';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { logger } from '@/utils/logger';
 
 /**
@@ -71,7 +71,7 @@ export class CupWinnerDeterminationService {
   private client: DatabaseClient;
 
   constructor(client?: DatabaseClient) {
-    this.client = client || getSupabaseServiceRoleClient();
+    this.client = client || createSupabaseServiceRoleClient();
   }
 
   // --- Subtask 1: Cup Standings Calculator ---
@@ -483,11 +483,11 @@ export class CupWinnerDeterminationService {
         competition_type: 'last_round_special' as const
       }));
 
-      // Use upsert to handle idempotency
+      // Use upsert with correct constraint name from test database
       const { error } = await this.client
         .from('season_winners')
         .upsert(winnerRecords, {
-          onConflict: 'season_id,user_id,competition_type',
+          onConflict: 'season_id, user_id, competition_type',
           ignoreDuplicates: false
         });
 
@@ -553,22 +553,51 @@ export class CupWinnerDeterminationService {
         return results;
       }
 
-      // Filter out seasons that already have cup winners
+      // Check which seasons already have winners and which need processing
       const seasonsToProcess = [];
+      const seasonsAlreadyDetermined = [];
+      
       for (const season of eligibleSeasons) {
         const existingWinners = await this.getExistingCupWinners(season.id);
         if (existingWinners.length === 0) {
           seasonsToProcess.push(season);
+        } else {
+          seasonsAlreadyDetermined.push({ season, existingWinners });
         }
       }
 
-      logger.info({ 
-        ...loggerContext, 
+      logger.info({
+        ...loggerContext,
         totalEligible: eligibleSeasons.length,
-        needProcessing: seasonsToProcess.length 
-      }, 'Found seasons needing cup winner determination');
+        needProcessing: seasonsToProcess.length,
+        alreadyDetermined: seasonsAlreadyDetermined.length
+      }, 'Found seasons for cup winner determination');
 
-      // Process each season
+      // First, add results for seasons that already have winners
+      for (const { season, existingWinners } of seasonsAlreadyDetermined) {
+        logger.info({
+          ...loggerContext,
+          seasonId: season.id,
+          seasonName: season.name,
+          winnerCount: existingWinners.length
+        }, 'Season already has cup winners determined');
+        
+        results.push({
+          seasonId: season.id,
+          winners: existingWinners,
+          totalParticipants: existingWinners.length, // Approximate - we don't have exact count
+          isAlreadyDetermined: true,
+          errors: [],
+          metadata: {
+            maxPoints: existingWinners.length > 0 ? existingWinners[0].total_points : 0,
+            averagePoints: existingWinners.length > 0 ?
+              existingWinners.reduce((sum, w) => sum + w.total_points, 0) / existingWinners.length : 0,
+            participationRate: 100 // Approximate
+          }
+        });
+      }
+
+      // Then process seasons that need winner determination
       for (const season of seasonsToProcess) {
         try {
           logger.info({ 

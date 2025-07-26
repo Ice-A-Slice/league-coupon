@@ -2,21 +2,31 @@
 require('@testing-library/jest-dom');
 require('whatwg-fetch'); // Use require for the polyfill
 
+// Load test environment variables
+require('dotenv').config({ path: '.env.test.local' });
+
 // Polyfills for Next.js API routes in tests
 const { TextEncoder, TextDecoder } = require('util');
 global.TextEncoder = TextEncoder;
 global.TextDecoder = TextDecoder;
 
-// Mock environment variables required by Supabase client
-process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost:54321';
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'mock-anon-key';
-process.env.SUPABASE_SERVICE_ROLE_KEY = 'mock-service-role-key';
-
-// Mock environment variables required by email service
+// Ensure test environment variables are set
+process.env.NODE_ENV = 'test';
 process.env.EMAIL_TEST_MODE = 'true';
 
-// Mock environment variable required by football API
-process.env.NEXT_PUBLIC_FOOTBALL_API_KEY = 'test-api-key-for-testing';
+// Set default test environment variables if not already set
+if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+  process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://127.0.0.1:54321';
+}
+if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
+}
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU';
+}
+if (!process.env.NEXT_PUBLIC_FOOTBALL_API_KEY) {
+  process.env.NEXT_PUBLIC_FOOTBALL_API_KEY = 'test-api-key-for-testing';
+}
 
 // Mock next/navigation
 jest.mock('next/navigation', () => ({
@@ -24,6 +34,39 @@ jest.mock('next/navigation', () => ({
   useSearchParams: () => ({ get: jest.fn() }),
   usePathname: () => '/',
 }));
+
+// Add Response.json polyfill for Node.js test environment
+if (!global.Response || !global.Response.json) {
+  global.Response = class Response {
+    constructor(body, init = {}) {
+      this.body = body;
+      this.status = init.status || 200;
+      this.statusText = init.statusText || 'OK';
+      this.headers = new Map(Object.entries(init.headers || {}));
+      this.ok = this.status >= 200 && this.status < 300;
+    }
+
+    static json(data, init = {}) {
+      return new Response(JSON.stringify(data), {
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          'Content-Type': 'application/json',
+          ...init.headers,
+        },
+        ...init,
+      });
+    }
+
+    async json() {
+      return JSON.parse(this.body);
+    }
+
+    async text() {
+      return this.body;
+    }
+  };
+}
 
 // Mock ResizeObserver which is not available in the jsdom environment
 global.ResizeObserver = class ResizeObserver {
@@ -147,5 +190,42 @@ beforeEach(() => {
     
     // Reset localStorage to empty state
     localStorageMock.getItem.mockReturnValue(null);
+  }
+});
+
+// Database reset functionality for integration tests
+let dbResetEnabled = false;
+
+// Check if we should enable database reset (only for integration tests)
+if (process.env.NODE_ENV === 'test' && process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('127.0.0.1')) {
+  dbResetEnabled = true;
+  console.log('[JEST_SETUP] Database reset enabled for integration tests');
+}
+
+// Global setup for database tests
+beforeEach(async () => {
+  // Only reset database for integration tests, not unit tests
+  if (dbResetEnabled && expect.getState().currentTestName?.includes('integration')) {
+    try {
+      const { resetDatabase } = require('./tests/utils/db');
+      await resetDatabase(true);
+      console.log('[JEST_SETUP] Database reset completed for test:', expect.getState().currentTestName);
+    } catch (error) {
+      console.warn('[JEST_SETUP] Database reset failed:', error.message);
+      // Don't fail the test setup, just warn
+    }
+  }
+});
+
+// Global teardown
+afterAll(async () => {
+  if (dbResetEnabled) {
+    try {
+      const { disconnectDb } = require('./tests/utils/db');
+      await disconnectDb();
+      console.log('[JEST_SETUP] Database disconnected');
+    } catch (error) {
+      console.warn('[JEST_SETUP] Database disconnect failed:', error.message);
+    }
   }
 });

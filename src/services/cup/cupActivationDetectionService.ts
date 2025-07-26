@@ -278,9 +278,13 @@ export class CupActivationDetectionService {
     errors: string[]
   ): Promise<ActivationConditionResult> {
     try {
+      // First check current activation status to inform the condition calculation
+      const statusCheck = await cupActivationStatusChecker.checkCurrentSeasonActivationStatus();
+      
       const conditionResult = await activationConditionCalculator.calculateActivationCondition(
         fixtureData,
-        this.threshold
+        this.threshold,
+        statusCheck.isActivated // Pass current activation status
       );
 
       this.logger.logActivationConditionResult(conditionResult, { ...context, sessionId });
@@ -327,21 +331,34 @@ export class CupActivationDetectionService {
     context: Partial<CupActivationLogContext>,
     sessionId: string
   ): boolean {
-    // Don't activate if already activated
+    // Don't activate if already activated (unless we need to maintain display)
     if (statusCheck.isActivated) {
-      this.logger.debug(
-        'Activation skipped: Cup already activated',
-        { ...context, sessionId },
-        { 
-          activatedAt: statusCheck.activatedAt,
-          seasonId: statusCheck.seasonId 
-        }
-      );
+      // If we should maintain display, we don't need to "activate" again, but the system should recognize it as active
+      if (activationCondition.shouldMaintainDisplay) {
+        this.logger.debug(
+          'Cup already activated and maintaining display for completed season',
+          { ...context, sessionId },
+          { 
+            activatedAt: statusCheck.activatedAt,
+            seasonId: statusCheck.seasonId,
+            displayReason: activationCondition.displayReason
+          }
+        );
+      } else {
+        this.logger.debug(
+          'Activation skipped: Cup already activated',
+          { ...context, sessionId },
+          { 
+            activatedAt: statusCheck.activatedAt,
+            seasonId: statusCheck.seasonId 
+          }
+        );
+      }
       return false;
     }
 
-    // Don't activate if conditions not met
-    if (!activationCondition.conditionMet) {
+    // Don't activate if conditions not met (and not maintaining display)
+    if (!activationCondition.conditionMet && !activationCondition.shouldMaintainDisplay) {
       this.logger.debug(
         'Activation skipped: Conditions not met',
         { ...context, sessionId },
@@ -361,7 +378,8 @@ export class CupActivationDetectionService {
       {
         percentage: activationCondition.percentageWithFiveOrFewerGames,
         threshold: activationCondition.threshold,
-        reasoning: activationCondition.reasoning
+        reasoning: activationCondition.reasoning,
+        shouldMaintainDisplay: activationCondition.shouldMaintainDisplay
       }
     );
 

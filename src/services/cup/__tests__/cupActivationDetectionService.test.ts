@@ -257,7 +257,7 @@ describe('CupActivationDetectionService', () => {
       expect(result.shouldActivate).toBe(false);
       expect(result.success).toBe(false);
       expect(result.errors).toHaveLength(1);
-      expect(result.errors[0]).toContain('Activation status check failed');
+      expect(result.errors[0]).toContain('Activation condition calculation failed: Status check failed');
     });
 
     test('should handle activation service failure', async () => {
@@ -604,7 +604,7 @@ describe('CupActivationDetectionService', () => {
 
       expect(result.shouldActivate).toBe(false);
       expect(result.activationCondition.threshold).toBe(80);
-      expect(mockActivationConditionCalculator.calculateActivationCondition).toHaveBeenCalledWith(mockFixtureData, 80);
+      expect(mockActivationConditionCalculator.calculateActivationCondition).toHaveBeenCalledWith(mockFixtureData, 80, false);
     });
   });
 

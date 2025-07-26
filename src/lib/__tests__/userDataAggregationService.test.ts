@@ -42,7 +42,7 @@ describe('UserDataAggregationService - Integration Tests', () => {
       calculateStandings: jest.fn(),
     }));
     jest.mock('@/utils/supabase/service', () => ({
-      getSupabaseServiceRoleClient: jest.fn(),
+      createSupabaseServiceRoleClient: jest.fn(),
     }));
 
     // 3. Dynamically import the mocked modules to get handles to the mock functions
@@ -51,7 +51,7 @@ describe('UserDataAggregationService - Integration Tests', () => {
     
     // Assign the mock functions to our suite-scoped variables
     mockCalculateStandings = standingsServiceModule.calculateStandings as jest.Mock;
-    mockGetSupabaseServiceRoleClient = supabaseServiceModule.getSupabaseServiceRoleClient as jest.Mock;
+    mockGetSupabaseServiceRoleClient = supabaseServiceModule.createSupabaseServiceRoleClient as jest.Mock;
 
     // 4. NOW, dynamically import the service under test. It will get the mocked dependencies.
     UserDataAggregationServiceModule = await import('../userDataAggregationService');

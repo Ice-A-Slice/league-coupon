@@ -37,12 +37,6 @@ interface CouponClientProps {
 
 // Initial states 
 const initialSampleSelections: Selections = {};
-const initialPredictions: Prediction = {
-    leagueWinner: null,
-    lastPlace: null,
-    bestGoalDifference: null,
-    topScorer: null
-};
 
 interface ErrorsState {
   coupon?: Record<string, string>;
@@ -83,6 +77,15 @@ export default function CouponClient({
   // Extract data from props
   const roundNameForTitle = initialRoundData?.roundName ?? 'Current Round';
   const matchesForCoupon = initialRoundData?.matches ?? [];
+  
+  // Transform user season answers to initial predictions format
+  const userSeasonAnswers = initialRoundData?.userSeasonAnswers;
+  const initialPredictionsWithUserAnswers: Prediction = {
+    leagueWinner: userSeasonAnswers?.league_winner?.toString() ?? null,
+    topScorer: userSeasonAnswers?.top_scorer?.toString() ?? null,
+    bestGoalDifference: userSeasonAnswers?.best_goal_difference?.toString() ?? null,
+    lastPlace: userSeasonAnswers?.last_place?.toString() ?? null
+  };
   
   // Handlers
   const handleSelectionChange = (newSelections: Selections, matchId: string) => {
@@ -257,7 +260,7 @@ export default function CouponClient({
               ref={questionnaireRef}
               teams={teamsForQuestionnaire ?? []}
               players={playersForQuestionnaire ?? []}
-              initialPredictions={initialPredictions}
+              initialPredictions={initialPredictionsWithUserAnswers}
               onPredictionChange={handlePredictionChange}
               validationErrors={validationErrors.questionnaire}
             />

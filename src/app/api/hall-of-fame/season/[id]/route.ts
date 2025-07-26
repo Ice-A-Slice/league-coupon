@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { logger } from '@/utils/logger';
 
 /**
@@ -54,7 +54,7 @@ export async function GET(
     });
 
     // Create Supabase client
-    const supabase = getSupabaseServiceRoleClient();
+    const supabase = createSupabaseServiceRoleClient();
 
     // Query for the season winner with all related data
     const { data: seasonWinner, error } = await supabase

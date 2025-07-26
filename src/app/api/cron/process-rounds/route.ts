@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { calculateAndStoreMatchPoints, ScoreCalculationResult } from '@/lib/scoring'; // Assuming path and ScoreCalculationResult is exported
 import { logger } from '@/utils/logger'; // Assuming path
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service'; // Reverted path
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service'; // Reverted path
 import { RoundCompletionDetectorService } from '@/services/roundCompletionDetectorService'; // Import class
 import { revalidatePath } from 'next/cache'; // Import revalidatePath
 
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
   try {
     // Initialize Supabase service role client
     // No type argument needed as the function returns the typed client
-    const serviceRoleClient = getSupabaseServiceRoleClient(); 
+    const serviceRoleClient = createSupabaseServiceRoleClient(); 
 
     // 1. Detect and Mark Completed Rounds
     // Instantiate the service correctly (assuming constructor takes no args now)

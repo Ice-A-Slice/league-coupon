@@ -11,8 +11,8 @@ import { cn } from '@/lib/utils';
 // Define proper types for grouped season data
 interface SeasonGroup {
   year: string;
-  leagueWinner?: SeasonWinner;
-  cupWinner?: SeasonWinner;
+  leagueWinners: SeasonWinner[];
+  cupWinners: SeasonWinner[];
 }
 
 // Define view mode type
@@ -33,15 +33,15 @@ const groupWinnersBySeason = (winners: SeasonWinner[]): SeasonGroup[] => {
     if (!acc[seasonKey]) {
       acc[seasonKey] = { 
         year: winner.season.name,
-        leagueWinner: undefined,
-        cupWinner: undefined
+        leagueWinners: [],
+        cupWinners: []
       };
     }
     
     if (winner.competition_type === 'last_round_special') {
-      acc[seasonKey].cupWinner = winner;
+      acc[seasonKey].cupWinners.push(winner);
     } else {
-      acc[seasonKey].leagueWinner = winner;
+      acc[seasonKey].leagueWinners.push(winner);
     }
     
     return acc;
@@ -243,22 +243,32 @@ const SeasonWinnersList: React.FC<SeasonWinnersListProps> = ({
 
               {/* Winners Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 justify-items-center">
-                {season.leagueWinner && (
-                  <CircularBadge 
-                    winner={season.leagueWinner}
-                    type="league"
-                    currentUserId={currentUserId}
-                    onWinnerSelect={onWinnerSelect}
-                  />
+                {season.leagueWinners.length > 0 && (
+                  <div className="space-y-4">
+                    {season.leagueWinners.map((winner) => (
+                      <CircularBadge 
+                        key={winner.id}
+                        winner={winner}
+                        type="league"
+                        currentUserId={currentUserId}
+                        onWinnerSelect={onWinnerSelect}
+                      />
+                    ))}
+                  </div>
                 )}
                 
-                {season.cupWinner && (
-                  <CircularBadge 
-                    winner={season.cupWinner}
-                    type="cup"
-                    currentUserId={currentUserId}
-                    onWinnerSelect={onWinnerSelect}
-                  />
+                {season.cupWinners.length > 0 && (
+                  <div className="space-y-4">
+                    {season.cupWinners.map((winner) => (
+                      <CircularBadge 
+                        key={winner.id}
+                        winner={winner}
+                        type="cup"
+                        currentUserId={currentUserId}
+                        onWinnerSelect={onWinnerSelect}
+                      />
+                    ))}
+                  </div>
                 )}
               </div>
 

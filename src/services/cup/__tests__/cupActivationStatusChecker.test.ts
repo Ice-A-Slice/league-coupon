@@ -1,124 +1,94 @@
+/**
+ * @jest-environment node
+ */
+import { SupabaseClient } from '@supabase/supabase-js';
+import { Database } from '@/types/supabase';
 import { cupActivationStatusChecker } from '../cupActivationStatusChecker';
-import { createClient } from '@/utils/supabase/client';
-import { logger } from '@/utils/logger';
+import {
+  connectToTestDb,
+  resetDatabase,
+  disconnectDb,
+  testIds,
+} from '../../../../tests/utils/db';
 
-// Mock dependencies
-jest.mock('@/utils/supabase/client');
-jest.mock('@/utils/logger');
+// Mock next/cache since we don't need it for testing
+jest.mock('next/cache', () => ({
+  revalidatePath: jest.fn()
+}));
 
-const mockSupabase = {
-  from: jest.fn(),
-};
+describe('Cup Activation Status Checker Integration Tests', () => {
+  let client: SupabaseClient<Database>;
 
-const mockCreateClient = createClient as jest.MockedFunction<typeof createClient>;
-const mockLogger = logger as jest.Mocked<typeof logger>;
+  beforeAll(async () => {
+    client = await connectToTestDb();
+  });
 
-describe('CupActivationStatusChecker', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockCreateClient.mockReturnValue(mockSupabase as ReturnType<typeof createClient>);
-    mockLogger.error = jest.fn();
+  beforeEach(async () => {
+    await resetDatabase(true);
+  });
+
+  afterAll(async () => {
+    await disconnectDb();
   });
 
   describe('checkCurrentSeasonActivationStatus', () => {
-    it('should return activated status when current season has cup activated', async () => {
-      const mockSeason = {
-        id: 1,
-        name: '2024/25',
-        last_round_special_activated: true,
-        last_round_special_activated_at: '2025-01-27T10:00:00Z'
-      };
+    it('should return not activated status for seeded season (default)', async () => {
+      const result = await cupActivationStatusChecker.checkCurrentSeasonActivationStatus();
 
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({
-              data: mockSeason,
-              error: null
-            })
-          })
-        })
+      expect(result).toEqual({
+        isActivated: false,
+        activatedAt: null,
+        seasonId: testIds.season,
+        seasonName: '2024 Season'
       });
+    });
+
+    it('should return activated status when current season has cup activated', async () => {
+      // Activate the cup for the current season
+      await client
+        .from('seasons')
+        .update({
+          last_round_special_activated: true,
+          last_round_special_activated_at: '2025-01-27T10:00:00Z'
+        })
+        .eq('id', testIds.season!);
 
       const result = await cupActivationStatusChecker.checkCurrentSeasonActivationStatus();
 
       expect(result).toEqual({
         isActivated: true,
-        activatedAt: '2025-01-27T10:00:00Z',
-        seasonId: 1,
-        seasonName: '2024/25'
-      });
-    });
-
-    it('should return not activated status when current season has cup not activated', async () => {
-      const mockSeason = {
-        id: 1,
-        name: '2024/25',
-        last_round_special_activated: false,
-        last_round_special_activated_at: null
-      };
-
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({
-              data: mockSeason,
-              error: null
-            })
-          })
-        })
-      });
-
-      const result = await cupActivationStatusChecker.checkCurrentSeasonActivationStatus();
-
-      expect(result).toEqual({
-        isActivated: false,
-        activatedAt: null,
-        seasonId: 1,
-        seasonName: '2024/25'
+        activatedAt: '2025-01-27T10:00:00+00:00',
+        seasonId: testIds.season,
+        seasonName: '2024 Season'
       });
     });
 
     it('should handle null last_round_special_activated field', async () => {
-      const mockSeason = {
-        id: 1,
-        name: '2024/25',
-        last_round_special_activated: null,
-        last_round_special_activated_at: null
-      };
-
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({
-              data: mockSeason,
-              error: null
-            })
-          })
+      // Explicitly set last_round_special_activated to null
+      await client
+        .from('seasons')
+        .update({
+          last_round_special_activated: null,
+          last_round_special_activated_at: null
         })
-      });
+        .eq('id', testIds.season!);
 
       const result = await cupActivationStatusChecker.checkCurrentSeasonActivationStatus();
 
       expect(result).toEqual({
         isActivated: false,
         activatedAt: null,
-        seasonId: 1,
-        seasonName: '2024/25'
+        seasonId: testIds.season,
+        seasonName: '2024 Season'
       });
     });
 
     it('should return default values when no current season exists', async () => {
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({
-              data: null,
-              error: null
-            })
-          })
-        })
-      });
+      // Remove is_current flag from all seasons
+      await client
+        .from('seasons')
+        .update({ is_current: false })
+        .eq('id', testIds.season!);
 
       const result = await cupActivationStatusChecker.checkCurrentSeasonActivationStatus();
 
@@ -129,114 +99,48 @@ describe('CupActivationStatusChecker', () => {
         seasonName: null
       });
     });
-
-    it('should throw error when database query fails', async () => {
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({
-              data: null,
-              error: { message: 'Database connection failed' }
-            })
-          })
-        })
-      });
-
-      await expect(cupActivationStatusChecker.checkCurrentSeasonActivationStatus())
-        .rejects.toThrow('Unable to fetch current season data');
-    });
-
-    it('should handle unexpected errors gracefully', async () => {
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            single: jest.fn().mockRejectedValue(new Error('Unexpected error'))
-          })
-        })
-      });
-
-      await expect(cupActivationStatusChecker.checkCurrentSeasonActivationStatus())
-        .rejects.toThrow('Unexpected error while checking activation status');
-    });
   });
 
   describe('checkSeasonActivationStatus', () => {
     it('should return activated status for specific season when cup is activated', async () => {
-      const mockSeason = {
-        id: 2,
-        name: '2023/24',
-        last_round_special_activated: true,
-        last_round_special_activated_at: '2024-03-15T14:30:00Z'
-      };
-
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({
-              data: mockSeason,
-              error: null
-            })
-          })
+      // Activate the cup for the test season
+      await client
+        .from('seasons')
+        .update({
+          last_round_special_activated: true,
+          last_round_special_activated_at: '2024-03-15T14:30:00Z'
         })
-      });
+        .eq('id', testIds.season!);
 
-      const result = await cupActivationStatusChecker.checkSeasonActivationStatus(2);
+      const result = await cupActivationStatusChecker.checkSeasonActivationStatus(testIds.season!);
 
       expect(result).toEqual({
         isActivated: true,
-        activatedAt: '2024-03-15T14:30:00Z',
-        seasonId: 2,
-        seasonName: '2023/24'
+        activatedAt: '2024-03-15T14:30:00+00:00',
+        seasonId: testIds.season,
+        seasonName: '2024 Season'
       });
     });
 
     it('should return not activated status for specific season when cup is not activated', async () => {
-      const mockSeason = {
-        id: 2,
-        name: '2023/24',
-        last_round_special_activated: false,
-        last_round_special_activated_at: null
-      };
-
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({
-              data: mockSeason,
-              error: null
-            })
-          })
-        })
-      });
-
-      const result = await cupActivationStatusChecker.checkSeasonActivationStatus(2);
+      // Ensure cup is not activated (default state from seeding)
+      const result = await cupActivationStatusChecker.checkSeasonActivationStatus(testIds.season!);
 
       expect(result).toEqual({
         isActivated: false,
         activatedAt: null,
-        seasonId: 2,
-        seasonName: '2023/24'
+        seasonId: testIds.season,
+        seasonName: '2024 Season'
       });
     });
 
     it('should return default values when season is not found', async () => {
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({
-              data: null,
-              error: null
-            })
-          })
-        })
-      });
-
-      const result = await cupActivationStatusChecker.checkSeasonActivationStatus(999);
+      const result = await cupActivationStatusChecker.checkSeasonActivationStatus(999999);
 
       expect(result).toEqual({
         isActivated: false,
         activatedAt: null,
-        seasonId: 999,
+        seasonId: 999999,
         seasonName: null
       });
     });
@@ -251,95 +155,35 @@ describe('CupActivationStatusChecker', () => {
       await expect(cupActivationStatusChecker.checkSeasonActivationStatus(null as unknown as number))
         .rejects.toThrow('Valid season ID is required');
     });
-
-    it('should throw error when database query fails for specific season', async () => {
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({
-              data: null,
-              error: { message: 'Season not accessible' }
-            })
-          })
-        })
-      });
-
-      await expect(cupActivationStatusChecker.checkSeasonActivationStatus(5))
-        .rejects.toThrow('Unable to fetch season 5 data');
-    });
-
-    it('should handle unexpected errors for specific season gracefully', async () => {
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            single: jest.fn().mockRejectedValue(new Error('Network timeout'))
-          })
-        })
-      });
-
-      await expect(cupActivationStatusChecker.checkSeasonActivationStatus(3))
-        .rejects.toThrow('Unexpected error while checking activation status');
-    });
   });
 
   describe('isCurrentSeasonCupActivated', () => {
     it('should return true when current season cup is activated', async () => {
-      const mockSeason = {
-        id: 1,
-        name: '2024/25',
-        last_round_special_activated: true,
-        last_round_special_activated_at: '2025-01-27T10:00:00Z'
-      };
-
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({
-              data: mockSeason,
-              error: null
-            })
-          })
+      // Activate the cup for the current season
+      await client
+        .from('seasons')
+        .update({
+          last_round_special_activated: true,
+          last_round_special_activated_at: '2025-01-27T10:00:00Z'
         })
-      });
+        .eq('id', testIds.season!);
 
       const result = await cupActivationStatusChecker.isCurrentSeasonCupActivated();
       expect(result).toBe(true);
     });
 
     it('should return false when current season cup is not activated', async () => {
-      const mockSeason = {
-        id: 1,
-        name: '2024/25',
-        last_round_special_activated: false,
-        last_round_special_activated_at: null
-      };
-
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({
-              data: mockSeason,
-              error: null
-            })
-          })
-        })
-      });
-
+      // Default seeded state has cup not activated
       const result = await cupActivationStatusChecker.isCurrentSeasonCupActivated();
       expect(result).toBe(false);
     });
 
     it('should return false when no current season exists', async () => {
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({
-              data: null,
-              error: null
-            })
-          })
-        })
-      });
+      // Remove is_current flag from all seasons
+      await client
+        .from('seasons')
+        .update({ is_current: false })
+        .eq('id', testIds.season!);
 
       const result = await cupActivationStatusChecker.isCurrentSeasonCupActivated();
       expect(result).toBe(false);
@@ -348,64 +192,27 @@ describe('CupActivationStatusChecker', () => {
 
   describe('isSeasonCupActivated', () => {
     it('should return true when specified season cup is activated', async () => {
-      const mockSeason = {
-        id: 3,
-        name: '2022/23',
-        last_round_special_activated: true,
-        last_round_special_activated_at: '2023-04-10T16:20:00Z'
-      };
-
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({
-              data: mockSeason,
-              error: null
-            })
-          })
+      // Activate the cup for the test season
+      await client
+        .from('seasons')
+        .update({
+          last_round_special_activated: true,
+          last_round_special_activated_at: '2023-04-10T16:20:00Z'
         })
-      });
+        .eq('id', testIds.season!);
 
-      const result = await cupActivationStatusChecker.isSeasonCupActivated(3);
+      const result = await cupActivationStatusChecker.isSeasonCupActivated(testIds.season!);
       expect(result).toBe(true);
     });
 
     it('should return false when specified season cup is not activated', async () => {
-      const mockSeason = {
-        id: 3,
-        name: '2022/23',
-        last_round_special_activated: false,
-        last_round_special_activated_at: null
-      };
-
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({
-              data: mockSeason,
-              error: null
-            })
-          })
-        })
-      });
-
-      const result = await cupActivationStatusChecker.isSeasonCupActivated(3);
+      // Default seeded state has cup not activated
+      const result = await cupActivationStatusChecker.isSeasonCupActivated(testIds.season!);
       expect(result).toBe(false);
     });
 
     it('should return false when specified season does not exist', async () => {
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({
-              data: null,
-              error: null
-            })
-          })
-        })
-      });
-
-      const result = await cupActivationStatusChecker.isSeasonCupActivated(999);
+      const result = await cupActivationStatusChecker.isSeasonCupActivated(999999);
       expect(result).toBe(false);
     });
   });

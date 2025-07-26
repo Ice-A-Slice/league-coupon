@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import StandingsTable from './StandingsTable';
-import { CupStandingsTable } from './CupStandingsTable';
+import CupStandingsTable from './CupStandingsTable';
 import { StandingsTableSkeleton } from './StandingsTableSkeleton';
 
 // League standings interface

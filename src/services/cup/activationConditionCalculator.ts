@@ -9,6 +9,9 @@ export type ActivationConditionResult = {
   percentageWithFiveOrFewerGames: number;
   threshold: number;
   reasoning: string;
+  // New field for display-only mode
+  shouldMaintainDisplay?: boolean;
+  displayReason?: string;
 };
 
 // --- Constants ---
@@ -16,17 +19,13 @@ const DEFAULT_ACTIVATION_THRESHOLD = 60; // 60% threshold
 
 // --- Utilities ---
 const log = (...args: unknown[]) => console.log('[ActivationConditionCalculator]', ...args);
-
 const error = (...args: unknown[]) => {
-  const serviceContext = { service: 'ActivationConditionCalculator' };
-  if (args.length === 1 && typeof args[0] === 'object' && args[0] !== null) {
-    logger.error({ ...serviceContext, err: args[0] as Record<string, unknown> }, (args[0] as Error)?.message ?? 'Error object logged');
-  } else {
-    logger.error(serviceContext, args[0] as string, ...args.slice(1));
-  }
+  console.error('[ActivationConditionCalculator] ERROR:', ...args);
+  logger.error('[ActivationConditionCalculator]', {}, { args });
 };
 
-class ActivationConditionCalculatorError extends Error {
+// --- Error Classes ---
+export class ActivationConditionCalculatorError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'ActivationConditionCalculatorError';
@@ -37,17 +36,20 @@ class ActivationConditionCalculatorError extends Error {
 export const activationConditionCalculator = {
   /**
    * Calculates whether the activation condition is met based on team remaining games data.
+   * Now supports maintaining display for completed seasons.
    * 
    * @param fixtureData - The result from FixtureDataService containing team remaining games
    * @param threshold - The percentage threshold (default: 60%)
+   * @param isAlreadyActivated - Whether the cup is already activated (for display maintenance logic)
    * @returns Promise<ActivationConditionResult> - Object containing the condition result and supporting data
    * @throws {ActivationConditionCalculatorError} If unable to calculate condition
    */
   async calculateActivationCondition(
     fixtureData: FixtureDataResult,
-    threshold: number = DEFAULT_ACTIVATION_THRESHOLD
+    threshold: number = DEFAULT_ACTIVATION_THRESHOLD,
+    isAlreadyActivated: boolean = false
   ): Promise<ActivationConditionResult> {
-    log(`Calculating activation condition with ${threshold}% threshold...`);
+    log(`Calculating activation condition with ${threshold}% threshold (already activated: ${isAlreadyActivated})...`);
 
     try {
       // Validate input data
@@ -65,8 +67,22 @@ export const activationConditionCalculator = {
         percentageWithFiveOrFewerGames
       } = fixtureData;
 
-      // Calculate if condition is met
+      // Calculate if condition is met for initial activation
       const conditionMet = percentageWithFiveOrFewerGames >= threshold;
+
+      // Check if all teams have finished (0 games remaining)
+      const allTeamsFinished = fixtureData.teams.every(team => team.remainingGames === 0);
+
+      // Determine if we should maintain display for already activated cups
+      let shouldMaintainDisplay = false;
+      let displayReason = '';
+
+      if (isAlreadyActivated && allTeamsFinished) {
+        // If already activated and season is complete, maintain display for viewing final standings
+        shouldMaintainDisplay = true;
+        displayReason = 'Maintaining display for completed season to view final Last Round Special standings';
+        log('Season completed but maintaining cup display for final standings viewing');
+      }
 
       // Generate reasoning
       const reasoning = this._generateReasoning(
@@ -74,10 +90,16 @@ export const activationConditionCalculator = {
         totalTeams,
         teamsWithFiveOrFewerGames,
         percentageWithFiveOrFewerGames,
-        threshold
+        threshold,
+        allTeamsFinished,
+        isAlreadyActivated,
+        shouldMaintainDisplay
       );
 
       log(`Condition result: ${conditionMet ? 'MET' : 'NOT MET'} - ${reasoning}`);
+      if (shouldMaintainDisplay) {
+        log(`Display maintenance: ACTIVE - ${displayReason}`);
+      }
 
       return {
         conditionMet,
@@ -85,7 +107,9 @@ export const activationConditionCalculator = {
         teamsWithFiveOrFewerGames,
         percentageWithFiveOrFewerGames,
         threshold,
-        reasoning
+        reasoning,
+        shouldMaintainDisplay,
+        displayReason
       };
 
     } catch (err) {
@@ -101,11 +125,13 @@ export const activationConditionCalculator = {
    * 
    * @param teams - Array of team remaining games data
    * @param threshold - The percentage threshold (default: 60%)
+   * @param isAlreadyActivated - Whether the cup is already activated
    * @returns Promise<ActivationConditionResult> - Object containing the condition result and supporting data
    */
   async calculateActivationConditionFromTeams(
     teams: TeamRemainingGames[],
-    threshold: number = DEFAULT_ACTIVATION_THRESHOLD
+    threshold: number = DEFAULT_ACTIVATION_THRESHOLD,
+    isAlreadyActivated: boolean = false
   ): Promise<ActivationConditionResult> {
     try {
       // Validate input
@@ -113,7 +139,7 @@ export const activationConditionCalculator = {
         throw new ActivationConditionCalculatorError('Teams data must be an array');
       }
 
-      log(`Calculating activation condition from ${teams.length} teams with ${threshold}% threshold...`);
+      log(`Calculating activation condition from ${teams.length} teams with ${threshold}% threshold (already activated: ${isAlreadyActivated})...`);
 
       if (teams.length === 0) {
         log('No teams provided - condition cannot be met');
@@ -140,7 +166,7 @@ export const activationConditionCalculator = {
         percentageWithFiveOrFewerGames
       };
 
-      return await this.calculateActivationCondition(fixtureData, threshold);
+      return await this.calculateActivationCondition(fixtureData, threshold, isAlreadyActivated);
 
     } catch (err) {
       if (err instanceof ActivationConditionCalculatorError) throw err;
@@ -155,14 +181,16 @@ export const activationConditionCalculator = {
    * 
    * @param fixtureData - The result from FixtureDataService containing team remaining games
    * @param threshold - The percentage threshold (default: 60%)
-   * @returns Promise<boolean> - True if condition is met, false otherwise
+   * @param isAlreadyActivated - Whether the cup is already activated
+   * @returns Promise<boolean> - True if condition is met OR should maintain display, false otherwise
    */
   async isActivationConditionMet(
     fixtureData: FixtureDataResult,
-    threshold: number = DEFAULT_ACTIVATION_THRESHOLD
+    threshold: number = DEFAULT_ACTIVATION_THRESHOLD,
+    isAlreadyActivated: boolean = false
   ): Promise<boolean> {
-    const result = await this.calculateActivationCondition(fixtureData, threshold);
-    return result.conditionMet;
+    const result = await this.calculateActivationCondition(fixtureData, threshold, isAlreadyActivated);
+    return result.conditionMet || result.shouldMaintainDisplay || false;
   },
 
   /**
@@ -173,6 +201,9 @@ export const activationConditionCalculator = {
    * @param teamsWithFiveOrFewerGames - Number of teams with ≤5 games
    * @param percentageWithFiveOrFewerGames - Percentage of teams with ≤5 games
    * @param threshold - The threshold percentage
+   * @param allTeamsFinished - Whether all teams have completed their season
+   * @param isAlreadyActivated - Whether cup is already activated
+   * @param shouldMaintainDisplay - Whether to maintain display for completed season
    * @returns string - Human-readable reasoning
    */
   _generateReasoning(
@@ -180,17 +211,24 @@ export const activationConditionCalculator = {
     totalTeams: number,
     teamsWithFiveOrFewerGames: number,
     percentageWithFiveOrFewerGames: number,
-    threshold: number
+    threshold: number,
+    allTeamsFinished: boolean = false,
+    isAlreadyActivated: boolean = false,
+    shouldMaintainDisplay: boolean = false
   ): string {
     const baseInfo = `${teamsWithFiveOrFewerGames}/${totalTeams} teams (${percentageWithFiveOrFewerGames.toFixed(1)}%) have ≤5 games remaining`;
     
-    if (conditionMet) {
+    if (shouldMaintainDisplay && allTeamsFinished && isAlreadyActivated) {
+      return `Season complete (all teams finished), but maintaining Last Round Special display for final standings viewing`;
+    } else if (conditionMet) {
       return `${baseInfo}, which meets the ${threshold}% threshold for cup activation`;
+    } else if (allTeamsFinished) {
+      return `${baseInfo}. Season complete - all teams have finished their fixtures`;
     } else {
       return `${baseInfo}, which does not meet the ${threshold}% threshold for cup activation`;
     }
   }
 };
 
-// --- Constants Export ---
+// Export the activation threshold constant for use in other modules
 export const ACTIVATION_THRESHOLD = DEFAULT_ACTIVATION_THRESHOLD; 

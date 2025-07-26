@@ -1,5 +1,5 @@
 import { UserPoints, UserStandingEntry } from './standingsService';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { logger } from '@/utils/logger';
 
 // Mock dependencies
@@ -103,8 +103,8 @@ describe('Standings Service', () => {
     mockAggregateUserPoints.mockResolvedValue([]);
     mockGetUserDynamicQuestionnairePoints.mockResolvedValue(new Map());
     
-    // Mock Supabase client
-    (getSupabaseServiceRoleClient as jest.Mock).mockReturnValue({
+    // Mock Supabase client factory
+    (createSupabaseServiceRoleClient as jest.Mock).mockReturnValue({
       rpc: jest.fn().mockResolvedValue({ data: [], error: null }),
       from: jest.fn().mockReturnValue({
         select: jest.fn().mockReturnValue({
@@ -340,8 +340,8 @@ describe('getUserDynamicQuestionnairePoints Tests', () => {
     mockBettingRoundsSingle.mockReset();
     mockDynamicPointsEq.mockReset();
     
-    // Set up the Supabase client mock
-    (getSupabaseServiceRoleClient as jest.Mock).mockReturnValue({
+    // Set up the Supabase client factory mock
+    (createSupabaseServiceRoleClient as jest.Mock).mockReturnValue({
       from: jest.fn().mockImplementation((tableName: string) => {
         if (tableName === 'betting_rounds') {
           return {

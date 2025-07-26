@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/utils/logger';
 import { getCupStandings } from '@/services/cup/cupScoringService';
+import { cupActivationStatusChecker } from '@/services/cup/cupActivationStatusChecker';
 import { CacheStrategies } from '@/utils/api/cache';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 
 // Ensure the route is treated as dynamic to prevent caching issues
 export const dynamic = 'force-dynamic';
@@ -67,6 +68,35 @@ export async function GET(request: NextRequest) {
       sort,
       order
     }, 'Fetching cup standings with parameters');
+
+    // Check if cup is activated first
+    const cupStatus = await cupActivationStatusChecker.checkCurrentSeasonActivationStatus();
+    if (!cupStatus.isActivated) {
+      logger.info({ seasonId }, 'Cup not activated - returning empty standings');
+      
+      // Return empty result with pagination
+      const emptyResult = {
+        data: [],
+        pagination: {
+          page,
+          limit,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false
+        }
+      };
+      
+      // Apply caching headers
+      const response = NextResponse.json(emptyResult, { 
+        status: 200,
+        headers: {
+          'Cache-Control': `public, max-age=${CacheStrategies.LIVE_DATA.maxAge}, stale-while-revalidate=${CacheStrategies.LIVE_DATA.staleWhileRevalidate}`,
+        }
+      });
+      
+      return response;
+    }
 
     // Get base cup standings data
     const standings = await getCupStandings(seasonId);
@@ -177,7 +207,7 @@ async function enhanceStandingsWithUserProfiles(standings: Awaited<ReturnType<ty
     const userIds = standings.map(standing => standing.user_id);
 
     // Fetch user profiles
-    const supabase = getSupabaseServiceRoleClient();
+    const supabase = createSupabaseServiceRoleClient();
     const { data: profiles, error } = await supabase
       .from('profiles')
       .select('id, full_name, avatar_url')

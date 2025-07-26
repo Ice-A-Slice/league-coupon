@@ -1,11 +1,14 @@
--- Seed data for user_round_dynamic_points
--- Assuming user_id '86849fee-0d7c-47fb-8303-d26eb3276ef0' and scored betting_round_ids 1 and 2 from images
--- Using placeholder dynamic_points values (e.g., 6 and 9) as calculation logic isn't built yet.
+-- Seed Competitions
+INSERT INTO public.competitions (id, name, api_league_id, country_name, type) 
+VALUES (1, 'Tippeligaen', 203, 'Norway', 'League') ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO public.user_round_dynamic_points (user_id, betting_round_id, dynamic_points, season_id)
-VALUES
-  ('86849fee-0d7c-47fb-8303-d26eb3276ef0', 1, 6, 1), -- For Round 67 (ID 1)
-  ('86849fee-0d7c-47fb-8303-d26eb3276ef0', 2, 9, 1); -- For Round 69 (ID 2)
+-- Seed Seasons
+INSERT INTO public.seasons (id, competition_id, name, api_season_year, start_date, end_date, is_current) 
+VALUES (1, 1, 'Tippeligaen 2024', 2024, '2024-03-10', '2024-11-28', true) ON CONFLICT (id) DO NOTHING;
 
--- Note: Ensure these user_id, betting_round_id, and season_id values exist in their respective tables.
--- The dynamic_points are placeholders. 
+-- Seed Betting Rounds
+INSERT INTO public.betting_rounds (id, competition_id, name, status, updated_at) 
+VALUES 
+(1, 1, 'Round 1', 'open', NOW()),
+(2, 1, 'Round 2', 'open', NOW())
+ON CONFLICT (id) DO NOTHING; 

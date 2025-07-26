@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/utils/logger';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 
 /**
  * GET /api/hall-of-fame
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     const sort = searchParams.get('sort') || 'newest';
 
     // Create Supabase client
-    const supabase = getSupabaseServiceRoleClient();
+    const supabase = createSupabaseServiceRoleClient();
 
     // Build the query
     let query = supabase
