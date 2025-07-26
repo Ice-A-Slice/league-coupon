@@ -71,3 +71,19 @@ supabase/.temp/
 # Local development files
 scripts/
 .windsurfrules 
+
+# Supabase
+supabase/
+.env.local
+.env.local.example
+.env.test.local
+.DS_Store
+
+# Task Master
+/tasks.json
+/scripts/task-complexity-report.json
+/tests/reports/
+
+# Playwright
+/playwright-report/
+/test-results/ 

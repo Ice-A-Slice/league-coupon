@@ -14,6 +14,9 @@ import CouponClient from '@/components/client/CouponClient';
 export default async function Index() {
   const supabase = await createClient();
 
+  // Get the authenticated user
+  const { data: { user } } = await supabase.auth.getUser();
+
   // Fetch the current season to determine the active league and season year
   const { data: currentSeasonData, error: seasonError } = await supabase
     .from('seasons')
@@ -36,7 +39,8 @@ export default async function Index() {
   }
 
   // Fetch data for the current betting round - this function returns the data directly or null
-  const currentRoundData = await getCurrentBettingRoundFixtures();
+  // Pass the user ID if authenticated
+  const currentRoundData = await getCurrentBettingRoundFixtures(user?.id);
 
   // Render the client component, passing down all necessary data
   return (

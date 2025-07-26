@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { logger } from '@/utils/logger';
 import { getCronConfiguration, validateCronConfiguration } from '@/utils/cron/schedule';
 
@@ -94,7 +94,7 @@ export async function GET() {
  */
 async function checkDatabaseConnection() {
   try {
-    const supabase = getSupabaseServiceRoleClient();
+    const supabase = createSupabaseServiceRoleClient();
     
     // Test basic connectivity
     const { error: connectionError } = await supabase

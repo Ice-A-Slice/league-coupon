@@ -24,7 +24,7 @@ jest.mock('next/server', () => ({
 import { GET } from './route';
 import { WinnerDeterminationService } from '@/services/winnerDeterminationService';
 import { logger } from '@/utils/logger';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { revalidatePath } from 'next/cache';
 
 const mockWinnerDeterminationService = {
@@ -52,7 +52,7 @@ describe('/api/cron/winner-determination', () => {
     jest.mocked(logger).warn = mockLogger.warn;
     
     // Mock service role client
-    (getSupabaseServiceRoleClient as jest.Mock).mockReturnValue({});
+    (createSupabaseServiceRoleClient as jest.Mock).mockReturnValue({});
     
     // Mock revalidatePath
     (revalidatePath as jest.Mock).mockImplementation(mockRevalidatePath);

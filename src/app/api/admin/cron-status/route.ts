@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { logger } from '@/utils/logger';
 import { getCronConfiguration, validateCronConfiguration, getNextExecutionTime } from '@/utils/cron/schedule';
 import { getCronHealthSummary } from '@/utils/cron/alerts';
@@ -32,7 +32,7 @@ export async function GET() {
     // Example: const user = await getUserFromRequest(request);
     // if (!user || !user.isAdmin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const supabase = getSupabaseServiceRoleClient();
+    const supabase = createSupabaseServiceRoleClient();
     
     // Get cron configuration and validate it
     const cronConfig = getCronConfiguration();

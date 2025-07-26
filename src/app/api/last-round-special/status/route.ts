@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/utils/logger';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { CacheStrategies } from '@/utils/api/cache';
 
 // Ensure the route is treated as dynamic to prevent caching issues
@@ -41,7 +41,7 @@ export async function GET() {
     });
 
     // Get Supabase client
-    const supabase = getSupabaseServiceRoleClient();
+    const supabase = createSupabaseServiceRoleClient();
 
     // Query for current season and its cup activation status
     const { data: currentSeason, error } = await supabase

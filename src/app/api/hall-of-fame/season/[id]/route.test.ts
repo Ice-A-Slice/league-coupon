@@ -3,14 +3,14 @@
  */
 import { NextRequest } from 'next/server';
 import { GET } from './route';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { logger } from '@/utils/logger';
 
 // Mock dependencies
 jest.mock('@/utils/supabase/service');
 jest.mock('@/utils/logger');
 
-const mockGetSupabaseServiceRoleClient = getSupabaseServiceRoleClient as jest.MockedFunction<typeof getSupabaseServiceRoleClient>;
+const mockGetSupabaseServiceRoleClient = createSupabaseServiceRoleClient as jest.MockedFunction<typeof createSupabaseServiceRoleClient>;
 const mockLogger = logger as jest.Mocked<typeof logger>;
 
 describe('/api/hall-of-fame/season/[id] - Season-specific Hall of Fame API', () => {

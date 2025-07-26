@@ -225,12 +225,39 @@ export async function getPlayersForSeason(
 }
 
 /**
+ * Type definition for user season answers in a more accessible format
+ */
+export type UserSeasonAnswersFormatted = {
+  league_winner?: number | null;
+  top_scorer?: number | null;
+  best_goal_difference?: number | null;
+  last_place?: number | null;
+};
+
+/**
+ * Type definition for the betting round query result with competitions and seasons
+ */
+type BettingRoundWithCompetitions = {
+  id: number;
+  name: string;
+  competition_id: number;
+  competitions: {
+    id: number;
+    seasons: Array<{
+      id: number;
+      is_current: boolean;
+    }>;
+  };
+};
+
+/**
  * Type definition for the return value of getCurrentBettingRoundFixtures.
  */
 export type CurrentRoundFixturesResult = {
   roundId: number; // Representative round ID (from the first fixture in the group)
   roundName: string; // Representative round name (from the first fixture in the group)
   matches: Match[]; // The grouped fixtures for the current betting round
+  userSeasonAnswers?: UserSeasonAnswersFormatted; // User's season predictions (optional)
 } | null;
 
 /**
@@ -240,17 +267,29 @@ export type CurrentRoundFixturesResult = {
  * @returns {Promise<CurrentRoundFixturesResult>} An object containing the round ID, name,
  *          and the list of matches for the current betting round, or null if no 'open' round exists.
  */
-export async function getCurrentBettingRoundFixtures(): Promise<CurrentRoundFixturesResult> {
+export async function getCurrentBettingRoundFixtures(userId?: string): Promise<CurrentRoundFixturesResult> {
   console.log(`Query: Identifying current open betting round`);
 
   try {
-    // 1. Find the single 'open' betting round
+    // 1. Find the single 'open' betting round with competition and season info
     const { data: openRoundData, error: openRoundError } = await supabaseServerClient
       .from('betting_rounds')
-      .select('id, name') // Select id and name
+      .select(`
+        id, 
+        name,
+        competition_id,
+        competitions!inner(
+          id,
+          seasons!inner(
+            id,
+            is_current
+          )
+        )
+      `)
       .eq('status', 'open')
+      .eq('competitions.seasons.is_current', true)
       .limit(1) // Ensure only one open round is expected/fetched
-      .single(); // Use .single() to expect zero or one row
+      .single() as { data: BettingRoundWithCompetitions | null; error: { code?: string; message?: string } | null }; // Type assertion for proper typing
 
     if (openRoundError) {
       // If error is 'PGRST116', it means no rows found, which is expected if no round is open
@@ -287,10 +326,44 @@ export async function getCurrentBettingRoundFixtures(): Promise<CurrentRoundFixt
 
     if (!roundFixturesData || roundFixturesData.length === 0) {
       console.warn(`Query: Open betting round ${openRoundId} has no associated fixtures.`); 
+      
+      // Still fetch user season answers even if no fixtures
+      let userSeasonAnswers: UserSeasonAnswersFormatted | undefined;
+      if (userId && openRoundData?.competitions?.seasons?.[0]?.id) {
+        const seasonId = openRoundData.competitions.seasons[0].id;
+        const { data: answersData } = await supabaseServerClient
+          .from('user_season_answers')
+          .select('question_type, answered_team_id, answered_player_id')
+          .eq('user_id', userId)
+          .eq('season_id', seasonId);
+        
+        if (answersData && answersData.length > 0) {
+          userSeasonAnswers = {};
+          answersData.forEach((answer) => {
+            const value = answer.answered_team_id || answer.answered_player_id;
+            switch (answer.question_type) {
+              case 'league_winner':
+                userSeasonAnswers!.league_winner = value;
+                break;
+              case 'top_scorer':
+                userSeasonAnswers!.top_scorer = value;
+                break;
+              case 'best_goal_difference':
+                userSeasonAnswers!.best_goal_difference = value;
+                break;
+              case 'last_place':
+                userSeasonAnswers!.last_place = value;
+                break;
+            }
+          });
+        }
+      }
+      
       return {
         roundId: openRoundId,
         roundName: openRoundName,
         matches: [],
+        userSeasonAnswers,
       };
     }
 
@@ -339,10 +412,52 @@ export async function getCurrentBettingRoundFixtures(): Promise<CurrentRoundFixt
     }).filter((match): match is Match => match !== null);
 
     console.log(`Successfully fetched ${matches.length} fixtures from Supabase.`);
+    
+    // 4. Fetch user season answers if userId is provided
+    let userSeasonAnswers: UserSeasonAnswersFormatted | undefined;
+    
+    if (userId && openRoundData?.competitions?.seasons?.[0]?.id) {
+      const seasonId = openRoundData.competitions.seasons[0].id;
+      console.log(`Fetching season answers for user ${userId} and season ${seasonId}`);
+      
+      const { data: answersData, error: answersError } = await supabaseServerClient
+        .from('user_season_answers')
+        .select('question_type, answered_team_id, answered_player_id')
+        .eq('user_id', userId)
+        .eq('season_id', seasonId);
+      
+      if (answersError) {
+        console.error('Error fetching user season answers:', answersError);
+        // Continue without user answers - don't fail the whole request
+      } else if (answersData && answersData.length > 0) {
+        // Transform the normalized rows into a formatted object
+        userSeasonAnswers = {};
+        answersData.forEach((answer) => {
+          const value = answer.answered_team_id || answer.answered_player_id;
+          switch (answer.question_type) {
+            case 'league_winner':
+              userSeasonAnswers!.league_winner = value;
+              break;
+            case 'top_scorer':
+              userSeasonAnswers!.top_scorer = value;
+              break;
+            case 'best_goal_difference':
+              userSeasonAnswers!.best_goal_difference = value;
+              break;
+            case 'last_place':
+              userSeasonAnswers!.last_place = value;
+              break;
+          }
+        });
+        console.log('User season answers found:', userSeasonAnswers);
+      }
+    }
+    
     return {
       roundId: openRoundId,
       roundName: openRoundName,
       matches: matches,
+      userSeasonAnswers,
     };
 
   } catch (error) {

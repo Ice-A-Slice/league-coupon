@@ -1,6 +1,6 @@
 import { EmailSchedulerService, emailSchedulerService, runEmailSchedulingCheck } from '../emailScheduler';
 import { roundCompletionDetectorService } from '@/services/roundCompletionDetectorService';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 // Removed unused logger import
 
 // Mock dependencies
@@ -21,7 +21,7 @@ const mockSupabaseClient: MockSupabaseClient = {
 };
 
 const mockRoundCompletionDetectorService = roundCompletionDetectorService as jest.Mocked<typeof roundCompletionDetectorService>;
-const mockGetSupabaseServiceRoleClient = getSupabaseServiceRoleClient as jest.MockedFunction<typeof getSupabaseServiceRoleClient>;
+const mockGetSupabaseServiceRoleClient = createSupabaseServiceRoleClient as jest.MockedFunction<typeof createSupabaseServiceRoleClient>;
 const mockFetch = fetch as jest.MockedFunction<typeof fetch>;
 
 describe('EmailSchedulerService', () => {
@@ -32,7 +32,7 @@ describe('EmailSchedulerService', () => {
     schedulerService = new EmailSchedulerService();
     
     // Setup default mock implementations
-    mockGetSupabaseServiceRoleClient.mockReturnValue(mockSupabaseClient as unknown as ReturnType<typeof getSupabaseServiceRoleClient>);
+    mockGetSupabaseServiceRoleClient.mockReturnValue(mockSupabaseClient as unknown as ReturnType<typeof createSupabaseServiceRoleClient>);
     
     // Mock environment variables
     process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3000';

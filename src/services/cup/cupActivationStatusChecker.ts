@@ -1,4 +1,4 @@
-import { createClient } from '@/utils/supabase/client';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { Tables } from '@/types/supabase';
 import { logger } from '@/utils/logger';
 
@@ -39,7 +39,7 @@ export const cupActivationStatusChecker = {
    */
   async checkCurrentSeasonActivationStatus(): Promise<CupActivationStatus> {
     log('Checking cup activation status for current season...');
-    const supabase = createClient();
+    const supabase = createSupabaseServiceRoleClient();
 
     try {
       // Get the current season with activation status
@@ -47,7 +47,7 @@ export const cupActivationStatusChecker = {
         .from('seasons')
         .select('id, name, last_round_special_activated, last_round_special_activated_at')
         .eq('is_current', true)
-        .single();
+        .maybeSingle();
 
       if (seasonError) {
         error('Failed to fetch current season:', seasonError);
@@ -97,7 +97,7 @@ export const cupActivationStatusChecker = {
    */
   async checkSeasonActivationStatus(seasonId: number): Promise<CupActivationStatus> {
     log(`Checking cup activation status for season ID: ${seasonId}...`);
-    const supabase = createClient();
+    const supabase = createSupabaseServiceRoleClient();
 
     try {
       // Validate input
@@ -110,7 +110,7 @@ export const cupActivationStatusChecker = {
         .from('seasons')
         .select('id, name, last_round_special_activated, last_round_special_activated_at')
         .eq('id', seasonId)
-        .single();
+        .maybeSingle();
 
       if (seasonError) {
         error(`Failed to fetch season ${seasonId}:`, seasonError);

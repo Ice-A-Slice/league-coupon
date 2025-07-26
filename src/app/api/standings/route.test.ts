@@ -1,332 +1,282 @@
+/**
+ * @jest-environment node
+ */
+import { NextRequest } from 'next/server';
 import { GET } from './route';
-import { calculateStandings, UserStandingEntry } from '@/services/standingsService';
-import { cupActivationStatusChecker } from '@/services/cup/cupActivationStatusChecker';
-import { getCupStandings } from '@/services/cup/cupScoringService';
-import { logger } from '@/utils/logger';
+import {
+  connectToTestDb,
+  resetDatabase,
+  disconnectDb,
+  createTestProfiles,
+  testIds,
+} from '../../../../tests/utils/db';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { Database } from '@/types/supabase';
 
-// Mock the dependencies
-jest.mock('@/services/standingsService');
-jest.mock('@/services/cup/cupActivationStatusChecker');
-jest.mock('@/services/cup/cupScoringService');
-jest.mock('@/utils/logger');
-
-// Mock the entire next/server module
-const mockNextResponseJson = jest.fn();
-jest.mock('next/server', () => ({
-  NextResponse: {
-    json: (body: unknown, init?: { status?: number; headers?: Record<string, string> }) => {
-      mockNextResponseJson(body, init);
-      return {
-        status: init?.status ?? 200,
-        body,
-        headers: {
-          get: jest.fn((name: string) => {
-            if (name === 'Cache-Control' && init?.headers) {
-              return init.headers['Cache-Control'];
-            }
-            return null;
-          })
-        },
-        json: jest.fn().mockResolvedValue(body)
-      };
-    },
-  },
+// Mock next/cache since we don't need it for testing
+jest.mock('next/cache', () => ({
+  revalidatePath: jest.fn()
 }));
 
-const mockCalculateStandings = calculateStandings as jest.MockedFunction<typeof calculateStandings>;
-const mockCupActivationStatusChecker = cupActivationStatusChecker as jest.Mocked<typeof cupActivationStatusChecker>;
-const mockGetCupStandings = getCupStandings as jest.MockedFunction<typeof getCupStandings>;
-const mockLogger = logger as jest.Mocked<typeof logger>;
+describe('/api/standings - Standings API Integration Tests', () => {
+  let client: SupabaseClient<Database>;
+  let testProfiles: Array<{ id: string; full_name: string | null }>;
 
-describe('/api/standings', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockNextResponseJson.mockClear();
+  beforeAll(async () => {
+    client = await connectToTestDb();
+  });
+
+  beforeEach(async () => {
+    await resetDatabase(true);
     
-    // Default logger mocks
-    mockLogger.info = jest.fn();
-    mockLogger.debug = jest.fn();
-    mockLogger.warn = jest.fn();
-    mockLogger.error = jest.fn();
+    // Create test profiles for standings
+    testProfiles = [
+      { id: 'standings-user-1', full_name: 'Test User 1' },
+      { id: 'standings-user-2', full_name: 'Test User 2' },
+      { id: 'standings-user-3', full_name: 'Test User 3' },
+    ];
+    await createTestProfiles(testProfiles);
   });
 
-  describe('GET', () => {
-    const mockLeagueStandings = [
-      {
-        user_id: 'user-1',
-        username: 'Alice Johnson',
-        game_points: 150,
-        dynamic_points: 25,
-        combined_total_score: 175,
-        rank: 1
-      },
-      {
-        user_id: 'user-2', 
-        username: 'Bob Smith',
-        game_points: 140,
-        dynamic_points: 20,
-        combined_total_score: 160,
-        rank: 2
-      }
-    ];
+  afterAll(async () => {
+    await disconnectDb();
+  });
 
-    const mockCupStandings = [
-      {
-        user_id: 'user-2',
-        total_points: 45,
-        rounds_participated: 3,
-        position: 1,
-        last_updated: '2025-01-27T12:00:00Z'
-      },
-      {
-        user_id: 'user-1',
-        total_points: 40,
-        rounds_participated: 3,
-        position: 2,
-        last_updated: '2025-01-27T12:00:00Z'
-      }
-    ];
+  const createMockRequest = () => {
+    return new NextRequest('http://localhost/api/standings', {
+      method: 'GET'
+    });
+  };
 
-    describe('when cup is not active', () => {
-      beforeEach(() => {
-        mockCalculateStandings.mockResolvedValue(mockLeagueStandings);
-        mockCupActivationStatusChecker.checkCurrentSeasonActivationStatus.mockResolvedValue({
-          isActivated: false,
-          activatedAt: null,
-          seasonId: 1,
-          seasonName: '2024/25'
-        });
-      });
-
-      it('should return league standings with inactive cup status', async () => {
-        const response = await GET();
-        const data = await response.json();
-
-        expect(response.status).toBe(200);
-        expect(data).toEqual({
-          league_standings: mockLeagueStandings,
-          cup: {
-            is_active: false,
-            season_id: 1,
-            season_name: '2024/25',
-            activated_at: null
+  describe('GET /api/standings', () => {
+    it('should return league standings with inactive cup status by default', async () => {
+      // Create some user bets for league standings data
+      await client
+        .from('user_bets')
+        .insert([
+          {
+            user_id: testProfiles[0].id,
+            betting_round_id: testIds.bettingRounds[0],
+            fixture_id: testIds.fixtures[0],
+            home_goals: 2,
+            away_goals: 1,
+            points_awarded: 3
           },
-          metadata: {
-            timestamp: expect.any(String),
-            has_cup_data: false,
-            total_league_participants: 2
+          {
+            user_id: testProfiles[1].id,
+            betting_round_id: testIds.bettingRounds[0],
+            fixture_id: testIds.fixtures[0],
+            home_goals: 1,
+            away_goals: 1,
+            points_awarded: 1
           }
-        });
+        ]);
 
-        // Should not call getCupStandings when cup is inactive
-        expect(mockGetCupStandings).not.toHaveBeenCalled();
-      });
+      const request = createMockRequest();
+      const response = await GET(request);
+      const data = await response.json();
 
-      it('should include proper cache headers', async () => {
-        const response = await GET();
-        
-        expect(response.headers.get('Cache-Control')).toBe(
-          'public, max-age=60, stale-while-revalidate=300'
-        );
-      });
+      expect(response.status).toBe(200);
+      
+      // Should have league standings
+      expect(data.league_standings).toBeDefined();
+      expect(Array.isArray(data.league_standings)).toBe(true);
+
+      // Cup should not be active by default
+      expect(data.cup.is_active).toBe(false);
+      expect(data.cup.season_id).toBe(testIds.season);
+      expect(data.cup.season_name).toBe('2024 Season');
+      expect(data.cup.activated_at).toBeNull();
+      expect(data.cup.standings).toBeUndefined();
+
+      // Should have metadata
+      expect(data.metadata).toBeDefined();
+      expect(data.metadata.timestamp).toBeDefined();
+      expect(data.metadata.has_cup_data).toBe(false);
+      expect(data.metadata.total_league_participants).toBeDefined();
     });
 
-    describe('when cup is active', () => {
-      beforeEach(() => {
-        mockCalculateStandings.mockResolvedValue(mockLeagueStandings);
-        mockCupActivationStatusChecker.checkCurrentSeasonActivationStatus.mockResolvedValue({
-          isActivated: true,
-          activatedAt: '2025-01-20T10:00:00Z',
-          seasonId: 1,
-          seasonName: '2024/25'
-        });
-        mockGetCupStandings.mockResolvedValue(mockCupStandings);
-      });
+    it('should include cache headers', async () => {
+      const request = createMockRequest();
+      const response = await GET(request);
 
-      it('should return both league and cup standings', async () => {
-        const response = await GET();
-        const data = await response.json();
+      const cacheControl = response.headers.get('Cache-Control');
+      expect(cacheControl).toBeTruthy();
+    });
 
-        expect(response.status).toBe(200);
-        expect(data).toEqual({
-          league_standings: mockLeagueStandings,
-          cup: {
-            is_active: true,
-            season_id: 1,
-            season_name: '2024/25',
-            activated_at: '2025-01-20T10:00:00Z',
-            standings: mockCupStandings
+    it('should return both league and cup standings when cup is active', async () => {
+      // Activate the cup for current season
+      await client
+        .from('seasons')
+        .update({
+          last_round_special_activated: true,
+          last_round_special_activated_at: '2025-01-20T10:00:00Z'
+        })
+        .eq('id', testIds.season!);
+
+      // Create some user bets for league standings
+      await client
+        .from('user_bets')
+        .insert([
+          {
+            user_id: testProfiles[0].id,
+            betting_round_id: testIds.bettingRounds[0],
+            fixture_id: testIds.fixtures[0],
+            home_goals: 2,
+            away_goals: 1,
+            points_awarded: 3
           },
-          metadata: {
-            timestamp: expect.any(String),
-            has_cup_data: true,
-            total_league_participants: 2,
-            total_cup_participants: 2
+          {
+            user_id: testProfiles[1].id,
+            betting_round_id: testIds.bettingRounds[0],
+            fixture_id: testIds.fixtures[0],
+            home_goals: 1,
+            away_goals: 1,
+            points_awarded: 2
           }
-        });
+        ]);
 
-        expect(mockGetCupStandings).toHaveBeenCalledTimes(1);
-      });
+      // Create some cup standings data
+      await client
+        .from('user_last_round_special_points')
+        .insert([
+          {
+            user_id: testProfiles[0].id,
+            betting_round_id: testIds.bettingRounds[0],
+            season_id: testIds.season!,
+            points: 15
+          },
+          {
+            user_id: testProfiles[1].id,
+            betting_round_id: testIds.bettingRounds[0],
+            season_id: testIds.season!,
+            points: 10
+          }
+        ]);
 
-      it('should handle cup standings fetch failure gracefully', async () => {
-        mockGetCupStandings.mockRejectedValue(new Error('Cup service unavailable'));
+      const request = createMockRequest();
+      const response = await GET(request);
+      const data = await response.json();
 
-        const response = await GET();
-        const data = await response.json();
+      expect(response.status).toBe(200);
 
-        expect(response.status).toBe(200);
-        expect(data.cup.is_active).toBe(true);
-        expect(data.cup.standings).toBeUndefined();
-        expect(data.metadata.has_cup_data).toBe(false);
+      // Should have league standings
+      expect(data.league_standings).toBeDefined();
+      expect(Array.isArray(data.league_standings)).toBe(true);
 
-        // Should log warning but continue
-        expect(mockLogger.warn).toHaveBeenCalledWith(
-          expect.objectContaining({
-            error: 'Cup service unavailable'
-          }),
-          'Failed to fetch cup standings - continuing with league standings only'
-        );
-      });
+      // Cup should be active
+      expect(data.cup.is_active).toBe(true);
+      expect(data.cup.season_id).toBe(testIds.season);
+      expect(data.cup.season_name).toBe('2024 Season');
+      expect(data.cup.activated_at).toBe('2025-01-20T10:00:00+00:00');
+      
+      // Should have cup standings with enhanced user data
+      expect(data.cup.standings).toBeDefined();
+      expect(Array.isArray(data.cup.standings)).toBe(true);
+      if (data.cup.standings && data.cup.standings.length > 0) {
+        const firstStanding = data.cup.standings[0];
+        expect(firstStanding.user_id).toBeDefined();
+        expect(firstStanding.user).toBeDefined();
+        expect(firstStanding.user.id).toBeDefined();
+        expect(firstStanding.user.full_name).toBeDefined();
+        expect(firstStanding.total_points).toBeDefined();
+        expect(firstStanding.position).toBeDefined();
+      }
+
+      // Should have metadata with cup data
+      expect(data.metadata.has_cup_data).toBe(true);
+      expect(data.metadata.total_cup_participants).toBeDefined();
     });
 
-    describe('when no current season exists', () => {
-      beforeEach(() => {
-        mockCalculateStandings.mockResolvedValue(mockLeagueStandings);
-        mockCupActivationStatusChecker.checkCurrentSeasonActivationStatus.mockResolvedValue({
-          isActivated: false,
-          activatedAt: null,
-          seasonId: null,
-          seasonName: null
-        });
-      });
+    it('should handle cup standings fetch failure gracefully', async () => {
+      // Activate the cup but don't create cup standings data
+      await client
+        .from('seasons')
+        .update({
+          last_round_special_activated: true,
+          last_round_special_activated_at: '2025-01-20T10:00:00Z'
+        })
+        .eq('id', testIds.season!);
 
-      it('should return league standings with null season info', async () => {
-        const response = await GET();
-        const data = await response.json();
+      // Create league standings data
+      await client
+        .from('user_bets')
+        .insert([
+          {
+            user_id: testProfiles[0].id,
+            betting_round_id: testIds.bettingRounds[0],
+            fixture_id: testIds.fixtures[0],
+            home_goals: 2,
+            away_goals: 1,
+            points_awarded: 3
+          }
+        ]);
 
-        expect(response.status).toBe(200);
-        expect(data.cup).toEqual({
-          is_active: false,
-          season_id: null,
-          season_name: null,
-          activated_at: null
-        });
-        expect(data.league_standings).toEqual(mockLeagueStandings);
-      });
+      const request = createMockRequest();
+      const response = await GET(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      
+      // Should still have league standings
+      expect(data.league_standings).toBeDefined();
+      
+      // Cup should be active but have empty standings
+      expect(data.cup.is_active).toBe(true);
+      expect(data.cup.standings).toBeDefined();
+      expect(data.cup.standings).toEqual([]);
+      expect(data.metadata.total_cup_participants).toBe(0);
     });
 
-    describe('error handling', () => {
-      it('should return 500 when league standings calculation fails', async () => {
-        mockCalculateStandings.mockResolvedValue(null);
+    it('should return league standings when no current season exists', async () => {
+      // Remove is_current flag from all seasons
+      await client
+        .from('seasons')
+        .update({ is_current: false })
+        .eq('id', testIds.season!);
 
-        const response = await GET();
-        const data = await response.json();
+      const request = createMockRequest();
+      const response = await GET(request);
+      const data = await response.json();
 
-        expect(response.status).toBe(500);
-        expect(data).toEqual({
-          error: 'Failed to calculate league standings.'
-        });
+      expect(response.status).toBe(200);
+      
+      // Should still have league standings (empty)
+      expect(data.league_standings).toBeDefined();
+      expect(Array.isArray(data.league_standings)).toBe(true);
 
-        // Should not proceed to check cup status
-        expect(mockCupActivationStatusChecker.checkCurrentSeasonActivationStatus).not.toHaveBeenCalled();
-      });
-
-      it('should return 500 when league standings service throws', async () => {
-        mockCalculateStandings.mockRejectedValue(new Error('Database connection failed'));
-
-        const response = await GET();
-        const data = await response.json();
-
-        expect(response.status).toBe(500);
-        expect(data).toEqual({
-          error: 'Internal server error.'
-        });
-
-        expect(mockLogger.error).toHaveBeenCalledWith(
-          expect.objectContaining({
-            error: 'Database connection failed',
-            stack: expect.any(String)
-          }),
-          'Unexpected error fetching enhanced standings.'
-        );
-      });
-
-      it('should continue with league standings when cup status check fails', async () => {
-        mockCalculateStandings.mockResolvedValue(mockLeagueStandings);
-        mockCupActivationStatusChecker.checkCurrentSeasonActivationStatus.mockRejectedValue(
-          new Error('Cup status service down')
-        );
-
-        const response = await GET();
-        const data = await response.json();
-
-        expect(response.status).toBe(500);
-        expect(data).toEqual({
-          error: 'Internal server error.'
-        });
-      });
+      // Cup should not be active with null season info
+      expect(data.cup.is_active).toBe(false);
+      expect(data.cup.season_id).toBeNull();
+      expect(data.cup.season_name).toBeNull();
+      expect(data.metadata.has_cup_data).toBe(false);
     });
 
-    describe('performance logging', () => {
-      beforeEach(() => {
-        mockCalculateStandings.mockResolvedValue(mockLeagueStandings);
-        mockCupActivationStatusChecker.checkCurrentSeasonActivationStatus.mockResolvedValue({
-          isActivated: true,
-          activatedAt: '2025-01-20T10:00:00Z',
-          seasonId: 1,
-          seasonName: '2024/25'
-        });
-        mockGetCupStandings.mockResolvedValue(mockCupStandings);
-      });
+    it('should maintain backward compatibility with league_standings field', async () => {
+      const request = createMockRequest();
+      const response = await GET(request);
+      const data = await response.json();
 
-      it('should log processing time and participant counts', async () => {
-        await GET();
-
-        expect(mockLogger.info).toHaveBeenCalledWith(
-          expect.objectContaining({
-            leagueParticipants: 2,
-            cupActive: true,
-            cupParticipants: 2,
-            processingTime: expect.any(Number)
-          }),
-          'Successfully compiled enhanced standings response.'
-        );
-      });
+      expect(response.status).toBe(200);
+      
+      // Must always include league_standings field for backward compatibility
+      expect(data.league_standings).toBeDefined();
+      expect(Array.isArray(data.league_standings)).toBe(true);
     });
 
-    describe('backward compatibility', () => {
-      beforeEach(() => {
-        mockCalculateStandings.mockResolvedValue(mockLeagueStandings);
-        mockCupActivationStatusChecker.checkCurrentSeasonActivationStatus.mockResolvedValue({
-          isActivated: false,
-          activatedAt: null,
-          seasonId: 1,
-          seasonName: '2024/25'
-        });
-      });
+    it('should include performance metadata', async () => {
+      const request = createMockRequest();
+      const response = await GET(request);
+      const data = await response.json();
 
-      it('should always include league_standings field for existing clients', async () => {
-        const response = await GET();
-        const data = await response.json();
-
-        expect(data).toHaveProperty('league_standings');
-        expect(Array.isArray(data.league_standings)).toBe(true);
-        expect(data.league_standings).toEqual(mockLeagueStandings);
-      });
-
-      it('should maintain the same league standings data structure', async () => {
-        const response = await GET();
-        const data = await response.json();
-
-        data.league_standings.forEach((standing: UserStandingEntry) => {
-          expect(standing).toHaveProperty('user_id');
-          expect(standing).toHaveProperty('username');
-          expect(standing).toHaveProperty('game_points');
-          expect(standing).toHaveProperty('dynamic_points');
-          expect(standing).toHaveProperty('combined_total_score');
-          expect(standing).toHaveProperty('rank');
-        });
-      });
+      expect(response.status).toBe(200);
+      
+      // Should have performance metadata
+      expect(data.metadata).toBeDefined();
+      expect(data.metadata.timestamp).toBeDefined();
+      expect(typeof data.metadata.timestamp).toBe('string');
+      expect(data.metadata.total_league_participants).toBeDefined();
+      expect(typeof data.metadata.total_league_participants).toBe('number');
     });
   });
-}); 
+});

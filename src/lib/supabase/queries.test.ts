@@ -191,6 +191,7 @@ describe('Supabase Queries', () => {
     let fromBettingRoundsMock: jest.Mock;
     let fromBettingRoundFixturesMock: jest.Mock;
     let fromFixturesMock: jest.Mock;
+    let fromUserSeasonAnswersMock: jest.Mock;
 
     beforeEach(() => {
       jest.clearAllMocks();
@@ -198,6 +199,7 @@ describe('Supabase Queries', () => {
       fromBettingRoundsMock = jest.fn();
       fromBettingRoundFixturesMock = jest.fn();
       fromFixturesMock = jest.fn(); // This will now be what .in() resolves to
+      fromUserSeasonAnswersMock = jest.fn().mockResolvedValue({ data: [], error: null }); // Default empty answers
 
       // @ts-expect-error - Assigning mock implementation
       supabaseServerClient.from = jest.fn((tableName: string) => {
@@ -205,8 +207,10 @@ describe('Supabase Queries', () => {
           return {
             select: jest.fn(() => ({
               eq: jest.fn(() => ({
-                limit: jest.fn(() => ({
-                  single: fromBettingRoundsMock
+                eq: jest.fn(() => ({
+                  limit: jest.fn(() => ({
+                    single: fromBettingRoundsMock
+                  }))
                 }))
               }))
             }))
@@ -225,6 +229,15 @@ describe('Supabase Queries', () => {
               // .in(...).order(...) is the terminal chain for this path in the actual code
               in: jest.fn(() => ({
                 order: fromFixturesMock
+              }))
+            }))
+          };
+        }
+        if (tableName === 'user_season_answers') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                eq: fromUserSeasonAnswersMock
               }))
             }))
           };
@@ -392,6 +405,73 @@ describe('Supabase Queries', () => {
       expect(consoleErrorSpy).toHaveBeenCalledWith('Error fetching fixture details for betting round 103:', mockError);
       expect(consoleErrorSpy).toHaveBeenCalledWith('An error occurred in getCurrentBettingRoundFixtures:', mockError);
       consoleErrorSpy.mockRestore();
+    });
+
+    it('should fetch user season answers when userId is provided', async () => {
+      // Arrange
+      const openRound = {
+        id: 104,
+        name: 'Test Round with User',
+        competitions: {
+          seasons: [{ id: 123 }]
+        }
+      };
+      const roundFixtureLinks = [{ fixture_id: 401 }];
+      const fixtureDetails = [
+        {
+          id: 401,
+          kickoff: '2024-08-17T11:30:00+00:00',
+          home_team: { id: 1, name: 'Home Team' },
+          away_team: { id: 2, name: 'Away Team' }
+        }
+      ];
+      const userAnswers = [
+        { question_type: 'league_winner', answered_team_id: 1, answered_player_id: null },
+        { question_type: 'top_scorer', answered_team_id: null, answered_player_id: 100 }
+      ];
+
+      fromBettingRoundsMock.mockResolvedValueOnce({ data: openRound, error: null });
+      fromBettingRoundFixturesMock.mockResolvedValueOnce({ data: roundFixtureLinks, error: null });
+      fromFixturesMock.mockResolvedValueOnce({ data: fixtureDetails, error: null });
+      fromUserSeasonAnswersMock.mockResolvedValueOnce({ data: userAnswers, error: null });
+
+      // Act
+      const result = await getCurrentBettingRoundFixtures('test-user-id');
+
+      // Assert
+      expect(result).not.toBeNull();
+      expect(result?.userSeasonAnswers).toEqual({
+        league_winner: 1,
+        top_scorer: 100
+      });
+      expect(supabaseServerClient.from).toHaveBeenCalledWith('user_season_answers');
+      expect(fromUserSeasonAnswersMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not fetch user season answers when userId is not provided', async () => {
+      // Arrange
+      const openRound = { id: 105, name: 'Test Round No User' };
+      const roundFixtureLinks = [{ fixture_id: 501 }];
+      const fixtureDetails = [
+        {
+          id: 501,
+          kickoff: '2024-08-17T11:30:00+00:00',
+          home_team: { id: 1, name: 'Home Team' },
+          away_team: { id: 2, name: 'Away Team' }
+        }
+      ];
+
+      fromBettingRoundsMock.mockResolvedValueOnce({ data: openRound, error: null });
+      fromBettingRoundFixturesMock.mockResolvedValueOnce({ data: roundFixtureLinks, error: null });
+      fromFixturesMock.mockResolvedValueOnce({ data: fixtureDetails, error: null });
+
+      // Act
+      const result = await getCurrentBettingRoundFixtures(); // No userId
+
+      // Assert
+      expect(result).not.toBeNull();
+      expect(result?.userSeasonAnswers).toBeUndefined();
+      expect(fromUserSeasonAnswersMock).not.toHaveBeenCalled();
     });
 
     // Old tests remain commented out

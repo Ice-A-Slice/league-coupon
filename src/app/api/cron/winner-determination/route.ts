@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { WinnerDeterminationService, WinnerDeterminationResult } from '@/services/winnerDeterminationService';
 import { logger } from '@/utils/logger';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { revalidatePath } from 'next/cache';
 import { startCronExecution, completeCronExecution } from '@/utils/cron/alerts';
 
@@ -54,7 +54,7 @@ export async function GET(request: Request) {
     logger.info('Starting winner determination cron job', { timestamp });
 
     // Initialize service
-    const supabaseClient = getSupabaseServiceRoleClient();
+    const supabaseClient = createSupabaseServiceRoleClient();
     const winnerDeterminationService = new WinnerDeterminationService(supabaseClient);
 
     // Process winner determination for all eligible seasons

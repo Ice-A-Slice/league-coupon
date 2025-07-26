@@ -1,5 +1,5 @@
 import { type SupabaseClient } from '@supabase/supabase-js';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { calculateStandings, type UserStandingEntry } from '@/services/standingsService';
 import { getAllUsersPerformanceData, type UserPerformanceData } from '@/lib/userDataAggregationService';
 import { logger } from '@/utils/logger';
@@ -89,7 +89,7 @@ export class EmailDataFetchingService {
   private client: SupabaseClient<Database>;
 
   constructor(client?: SupabaseClient<Database>) {
-    this.client = client || getSupabaseServiceRoleClient();
+    this.client = client || createSupabaseServiceRoleClient();
   }
 
   /**
@@ -435,7 +435,7 @@ export async function getLatestCompletedRoundSummary(): Promise<SummaryEmailData
  */
 export async function hasCompletedRoundsForSummary(): Promise<boolean> {
   try {
-    const client = getSupabaseServiceRoleClient();
+    const client = createSupabaseServiceRoleClient();
     const { data, error } = await client
       .from('betting_rounds')
       .select('id')

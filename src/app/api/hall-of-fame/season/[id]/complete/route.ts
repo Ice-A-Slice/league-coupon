@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { logger } from '@/utils/logger';
 
 /**
@@ -25,8 +25,8 @@ export interface UnifiedSeasonWinner {
 
 export interface CompleteSeasonResponse {
   season_id: number;
-  league_winner: UnifiedSeasonWinner | null;
-  cup_winner: UnifiedSeasonWinner | null;
+  league_winners: UnifiedSeasonWinner[];
+  cup_winners: UnifiedSeasonWinner[];
   season: {
     id: number;
     name: string | null;
@@ -101,7 +101,7 @@ export async function GET(
     });
 
     // Create Supabase client
-    const supabase = getSupabaseServiceRoleClient();
+    const supabase = createSupabaseServiceRoleClient();
 
     // First, verify the season exists and get its details
     const { data: seasonData, error: seasonError } = await supabase
@@ -185,53 +185,53 @@ export async function GET(
       );
     }
 
-    // Separate league and cup winners
-    const leagueWinner = allWinners?.find(winner => 
+    // Separate league and cup winners (support multiple winners)
+    const leagueWinners = allWinners?.filter(winner => 
       winner.competition_type === 'league' || !winner.competition_type
-    ) || null;
+    ) || [];
     
-    const cupWinner = allWinners?.find(winner => 
+    const cupWinners = allWinners?.filter(winner => 
       winner.competition_type === 'last_round_special'
-    ) || null;
+    ) || [];
 
     const processingTime = Date.now() - startTime;
 
     const response: CompleteSeasonResponse = {
       season_id: seasonId,
-      league_winner: leagueWinner ? {
-        id: leagueWinner.id,
-        season_id: leagueWinner.season_id,
-        user_id: leagueWinner.user_id,
-        league_id: leagueWinner.league_id,
-        total_points: leagueWinner.total_points,
-        game_points: leagueWinner.game_points,
-        dynamic_points: leagueWinner.dynamic_points,
-        created_at: leagueWinner.created_at,
-        competition_type: 'league',
+      league_winners: leagueWinners.map(winner => ({
+        id: winner.id,
+        season_id: winner.season_id,
+        user_id: winner.user_id,
+        league_id: winner.league_id,
+        total_points: winner.total_points,
+        game_points: winner.game_points,
+        dynamic_points: winner.dynamic_points,
+        created_at: winner.created_at,
+        competition_type: 'league' as const,
         profile: {
-          id: leagueWinner.profile.id,
-          full_name: leagueWinner.profile.full_name,
-          avatar_url: leagueWinner.profile.avatar_url,
-          updated_at: leagueWinner.profile.updated_at
+          id: winner.profile.id,
+          full_name: winner.profile.full_name,
+          avatar_url: winner.profile.avatar_url,
+          updated_at: winner.profile.updated_at
         }
-      } : null,
-      cup_winner: cupWinner ? {
-        id: cupWinner.id,
-        season_id: cupWinner.season_id,
-        user_id: cupWinner.user_id,
-        league_id: cupWinner.league_id,
-        total_points: cupWinner.total_points,
-        game_points: cupWinner.game_points,
-        dynamic_points: cupWinner.dynamic_points,
-        created_at: cupWinner.created_at,
-        competition_type: 'last_round_special',
+      })),
+      cup_winners: cupWinners.map(winner => ({
+        id: winner.id,
+        season_id: winner.season_id,
+        user_id: winner.user_id,
+        league_id: winner.league_id,
+        total_points: winner.total_points,
+        game_points: winner.game_points,
+        dynamic_points: winner.dynamic_points,
+        created_at: winner.created_at,
+        competition_type: 'last_round_special' as const,
         profile: {
-          id: cupWinner.profile.id,
-          full_name: cupWinner.profile.full_name,
-          avatar_url: cupWinner.profile.avatar_url,
-          updated_at: cupWinner.profile.updated_at
+          id: winner.profile.id,
+          full_name: winner.profile.full_name,
+          avatar_url: winner.profile.avatar_url,
+          updated_at: winner.profile.updated_at
         }
-      } : null,
+      })),
       season: {
         id: seasonData.id,
         name: seasonData.name,
@@ -257,8 +257,10 @@ export async function GET(
         requestId,
         timestamp,
         processingTime,
-        has_league_winner: !!leagueWinner,
-        has_cup_winner: !!cupWinner,
+        has_league_winners: leagueWinners.length > 0,
+        has_cup_winners: cupWinners.length > 0,
+        league_winners_count: leagueWinners.length,
+        cup_winners_count: cupWinners.length,
         cup_was_activated: seasonData.last_round_special_activated || false
       }
     };
@@ -267,8 +269,8 @@ export async function GET(
       requestId,
       seasonId,
       processingTime,
-      hasLeagueWinner: !!leagueWinner,
-      hasCupWinner: !!cupWinner,
+      leagueWinnersCount: leagueWinners.length,
+      cupWinnersCount: cupWinners.length,
       cupActivated: seasonData.last_round_special_activated || false
     });
 

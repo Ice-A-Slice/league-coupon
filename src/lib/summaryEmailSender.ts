@@ -3,7 +3,7 @@ import { emailDataService, type SummaryEmailProps } from '@/lib/emailDataService
 import { SummaryEmail } from '@/components/emails/SummaryEmail';
 import * as React from 'react';
 import { render } from '@react-email/render';
-import { getSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 import { logger } from '@/utils/logger';
 
 /**
@@ -58,7 +58,7 @@ export interface IndividualEmailResult {
  */
 export class SummaryEmailSender {
   private config: SummaryEmailConfig;
-  private supabase = getSupabaseServiceRoleClient();
+  private supabase = createSupabaseServiceRoleClient();
 
   constructor(config?: Partial<SummaryEmailConfig>) {
     this.config = {
