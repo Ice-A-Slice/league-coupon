@@ -69,9 +69,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-supabase-
       
-      # Start Supabase local development environment
-      - name: Start Supabase
+      # Initialize and start Supabase local development environment
+      - name: Initialize and Start Supabase
         run: |
+          # Initialize Supabase project if config doesn't exist
+          if [ ! -f "supabase/config.toml" ]; then
+            echo "Initializing Supabase project..."
+            supabase init
+          fi
           # Start Supabase with minimal services for testing
           supabase start --exclude=imgproxy,edge-runtime,vector
           # Wait for database to be ready with better error handling
