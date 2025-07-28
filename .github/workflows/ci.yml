@@ -52,6 +52,10 @@ jobs:
       # Install Supabase CLI
       - name: Install Supabase CLI
         run: |
+          # Remove any existing supabase binary first
+          sudo rm -f /usr/local/bin/supabase
+          rm -f supabase
+          # Download and install Supabase CLI
           curl -fsSL https://github.com/supabase/cli/releases/download/v1.200.3/supabase_linux_amd64.tar.gz | tar -xz
           sudo mv supabase /usr/local/bin/
           supabase --version
