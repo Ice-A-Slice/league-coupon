@@ -95,15 +95,16 @@ jobs:
       # Run database migrations and seed data
       - name: Setup Database
         run: |
-          # Seed test data if available
-          if [ -f "supabase/seed.sql" ]; then
-            echo "Seeding database with test data..."
-            supabase db reset --debug
-          else
-            echo "No seed.sql found, skipping seeding"
-          fi
-          # Verify database is working
+          # Apply migrations first
+          echo "Applying database migrations..."
+          supabase db reset --debug
+          
+          # Verify database is working and tables exist
+          echo "Verifying database setup..."
           supabase db ping
+          
+          # Check if profiles table exists (basic schema verification)
+          docker exec supabase_db_league-coupon psql -U postgres -d postgres -c "\dt public.*" || echo "Warning: Could not list tables"
       
       # Run tests with proper error handling
       - name: Run tests
