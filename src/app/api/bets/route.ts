@@ -184,15 +184,19 @@ export async function POST(request: Request) {
     console.log(`Upserting ${upsertData.length} bets for user ${user.id}, round ${bettingRoundId}...`);
     const { error: upsertError } = await supabase
       .from('user_bets')
-      .insert(upsertData);
-      // Supabase handles conflict on UNIQUE(user_id, fixture_id) automatically
+      .upsert(upsertData, {
+        onConflict: 'user_id,fixture_id'
+      });
 
     if (upsertError) {
       console.error(`Error upserting bets for user ${user.id}:`, upsertError);
+      console.error(`Error details: code=${upsertError.code}, message=${upsertError.message}`);
+      console.error(`Attempted to upsert data:`, JSON.stringify(upsertData, null, 2));
+      
       if (upsertError.code === '23503') { // Foreign key violation
            return NextResponse.json({ error: 'Invalid fixture ID provided.' }, { status: 400 });
       }
-      return NextResponse.json({ error: 'Failed to save bets to database.' }, { status: 500 });
+      return NextResponse.json({ error: `Failed to save bets to database: ${upsertError.message}` }, { status: 500 });
     }
 
     console.log(`Successfully saved bets for user ${user.id}, round ${bettingRoundId}.`);
