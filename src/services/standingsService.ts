@@ -20,7 +20,7 @@ export async function aggregateUserPoints(): Promise<UserPoints[] | null> {
   const serviceRoleClient = createSupabaseServiceRoleClient();
 
   try {
-    // 1. Fetch game points from the RPC
+    // 1. Fetch game points from the RPC (only users with scored points)
     const { data: rpcPointsData, error: rpcError } = await serviceRoleClient.rpc(
       'get_user_total_points'
     );
@@ -40,27 +40,58 @@ export async function aggregateUserPoints(): Promise<UserPoints[] | null> {
     }
     logger.debug({ count: gamePointsMap.size }, 'Fetched game points from RPC.');
 
-    // 2. Fetch all profiles
+    // 2. Fetch all users who have placed bets (including those with unscored bets)
+    const { data: bettorsData, error: bettorsError } = await serviceRoleClient
+      .from('user_bets')
+      .select('user_id');
+
+    if (bettorsError) {
+      logger.error({ error: bettorsError }, 'Error fetching users who have placed bets.');
+      throw bettorsError;
+    }
+
+    const allUserIds = new Set<string>();
+    
+    // Add users with points
+    gamePointsMap.forEach((points, userId) => {
+      allUserIds.add(userId);
+    });
+    
+    // Add users who have placed bets (even without points)
+    if (bettorsData) {
+      bettorsData.forEach(bettor => {
+        if (bettor.user_id) {
+          allUserIds.add(bettor.user_id);
+        }
+      });
+    }
+
+    logger.debug({ count: allUserIds.size }, 'Found total unique users (with points or bets).');
+
+    // 3. Fetch profiles for all these users
     const { data: profilesData, error: profilesError } = await serviceRoleClient
       .from('profiles')
-      .select('id, full_name');
+      .select('id, full_name')
+      .in('id', Array.from(allUserIds));
 
     if (profilesError) {
       logger.error({ error: profilesError }, 'Error fetching profiles.');
       throw profilesError;
     }
 
-    if (!profilesData) {
-      logger.warn('No profiles data found.');
-      return []; // Or handle as appropriate - maybe an empty array if no profiles exist
+    // Create a profile map for quick lookup
+    const profilesMap = new Map<string, string | null>();
+    if (profilesData) {
+      profilesData.forEach(profile => {
+        profilesMap.set(profile.id, profile.full_name);
+      });
     }
-    logger.debug({ count: profilesData.length }, 'Fetched profiles.');
 
-    // 3. Combine profile data with game points
-    const aggregatedData: UserPoints[] = profilesData.map(profile => ({
-      user_id: profile.id,
-      full_name: profile.full_name || undefined, // Handle null full_name
-      total_points: gamePointsMap.get(profile.id) || 0, // Default to 0 game points if not in RPC data
+    // 4. Combine all data
+    const aggregatedData: UserPoints[] = Array.from(allUserIds).map(userId => ({
+      user_id: userId,
+      full_name: profilesMap.get(userId) || undefined,
+      total_points: gamePointsMap.get(userId) || 0, // Default to 0 if no points yet
     }));
     
     logger.info({ count: aggregatedData.length }, 'Successfully aggregated user points with profiles.');

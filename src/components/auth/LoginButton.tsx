@@ -21,23 +21,62 @@ export default function LoginButton() {
     }
 
     getUser()
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setUser(session?.user ?? null)
+      }
+    )
+
+    return () => subscription?.unsubscribe()
   }, [supabase])
 
   const handleLogin = async () => {
-    // Explicitly set the redirect URL for local development
-    // This is necessary because Vercel CLI environment variables might override .env.local
-    // for NEXT_PUBLIC_SITE_URL when determining the default redirect URL.
-    // TODO: Investigate Vercel env variable precedence vs .env.local for OAuth redirects.
-    const redirectURL = process.env.NODE_ENV === 'development' 
-      ? 'http://localhost:3000/auth/callback' 
-      : undefined; // Let Supabase handle it in production (using Site URL or Vercel URL)
+    // For MVP testing, use email/password authentication
+    const email = prompt('Enter your email address:')
+    if (!email) return
+    
+    const password = prompt('Enter password (or create new):')
+    if (!password) return
 
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: redirectURL,
-      },
+    // Try login first
+    const { data: loginData, error } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password,
     })
+
+    // If login fails, try signup
+    if (error && error.message.includes('Invalid login credentials')) {
+      // Get full name for new users
+      const fullName = prompt('Enter your full name (for display in standings):')
+      if (!fullName) return
+
+      const { data: signupData, error: signupError } = await supabase.auth.signUp({
+        email: email,
+        password: password,
+        options: {
+          data: {
+            full_name: fullName
+          }
+        }
+      })
+      
+      if (signupError) {
+        alert('Signup error: ' + signupError.message)
+      } else {
+        alert('Account created and logged in!')
+        // Set user immediately and refresh page
+        setUser(signupData.user)
+        window.location.reload()
+      }
+    } else if (error) {
+      alert('Login error: ' + error.message)
+    } else {
+      // Login successful - update state and refresh
+      setUser(loginData.user)
+      window.location.reload()
+    }
   }
 
   const handleLogout = async () => {
@@ -62,7 +101,7 @@ export default function LoginButton() {
           onClick={handleLogin}
           className="bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700"
         >
-          Logga in med Google
+          Logga in / Registrera
         </button>
       )}
     </div>
