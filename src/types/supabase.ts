@@ -7,13 +7,57 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "12.2.3 (519615d)"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
+      auth_attempts: {
+        Row: {
+          attempted_at: string | null
+          email: string
+          id: string
+          ip_address: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          attempted_at?: string | null
+          email: string
+          id?: string
+          ip_address?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          attempted_at?: string | null
+          email?: string
+          id?: string
+          ip_address?: string | null
+          user_agent?: string | null
+        }
+        Relationships: []
+      }
       betting_round_fixtures: {
         Row: {
           betting_round_id: number
@@ -124,6 +168,33 @@ export type Database = {
           logo_url?: string | null
           name?: string
           type?: string | null
+        }
+        Relationships: []
+      }
+      email_whitelist: {
+        Row: {
+          added_at: string | null
+          added_by: string | null
+          email: string
+          id: string
+          is_active: boolean | null
+          is_admin: boolean | null
+        }
+        Insert: {
+          added_at?: string | null
+          added_by?: string | null
+          email: string
+          id?: string
+          is_active?: boolean | null
+          is_admin?: boolean | null
+        }
+        Update: {
+          added_at?: string | null
+          added_by?: string | null
+          email?: string
+          id?: string
+          is_active?: boolean | null
+          is_admin?: boolean | null
         }
         Relationships: []
       }
@@ -712,6 +783,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      activate_last_round_special: {
+        Args: { p_activation_timestamp: string; p_season_id: number }
+        Returns: Json
+      }
       get_user_points_up_to_round: {
         Args: { target_round_id: number }
         Returns: {
@@ -727,12 +802,20 @@ export type Database = {
         }[]
       }
       handle_dynamic_points_update: {
-        Args: { p_round_id: number; p_dynamic_point_updates: Json }
+        Args: { p_dynamic_point_updates: Json; p_round_id: number }
         Returns: undefined
       }
       handle_round_scoring: {
-        Args: { p_betting_round_id: number; p_bet_updates: Json }
+        Args: { p_bet_updates: Json; p_betting_round_id: number }
         Returns: undefined
+      }
+      is_email_admin: {
+        Args: { check_email: string }
+        Returns: boolean
+      }
+      is_email_whitelisted: {
+        Args: { check_email: string }
+        Returns: boolean
       }
     }
     Enums: {
@@ -863,6 +946,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       betting_round_status: ["open", "closed", "scoring", "scored"],
@@ -870,3 +956,4 @@ export const Constants = {
     },
   },
 } as const
+
