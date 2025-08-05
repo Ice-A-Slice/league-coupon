@@ -139,10 +139,33 @@ export const roundManagementService = {
       const competitionId = seasonData.competition_id;
       log(`Determined Competition ID: ${competitionId}`);
 
-      // 3. Round Naming (Task 5.3 - Simplified MVP)
-      const minRoundId = Math.min(...uniqueRoundIds); // Find the minimum round ID numerically
-      const name = `Round ${minRoundId}`; // Simple MVP name format
-      log(`Generated Round Name: ${name}`);
+      // 3. Round Naming - Use actual round name from API
+      // Query for the actual round name from the rounds table
+      const { data: roundNameData, error: roundNameError } = await supabase
+        .from('rounds')
+        .select('name')
+        .eq('id', representativeRoundId)
+        .single();
+
+      if (roundNameError || !roundNameData) {
+        error('Error fetching round name:', roundNameError);
+        throw new RoundManagementError(`Failed to fetch round name for round ${representativeRoundId}.`);
+      }
+      
+      // Extract round number from API name and format consistently
+      const apiRoundName = roundNameData.name;
+      let name = apiRoundName; // Default to API name if parsing fails
+      
+      // Try to extract round number from various formats:
+      // "Regular Season - 15" -> "Round 15"
+      // "Round 15" -> "Round 15" 
+      // "Matchday 15" -> "Round 15"
+      const roundNumberMatch = apiRoundName.match(/\b(\d+)\b/);
+      if (roundNumberMatch) {
+        name = `Round ${roundNumberMatch[1]}`;
+      }
+      
+      log(`Formatted round name: ${name} (from API: ${apiRoundName})`);
 
       return { name, competitionId, earliestKickoff, latestKickoff };
 
