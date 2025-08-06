@@ -28,6 +28,57 @@ export default function AdminDashboard() {
           </div>
         </Link>
 
+        <Link
+          href="/admin/rounds"
+          className="block p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow"
+        >
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="ml-4">
+              <h3 className="text-lg font-medium text-gray-900">Round Management</h3>
+              <p className="text-sm text-gray-500">Enable/disable bonus rounds, manage seasons</p>
+            </div>
+          </div>
+        </Link>
+
+        <Link
+          href="/admin/coupon"
+          className="block p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow"
+        >
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <svg className="h-8 w-8 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+            </div>
+            <div className="ml-4">
+              <h3 className="text-lg font-medium text-gray-900">Season Questionnaire</h3>
+              <p className="text-sm text-gray-500">Manage season-long prediction submissions</p>
+            </div>
+          </div>
+        </Link>
+
+        <Link
+          href="/admin/audit"
+          className="block p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow"
+        >
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <svg className="h-8 w-8 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <div className="ml-4">
+              <h3 className="text-lg font-medium text-gray-900">Audit Log</h3>
+              <p className="text-sm text-gray-500">View all admin actions and changes</p>
+            </div>
+          </div>
+        </Link>
+
         <div className="p-6 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
           <div className="flex items-center">
             <div className="flex-shrink-0">

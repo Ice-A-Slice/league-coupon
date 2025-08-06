@@ -20,10 +20,28 @@ export default function AdminLayout({
             </div>
             <div className="flex items-center space-x-4">
               <Link 
-                href="/admin/whitelist" 
+                href="/admin" 
                 className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
               >
-                Whitelist
+                Dashboard
+              </Link>
+              <Link 
+                href="/admin/rounds" 
+                className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+              >
+                Rounds
+              </Link>
+              <Link 
+                href="/admin/coupon" 
+                className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+              >
+                Coupon
+              </Link>
+              <Link 
+                href="/admin/audit" 
+                className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+              >
+                Audit Log
               </Link>
               <Link 
                 href="/" 
