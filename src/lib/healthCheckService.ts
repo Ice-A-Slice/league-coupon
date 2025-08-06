@@ -103,6 +103,12 @@ class HealthCheckService {
         critical: true,
         timeout: 500,
         check: this.checkEnvironmentVariables.bind(this)
+      },
+      {
+        name: 'essential_data',
+        critical: true,
+        timeout: 3000,
+        check: this.checkEssentialData.bind(this)
       }
     ];
   }
@@ -517,6 +523,112 @@ class HealthCheckService {
         }
       }
     };
+  }
+
+  /**
+   * Check essential data exists for core functionality
+   */
+  private async checkEssentialData(): Promise<{ status: HealthStatus; message: string; details?: Record<string, unknown> }> {
+    try {
+      const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        {
+          cookies: {
+            get() { return undefined; },
+            set() {},
+            remove() {},
+          },
+        }
+      );
+
+      const checks = [
+        { table: 'competitions', minRequired: 1, name: 'Competitions' },
+        { table: 'seasons', minRequired: 1, name: 'Seasons' },
+        { table: 'teams', minRequired: 4, name: 'Teams' },
+        { table: 'players', minRequired: 5, name: 'Players' },
+        { table: 'player_statistics', minRequired: 5, name: 'Player Statistics' },
+        { table: 'betting_rounds', minRequired: 1, name: 'Betting Rounds' }
+      ];
+
+      const results: Record<string, number> = {};
+      const issues: string[] = [];
+
+      for (const check of checks) {
+        const { data, error } = await supabase
+          .from(check.table)
+          .select('id', { count: 'exact' });
+
+        if (error) {
+          issues.push(`${check.name}: Query failed - ${error.message}`);
+          continue;
+        }
+
+        const count = data?.length || 0;
+        results[check.table] = count;
+
+        if (count < check.minRequired) {
+          issues.push(`${check.name}: ${count} found, need ${check.minRequired}`);
+        }
+      }
+
+      // Check current season exists and has active betting round
+      const { data: currentSeason } = await supabase
+        .from('seasons')
+        .select('id')
+        .eq('is_current', true)
+        .single();
+
+      if (!currentSeason) {
+        issues.push('No current season found');
+      } else {
+        // Check if players are linked to current season (critical for top scorer)
+        const { data: linkedPlayers } = await supabase
+          .from('player_statistics')
+          .select('id')
+          .eq('season_id', currentSeason.id);
+
+        if (!linkedPlayers || linkedPlayers.length < 5) {
+          issues.push(`Only ${linkedPlayers?.length || 0} players linked to current season`);
+        }
+
+        // Check for open betting rounds
+        const { data: openRounds } = await supabase
+          .from('betting_rounds')
+          .select('id')
+          .eq('status', 'open');
+
+        if (!openRounds || openRounds.length === 0) {
+          issues.push('No open betting rounds found');
+        }
+      }
+
+      let status: HealthStatus = 'healthy';
+      let message = 'All essential data present and properly configured';
+
+      if (issues.length > 0) {
+        status = 'unhealthy';
+        message = `Essential data issues: ${issues.join('; ')}`;
+      }
+
+      return {
+        status,
+        message,
+        details: {
+          counts: results,
+          issues,
+          currentSeason: !!currentSeason
+        }
+      };
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown data check error';
+      return {
+        status: 'unhealthy',
+        message: `Essential data check failed: ${errorMessage}`,
+        details: { error: errorMessage }
+      };
+    }
   }
 
   /**

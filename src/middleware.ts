@@ -30,18 +30,26 @@ const adminRoutes = [
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   
-  // Safety switch: disable whitelist via environment variable
-  const whitelistEnabled = process.env.WHITELIST_ENABLED === 'true'
-  if (!whitelistEnabled) {
-    return NextResponse.next()
-  }
+  // Check if this is an admin route FIRST
+  const isAdminRoute = adminRoutes.some(route => 
+    pathname === route || pathname.startsWith(`${route}/`)
+  )
   
-  // Allow public routes
+  // Allow public routes (but not admin routes)
   const isPublicRoute = publicRoutes.some(route => 
     pathname === route || pathname.startsWith(`${route}/`)
   )
   
-  if (isPublicRoute) {
+  // Safety switch: disable whitelist via environment variable
+  const whitelistEnabled = process.env.WHITELIST_ENABLED === 'true'
+  
+  // If whitelist is disabled AND it's not an admin route, allow access
+  if (!whitelistEnabled && !isAdminRoute) {
+    return NextResponse.next()
+  }
+  
+  // Always require auth for admin routes, regardless of whitelist setting
+  if (isPublicRoute && !isAdminRoute) {
     return NextResponse.next()
   }
   
@@ -95,28 +103,27 @@ export async function middleware(request: NextRequest) {
   
   const userEmail = session.user.email.toLowerCase()
   
-  // Check whitelist status using RPC function
-  const { data: isWhitelisted, error: whitelistError } = await supabase
-    .rpc('is_email_whitelisted', { check_email: userEmail })
-  
-  if (whitelistError || !isWhitelisted) {
-    // User is not whitelisted, redirect to access denied
-    return NextResponse.redirect(new URL('/auth/access-denied', request.url))
-  }
-  
-  // Check admin routes
-  const isAdminRoute = adminRoutes.some(route => 
-    pathname === route || pathname.startsWith(`${route}/`)
-  )
-  
+  // For admin routes, check admin status
   if (isAdminRoute) {
     // Check if user is admin
     const { data: isAdmin, error: adminError } = await supabase
       .rpc('is_email_admin', { check_email: userEmail })
     
     if (adminError || !isAdmin) {
-      // User is not admin, redirect to home
-      return NextResponse.redirect(new URL('/', request.url))
+      // User is not admin, redirect to home with error message
+      return NextResponse.redirect(new URL('/?error=unauthorized', request.url))
+    }
+  }
+  
+  // For non-admin routes, check whitelist if enabled
+  if (whitelistEnabled && !isAdminRoute) {
+    // Check whitelist status using RPC function
+    const { data: isWhitelisted, error: whitelistError } = await supabase
+      .rpc('is_email_whitelisted', { check_email: userEmail })
+    
+    if (whitelistError || !isWhitelisted) {
+      // User is not whitelisted, redirect to access denied
+      return NextResponse.redirect(new URL('/auth/access-denied', request.url))
     }
   }
   

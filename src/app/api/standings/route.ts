@@ -157,6 +157,50 @@ export async function GET() {
 }
 
 /**
+ * Get user display name from multiple sources
+ * @param userId User ID to look up
+ * @param supabase Supabase service role client
+ * @returns Promise resolving to display name
+ */
+async function getUserDisplayName(userId: string, supabase: ReturnType<typeof createSupabaseServiceRoleClient>): Promise<string> {
+  try {
+    // First try profiles table
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', userId)
+      .single();
+
+    if (profile?.full_name) {
+      return profile.full_name;
+    }
+
+    // Fallback: try auth.users metadata (for Google OAuth)
+    const { data: authUser } = await supabase.auth.admin.getUserById(userId);
+    
+    if (authUser?.user?.user_metadata) {
+      const metadata = authUser.user.user_metadata;
+      // Try different metadata fields that might contain the name
+      const name = metadata.full_name || metadata.name || metadata.display_name;
+      if (name) return name;
+    }
+
+    // Final fallback: use email prefix if available
+    if (authUser?.user?.email) {
+      const emailPrefix = authUser.user.email.split('@')[0];
+      return emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+    }
+
+    // Ultimate fallback
+    return `User ${userId.slice(-8)}`;
+
+  } catch (error) {
+    logger.warn('Error getting user display name', { userId, error });
+    return `User ${userId.slice(-8)}`;
+  }
+}
+
+/**
  * Enhance cup standings with user profile information
  * @param standings Raw cup standings data  
  * @returns Enhanced standings with user profiles
@@ -167,32 +211,14 @@ async function enhanceStandingsWithUserProfiles(standings: CupStandingsRow[]): P
   }
 
   try {
-    // Get all user IDs
+    const supabase = createSupabaseServiceRoleClient();
     const userIds = standings.map(standing => standing.user_id);
 
-    // Fetch user profiles
-    const supabase = createSupabaseServiceRoleClient();
-    const { data: profiles, error } = await supabase
+    // Fetch profiles for all users at once
+    const { data: profiles } = await supabase
       .from('profiles')
       .select('id, full_name, avatar_url')
       .in('id', userIds);
-
-    if (error) {
-      logger.error('Failed to fetch user profiles for cup standings', { error });
-      // Fall back to basic user info without profile data
-      return standings.map(standing => ({
-        user_id: standing.user_id,
-        user: {
-          id: standing.user_id,
-          full_name: `User ${standing.user_id}`,
-          avatar_url: null
-        },
-        total_points: standing.total_points,
-        rounds_participated: standing.rounds_participated,
-        position: standing.position,
-        last_updated: standing.last_updated
-      }));
-    }
 
     // Create profile lookup map
     const profileMap = new Map(profiles?.map(profile => [
@@ -200,20 +226,26 @@ async function enhanceStandingsWithUserProfiles(standings: CupStandingsRow[]): P
       profile
     ]) || []);
 
-    // Enhance standings with profile data
+    // Get display names for users missing profiles
+    const usersWithoutProfiles = userIds.filter(id => !profileMap.has(id));
+    const displayNames = new Map<string, string>();
+
+    for (const userId of usersWithoutProfiles) {
+      const displayName = await getUserDisplayName(userId, supabase);
+      displayNames.set(userId, displayName);
+    }
+
+    // Enhance standings with user info
     return standings.map(standing => {
-      const userProfile = profileMap.get(standing.user_id) || {
-        id: standing.user_id,
-        full_name: `User ${standing.user_id}`,
-        avatar_url: null
-      };
+      const userProfile = profileMap.get(standing.user_id);
+      const displayName = userProfile?.full_name || displayNames.get(standing.user_id) || `User ${standing.user_id.slice(-8)}`;
 
       return {
         user_id: standing.user_id,
         user: {
-          id: userProfile.id,
-          full_name: userProfile.full_name || `User ${standing.user_id}`,
-          avatar_url: userProfile.avatar_url
+          id: standing.user_id,
+          full_name: displayName,
+          avatar_url: userProfile?.avatar_url || null
         },
         total_points: standing.total_points,
         rounds_participated: standing.rounds_participated,
@@ -230,7 +262,7 @@ async function enhanceStandingsWithUserProfiles(standings: CupStandingsRow[]): P
       user_id: standing.user_id,
       user: {
         id: standing.user_id,
-        full_name: `User ${standing.user_id}`,
+        full_name: `User ${standing.user_id.slice(-8)}`,
         avatar_url: null
       },
       total_points: standing.total_points,

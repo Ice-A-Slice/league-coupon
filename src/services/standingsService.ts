@@ -69,15 +69,10 @@ export async function aggregateUserPoints(): Promise<UserPoints[] | null> {
     logger.debug({ count: allUserIds.size }, 'Found total unique users (with points or bets).');
 
     // 3. Fetch profiles for all these users
-    const { data: profilesData, error: profilesError } = await serviceRoleClient
+    const { data: profilesData } = await serviceRoleClient
       .from('profiles')
       .select('id, full_name')
       .in('id', Array.from(allUserIds));
-
-    if (profilesError) {
-      logger.error({ error: profilesError }, 'Error fetching profiles.');
-      throw profilesError;
-    }
 
     // Create a profile map for quick lookup
     const profilesMap = new Map<string, string | null>();
@@ -87,10 +82,42 @@ export async function aggregateUserPoints(): Promise<UserPoints[] | null> {
       });
     }
 
-    // 4. Combine all data
+    // 4. Get display names for users without profiles
+    const usersWithoutProfiles = Array.from(allUserIds).filter(id => !profilesMap.has(id) || !profilesMap.get(id));
+    const displayNamesMap = new Map<string, string>();
+
+    for (const userId of usersWithoutProfiles) {
+      try {
+        // Try auth.users metadata (for Google OAuth users)
+        const { data: authUser } = await serviceRoleClient.auth.admin.getUserById(userId);
+        
+        let displayName = null;
+        if (authUser?.user?.user_metadata) {
+          const metadata = authUser.user.user_metadata;
+          displayName = metadata.full_name || metadata.name || metadata.display_name;
+        }
+
+        // Fallback to email prefix if available
+        if (!displayName && authUser?.user?.email) {
+          const emailPrefix = authUser.user.email.split('@')[0];
+          displayName = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+        }
+
+        // Final fallback
+        displayName = displayName || `User ${userId.slice(-8)}`;
+        
+        displayNamesMap.set(userId, displayName);
+        logger.debug({ userId, displayName }, 'Retrieved display name from auth metadata');
+      } catch (error) {
+        logger.warn({ userId, error }, 'Error getting display name from auth metadata');
+        displayNamesMap.set(userId, `User ${userId.slice(-8)}`);
+      }
+    }
+
+    // 5. Combine all data
     const aggregatedData: UserPoints[] = Array.from(allUserIds).map(userId => ({
       user_id: userId,
-      full_name: profilesMap.get(userId) || undefined,
+      full_name: profilesMap.get(userId) || displayNamesMap.get(userId) || `User ${userId.slice(-8)}`,
       total_points: gamePointsMap.get(userId) || 0, // Default to 0 if no points yet
     }));
     
