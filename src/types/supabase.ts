@@ -533,6 +533,7 @@ export type Database = {
           last_round_special_activated: boolean | null
           last_round_special_activated_at: string | null
           name: string | null
+          questionnaire_visible: boolean | null
           start_date: string | null
           winner_determined_at: string | null
         }
@@ -548,6 +549,7 @@ export type Database = {
           last_round_special_activated?: boolean | null
           last_round_special_activated_at?: string | null
           name?: string | null
+          questionnaire_visible?: boolean | null
           start_date?: string | null
           winner_determined_at?: string | null
         }
@@ -563,6 +565,7 @@ export type Database = {
           last_round_special_activated?: boolean | null
           last_round_special_activated_at?: string | null
           name?: string | null
+          questionnaire_visible?: boolean | null
           start_date?: string | null
           winner_determined_at?: string | null
         }
@@ -980,4 +983,3 @@ export const Constants = {
     },
   },
 } as const
-
