@@ -87,23 +87,32 @@ export async function submitPredictions(
     console.log('Coupon submission successful:', betsResult);
 
     // 2. Submit Season Answers (Questionnaire)
-    // This proceeds only if bets submission was successful
-    console.log('Submitting season answers...', answersData);
-    const answersResponse = await fetch('/api/season-answers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(answersData),
-    });
+    // This proceeds only if bets submission was successful AND there are answers to submit
+    if (answersData && answersData.length > 0) {
+      console.log('Submitting season answers...', answersData);
+      const answersResponse = await fetch('/api/season-answers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(answersData),
+      });
 
-    // Assume the response structure matches ApiResponse for now
-    answersResult = await answersResponse.json();
-    if (!answersResponse.ok) {
-      console.error('Season answers submission failed:', answersResult);
-      // Note: Bets might have succeeded, but answers failed. The error thrown here
-      // indicates the overall submission process failed at this stage.
-      throw new Error(`Season answers submission failed: ${answersResult?.error || 'Unknown error'} (Status: ${answersResponse.status})`);
+      // Assume the response structure matches ApiResponse for now
+      answersResult = await answersResponse.json();
+      if (!answersResponse.ok) {
+        console.error('Season answers submission failed:', answersResult);
+        // Note: Bets might have succeeded, but answers failed. The error thrown here
+        // indicates the overall submission process failed at this stage.
+        throw new Error(`Season answers submission failed: ${answersResult?.error || 'Unknown error'} (Status: ${answersResponse.status})`);
+      }
+      console.log('Season answers submission successful:', answersResult);
+    } else {
+      console.log('No season answers to submit, skipping...');
+      // Create a dummy success response when no answers are provided
+      answersResult = {
+        message: 'No season answers to submit',
+        data: null
+      };
     }
-    console.log('Season answers submission successful:', answersResult);
 
     // Both submissions succeeded
     return { betsResult, answersResult };

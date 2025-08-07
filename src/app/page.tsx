@@ -22,6 +22,7 @@ export default async function Index() {
     .from('seasons')
     .select(`
       api_season_year,
+      questionnaire_visible,
       competitions (
         api_league_id
       )
@@ -32,6 +33,7 @@ export default async function Index() {
   // Provide default/fallback values if the query fails or returns no data
   const currentLeagueId = currentSeasonData?.competitions?.api_league_id ?? 39; // Default to Premier League
   const currentSeasonYear = currentSeasonData?.api_season_year ?? 2024; // Default to 2024 season
+  const questionnaireVisible = currentSeasonData?.questionnaire_visible ?? true; // Default to visible
 
   if (seasonError) {
     console.error("Error fetching current season:", seasonError.message);
@@ -48,6 +50,7 @@ export default async function Index() {
       initialRoundData={currentRoundData} 
       currentLeagueId={currentLeagueId}
       currentSeasonYear={currentSeasonYear}
+      questionnaireVisible={questionnaireVisible}
     />
   );
 }

@@ -33,6 +33,7 @@ interface CouponClientProps {
   initialRoundData: CurrentRoundFixturesResult | null;
   currentLeagueId: number;
   currentSeasonYear: number;
+  questionnaireVisible: boolean;
 }
 
 // Initial states 
@@ -48,7 +49,8 @@ interface ErrorsState {
 export default function CouponClient({ 
   initialRoundData,
   currentLeagueId,
-  currentSeasonYear 
+  currentSeasonYear,
+  questionnaireVisible 
 }: CouponClientProps) {
   // Client-side hooks and state management
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -145,29 +147,33 @@ export default function CouponClient({
   };
   
   const handleCombinedSubmit = async () => {
-    if (!bettingCouponRef.current || !questionnaireRef.current) {
+    if (!bettingCouponRef.current) {
       toast.error('An unexpected error occurred (refs). Please try again.');
+      return;
+    }
+    if (questionnaireVisible && !questionnaireRef.current) {
+      toast.error('An unexpected error occurred (questionnaire ref). Please try again.');
       return;
     }
     setValidationErrors({});
     setIsSubmitting(true);
 
     const currentSelections = bettingCouponRef.current.getSelections();
-    const currentAnswers = questionnaireRef.current.getAnswers();
+    const currentAnswers = questionnaireVisible && questionnaireRef.current ? questionnaireRef.current.getAnswers() : [];
     const currentMatches = matchesForCoupon; 
 
     const couponValidation = validateCouponSelections(currentSelections, currentMatches);
-    const answersValidation = validateQuestionnaireAnswers(currentAnswers);
+    const answersValidation = questionnaireVisible ? validateQuestionnaireAnswers(currentAnswers) : { isValid: true };
 
     const combinedErrors: ErrorsState = {};
     if (!couponValidation.isValid) {
       combinedErrors.coupon = couponValidation.errors ?? { form: 'Coupon is invalid' };
     }
-    if (!answersValidation.isValid) {
+    if (questionnaireVisible && !answersValidation.isValid) {
       combinedErrors.questionnaire = answersValidation.errors ?? { form: 'Questionnaire is invalid' };
     }
 
-    if (!couponValidation.isValid || !answersValidation.isValid) {
+    if (!couponValidation.isValid || (questionnaireVisible && !answersValidation.isValid)) {
       combinedErrors.summary = 'Please fix the errors highlighted below.';
       setValidationErrors(combinedErrors);
       toast.error("Please fix the errors highlighted below.");
@@ -182,8 +188,10 @@ export default function CouponClient({
           answersData: currentAnswers,  
       });
 
-      if (submissionResult.betsResult && submissionResult.answersResult) {
-        const successMessage = submissionResult.answersResult.message || submissionResult.betsResult.message || 'Coupon and answers submitted successfully!';
+      if (submissionResult.betsResult && (submissionResult.answersResult || !questionnaireVisible)) {
+        const successMessage = questionnaireVisible 
+          ? (submissionResult.answersResult?.message || submissionResult.betsResult.message || 'Coupon and answers submitted successfully!')
+          : (submissionResult.betsResult.message || 'Coupon submitted successfully!');
         toast.success(successMessage);
         setSubmitStatus({ type: 'success', message: successMessage });
         
@@ -254,18 +262,20 @@ export default function CouponClient({
         )}
 
         {/* Questionnaire Section */}
-        <Suspense fallback={<div className="flex justify-center py-4"><Spinner /></div>}> 
-          {!questionnaireDataError && (
-            <Questionnaire
-              ref={questionnaireRef}
-              teams={teamsForQuestionnaire ?? []}
-              players={playersForQuestionnaire ?? []}
-              initialPredictions={initialPredictionsWithUserAnswers}
-              onPredictionChange={handlePredictionChange}
-              validationErrors={validationErrors.questionnaire}
-            />
-          )}
-        </Suspense>
+        {questionnaireVisible && (
+          <Suspense fallback={<div className="flex justify-center py-4"><Spinner /></div>}> 
+            {!questionnaireDataError && (
+              <Questionnaire
+                ref={questionnaireRef}
+                teams={teamsForQuestionnaire ?? []}
+                players={playersForQuestionnaire ?? []}
+                initialPredictions={initialPredictionsWithUserAnswers}
+                onPredictionChange={handlePredictionChange}
+                validationErrors={validationErrors.questionnaire}
+              />
+            )}
+          </Suspense>
+        )}
 
         {/* Betting Coupon Section */}
         <Suspense fallback={<div className="flex justify-center py-4"><Spinner /></div>}> 
