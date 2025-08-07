@@ -16,10 +16,13 @@ interface BettingRound {
 
 interface Season {
   id: string
-  season_number: number
+  competition_id: number
+  api_season_year: number
+  name?: string
   start_date: string
   end_date: string
   is_current: boolean
+  questionnaire_visible?: boolean
 }
 
 export default function RoundsManagement() {
@@ -45,12 +48,16 @@ export default function RoundsManagement() {
       const { data: seasonsData, error: seasonsError } = await supabase
         .from('seasons')
         .select('*')
-        .order('season_number', { ascending: false })
+        .order('api_season_year', { ascending: false })
 
       if (seasonsError) throw seasonsError
       setSeasons(seasonsData || [])
 
       const current = seasonsData?.find(s => s.is_current)
+      // Set default questionnaire_visible to true if not set
+      if (current && current.questionnaire_visible === undefined) {
+        current.questionnaire_visible = true
+      }
       setCurrentSeason(current || null)
 
       // Fetch rounds for current season
@@ -58,8 +65,8 @@ export default function RoundsManagement() {
         const { data: roundsData, error: roundsError } = await supabase
           .from('betting_rounds')
           .select('*')
-          .eq('season_id', current.id)
-          .order('round_number', { ascending: true })
+          .eq('competition_id', current.competition_id)
+          .order('id', { ascending: true })
 
         if (roundsError) throw roundsError
         setRounds(roundsData || [])
@@ -135,6 +142,30 @@ export default function RoundsManagement() {
     }
   }
 
+  const toggleQuestionnaireVisibility = async () => {
+    if (!currentSeason) return
+
+    try {
+      setError(null)
+      setSuccessMessage(null)
+
+      const newVisibility = !currentSeason.questionnaire_visible
+      
+      const { error: updateError } = await supabase
+        .from('seasons')
+        .update({ questionnaire_visible: newVisibility })
+        .eq('id', currentSeason.id)
+
+      if (updateError) throw updateError
+
+      setSuccessMessage(`Questionnaire ${newVisibility ? 'shown' : 'hidden'} successfully`)
+      await fetchData()
+    } catch (err) {
+      console.error('Error toggling questionnaire visibility:', err)
+      setError('Failed to toggle questionnaire visibility')
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -164,10 +195,40 @@ export default function RoundsManagement() {
         </div>
       )}
 
+      {currentSeason && (
+        <div className="bg-white shadow rounded-lg mb-6">
+          <div className="px-4 py-5 sm:px-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              Season Settings
+            </h3>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-700">Dynamic Questionnaire</p>
+                <p className="text-sm text-gray-500">Show or hide the season-long prediction questions for all users</p>
+              </div>
+              <button
+                onClick={toggleQuestionnaireVisibility}
+                className={`${
+                  currentSeason.questionnaire_visible 
+                    ? 'bg-green-600 hover:bg-green-700' 
+                    : 'bg-gray-400 hover:bg-gray-500'
+                } relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2`}
+              >
+                <span
+                  className={`${
+                    currentSeason.questionnaire_visible ? 'translate-x-5' : 'translate-x-0'
+                  } pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out`}
+                />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white shadow rounded-lg">
         <div className="px-4 py-5 sm:px-6 border-b">
           <h3 className="text-lg font-medium text-gray-900">
-            {currentSeason ? `Season ${currentSeason.season_number} Rounds` : 'No Active Season'}
+            {currentSeason ? `${currentSeason.name || `Season ${currentSeason.api_season_year}`} Rounds` : 'No Active Season'}
           </h3>
         </div>
         <div className="overflow-hidden">
