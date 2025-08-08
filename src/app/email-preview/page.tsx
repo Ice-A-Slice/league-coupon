@@ -26,7 +26,7 @@ const sampleSimpleReminderData: SimpleReminderEmailProps = {
 };
 
 export default function EmailPreviewPage() {
-  const [emailType, setEmailType] = useState<'summary' | 'reminder' | 'simple-reminder'>('simple-reminder');
+  const [emailType, setEmailType] = useState<'summary' | 'reminder' | 'simple-reminder' | 'transparency'>('simple-reminder');
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
@@ -41,7 +41,7 @@ export default function EmailPreviewPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          email_type: emailType === 'simple-reminder' ? 'simple-reminder' : 'simple-reminder'
+          email_type: emailType === 'transparency' ? 'transparency' : emailType === 'simple-reminder' ? 'simple-reminder' : 'simple-reminder'
         })
       });
 
@@ -106,13 +106,19 @@ export default function EmailPreviewPage() {
             >
               Simple Reminder Email
             </Button>
+            <Button
+              onClick={() => setEmailType('transparency')}
+              variant={emailType === 'transparency' ? 'default' : 'outline'}
+            >
+              Transparency Email
+            </Button>
           </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-lg p-6">
           <div className="mb-4 border-b pb-4">
             <h2 className="text-xl font-semibold text-gray-800">
-              Preview: {emailType === 'summary' ? 'Round Summary' : emailType === 'reminder' ? 'Round Reminder (Old)' : 'Simple Reminder'} Email
+              Preview: {emailType === 'summary' ? 'Round Summary' : emailType === 'reminder' ? 'Round Reminder (Old)' : emailType === 'transparency' ? 'Transparency' : 'Simple Reminder'} Email
             </h2>
             <p className="text-sm text-gray-500 mt-1">
               This preview shows how the email will look when sent to users
@@ -146,6 +152,57 @@ export default function EmailPreviewPage() {
                     <a href={sampleSimpleReminderData.appUrl} className="text-blue-600 underline">
                       Submit your bets here
                     </a>
+                  </div>
+                </div>
+              ) : emailType === 'transparency' ? (
+                <div className="space-y-4 font-sans">
+                  <div className="text-lg font-medium">Subject: 🔒 Round 6 - Predictions Locked!</div>
+                  <hr />
+                  <p>The first game has kicked off. Here are everyone&apos;s locked-in predictions for transparency.</p>
+                  <p>No one can change their predictions now! Below you can see exactly what everyone predicted for this round.</p>
+                  
+                  <div className="border rounded-lg overflow-hidden">
+                    <div className="bg-gray-100 p-2 font-bold text-sm border-b">
+                      <div className="flex">
+                        <div className="w-32">Player</div>
+                        <div className="flex-1 text-center">Man U vs Liverpool</div>
+                        <div className="flex-1 text-center">Chelsea vs Arsenal</div>
+                        <div className="flex-1 text-center">City vs Spurs</div>
+                        <div className="flex-1 text-center">Newcastle vs Brighton</div>
+                      </div>
+                    </div>
+                    <div className="text-sm">
+                      <div className="flex p-2 bg-gray-50">
+                        <div className="w-32 font-medium">Johann</div>
+                        <div className="flex-1 text-center text-blue-600 font-bold">1</div>
+                        <div className="flex-1 text-center text-amber-600 font-bold">X</div>
+                        <div className="flex-1 text-center text-red-600 font-bold">2</div>
+                        <div className="flex-1 text-center text-gray-400 font-bold">-</div>
+                      </div>
+                      <div className="flex p-2">
+                        <div className="w-32 font-medium">Sævar Freyr</div>
+                        <div className="flex-1 text-center text-red-600 font-bold">2</div>
+                        <div className="flex-1 text-center text-blue-600 font-bold">1</div>
+                        <div className="flex-1 text-center text-blue-600 font-bold">1</div>
+                        <div className="flex-1 text-center text-amber-600 font-bold">X</div>
+                      </div>
+                      <div className="flex p-2 bg-gray-50">
+                        <div className="w-32 font-medium">Divya</div>
+                        <div className="flex-1 text-center text-amber-600 font-bold">X</div>
+                        <div className="flex-1 text-center text-red-600 font-bold">2</div>
+                        <div className="flex-1 text-center text-blue-600 font-bold">1</div>
+                        <div className="flex-1 text-center text-blue-600 font-bold">1</div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4 text-sm space-y-1">
+                    <p><span className="text-blue-600 font-bold">1</span> = Home Win | <span className="text-amber-600 font-bold">X</span> = Draw | <span className="text-red-600 font-bold">2</span> = Away Win | <span className="text-gray-400 font-bold">-</span> = No Prediction</p>
+                  </div>
+                  
+                  <div className="mt-6 pt-4 border-t text-center">
+                    <p className="font-medium">Good luck to everyone! May the best predictor win! 🏆</p>
+                    <p className="text-sm text-gray-600 mt-1">TippSlottet - Fair Play, Transparent Predictions</p>
                   </div>
                 </div>
               ) : emailType === 'summary' ? (
