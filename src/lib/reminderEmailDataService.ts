@@ -32,6 +32,7 @@ export interface SubmissionStatus {
   remainingCount: number;
   competitorsSubmitted: number;
   totalCompetitors: number;
+  submittedUserNames: string[];
 }
 
 /**
@@ -151,7 +152,8 @@ export class ReminderEmailDataService {
         submittedAt: undefined,
         remainingCount: 0,
         competitorsSubmitted: 0,
-        totalCompetitors: 0
+        totalCompetitors: 0,
+        submittedUserNames: []
       };
     }
 
@@ -195,7 +197,8 @@ export class ReminderEmailDataService {
         submittedAt,
         remainingCount: Math.max(0, totalRequired - submissionCount),
         competitorsSubmitted: competitorStats.submitted,
-        totalCompetitors: competitorStats.total
+        totalCompetitors: competitorStats.total,
+        submittedUserNames: competitorStats.submittedNames
       };
 
     } catch (error) {
@@ -212,7 +215,8 @@ export class ReminderEmailDataService {
         submittedAt: undefined,
         remainingCount: 0,
         competitorsSubmitted: 0,
-        totalCompetitors: 0
+        totalCompetitors: 0,
+        submittedUserNames: []
       };
     }
   }
@@ -220,7 +224,7 @@ export class ReminderEmailDataService {
   /**
    * Get statistics about how many competitors have submitted for this round
    */
-  private async getCompetitorSubmissionStats(roundId: number): Promise<{ submitted: number; total: number }> {
+  private async getCompetitorSubmissionStats(roundId: number): Promise<{ submitted: number; total: number; submittedNames: string[] }> {
     try {
       // Get unique users who have submitted bets for this round
       const { data: submittedUsers, error: submittedError } = await supabaseServerClient
@@ -245,14 +249,47 @@ export class ReminderEmailDataService {
       const uniqueSubmittedUsers = new Set(submittedUsers?.map(bet => bet.user_id) || []);
       const uniqueTotalUsers = new Set(totalUsers?.map(bet => bet.user_id) || []);
 
+      // Get names of users who have submitted
+      const submittedNames = await this.getSubmittedUserNames(Array.from(uniqueSubmittedUsers));
+
       return {
         submitted: uniqueSubmittedUsers.size,
-        total: uniqueTotalUsers.size
+        total: uniqueTotalUsers.size,
+        submittedNames
       };
 
     } catch (error) {
       logger.error('ReminderEmailDataService: Error getting competitor stats', { roundId, error });
-      return { submitted: 0, total: 0 };
+      return { submitted: 0, total: 0, submittedNames: [] };
+    }
+  }
+
+  /**
+   * Get names of users who have submitted bets
+   */
+  private async getSubmittedUserNames(userIds: string[]): Promise<string[]> {
+    try {
+      if (userIds.length === 0) return [];
+
+      const { data: profiles, error } = await supabaseServerClient
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', userIds);
+
+      if (error) {
+        logger.error('ReminderEmailDataService: Error fetching user profiles', { error });
+        return [];
+      }
+
+      // Sort names alphabetically and return
+      return profiles
+        ?.map(profile => profile.full_name || 'Unknown User')
+        .filter(name => name !== 'Unknown User')
+        .sort() || [];
+
+    } catch (error) {
+      logger.error('ReminderEmailDataService: Error getting submitted user names', { error });
+      return [];
     }
   }
 
@@ -489,7 +526,8 @@ export class ReminderEmailDataService {
         submittedAt: undefined,
         remainingCount: 0,
         competitorsSubmitted: 0,
-        totalCompetitors: 0
+        totalCompetitors: 0,
+        submittedUserNames: []
       },
       aiInsights: {
         topPicks: ['Check back later for predictions'],
