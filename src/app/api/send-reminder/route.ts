@@ -4,7 +4,7 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
 import { render } from '@react-email/render';
-import { ReminderEmail } from '@/components/emails/ReminderEmail';
+import { SimpleReminderEmail } from '@/components/emails/SimpleReminderEmail';
 import { reminderEmailDataService } from '@/lib/reminderEmailDataService';
 import { sendEmail } from '@/lib/resend';
 import { emailMonitoringService } from '@/lib/emailMonitoringService';
@@ -178,13 +178,15 @@ export async function POST(request: Request) {
           payload.deadline_hours
         );
         
-        const testEmailProps = await reminderEmailDataService.transformToEmailProps(
-          testReminderData,
-          'test@example.com',
-          'Test User'
-        );
+        // Create simple email props for test mode
+        const testEmailProps = {
+          roundName: testReminderData.roundContext.roundName,
+          submittedUsers: testReminderData.submissionStatus.submittedUserNames,
+          gameLeaderInitials: 'PC',
+          appUrl: process.env.NEXT_PUBLIC_APP_URL
+        };
 
-        const htmlContent = render(React.createElement(ReminderEmail, testEmailProps));
+        const htmlContent = render(React.createElement(SimpleReminderEmail, testEmailProps));
         
         const testResponse = {
           success: true,
@@ -341,31 +343,26 @@ export async function POST(request: Request) {
             payload.deadline_hours
           );
           
-          // Skip users who have already submitted (unless forced)
-          if (reminderData.submissionStatus.hasSubmitted && !payload.force_send) {
-            return {
-              userId: targetUser.id,
-              email: targetUser.email,
-              status: 'skipped' as const,
-              reason: 'Already submitted'
-            };
-          }
+          // Always send reminder emails - even to users who have already submitted
+          // This serves as confirmation and keeps everyone informed about who has submitted
+          // Force send is no longer needed since we always send to everyone
           
-          // Transform to email props
-          const emailProps = await reminderEmailDataService.transformToEmailProps(
-            reminderData,
-            targetUser.email,
-            targetUser.name
-          );
+          // Create simple email props
+          const simpleEmailProps = {
+            roundName: reminderData.roundContext.roundName,
+            submittedUsers: reminderData.submissionStatus.submittedUserNames,
+            gameLeaderInitials: 'PC', // TODO: Make this configurable
+            appUrl: process.env.NEXT_PUBLIC_APP_URL
+          };
           
           // Render email HTML
-          const htmlContent = await render(React.createElement(ReminderEmail, emailProps));
+          const htmlContent = await render(React.createElement(SimpleReminderEmail, simpleEmailProps));
           
           // Send email via Resend
           const emailResponse = await sendEmail({
             from: process.env.RESEND_FROM_EMAIL || 'noreply@tippslottet.com',
             to: targetUser.email,
-            subject: `⚽ ${reminderData.fixtures.deadline.isUrgent ? 'URGENT: ' : ''}Reminder: Submit your predictions for Round ${reminderData.roundContext.roundNumber}`,
+            subject: `APL - Round ${reminderData.roundContext.roundNumber} - Friendly Reminder`,
             html: htmlContent,
             tags: [
               { name: 'type', value: 'reminder' },
