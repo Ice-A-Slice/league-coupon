@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import React from 'react';
 import { SimpleReminderEmail } from '@/components/emails/SimpleReminderEmail';
+import { TransparencyEmail } from '@/components/emails/TransparencyEmail';
+import type { TransparencyEmailData } from '@/lib/userDataAggregationService';
 
 /**
  * Public email preview endpoint for development
@@ -82,6 +84,67 @@ export async function POST(request: NextRequest) {
         email_type: 'simple-reminder',
         sample_data: sampleProps
       });
+    } else if (emailType === 'transparency') {
+      // Sample data for transparency email with 20 users and 10 games
+      const games = [
+        { homeTeam: 'Man United', awayTeam: 'Liverpool' },
+        { homeTeam: 'Chelsea', awayTeam: 'Arsenal' },
+        { homeTeam: 'Man City', awayTeam: 'Tottenham' },
+        { homeTeam: 'Newcastle', awayTeam: 'Brighton' },
+        { homeTeam: 'Aston Villa', awayTeam: 'West Ham' },
+        { homeTeam: 'Brentford', awayTeam: 'Fulham' },
+        { homeTeam: 'Crystal Palace', awayTeam: 'Everton' },
+        { homeTeam: 'Leicester', awayTeam: 'Wolves' },
+        { homeTeam: 'Nottingham Forest', awayTeam: 'Sheffield Utd' },
+        { homeTeam: 'Burnley', awayTeam: 'Luton Town' }
+      ];
+
+      const userNames = [
+        'Johann Johannsson', 'Sævar Freyr Alexandersson', 'Divya', 'Jóhannes Arelakis',
+        'Tommi Sigurbjorns', 'Kristjan', 'Arni Hardarson', 'Robert Wessman',
+        'Stefan Möller', 'Aron Ingi Kristinsson', 'Baldur Jonsson', 'Snorri Páll Sigurðsson',
+        'Erik Andersen', 'Magnus Olafsson', 'Ragnar Eriksson', 'Lars Nielsen',
+        'Björn Andersson', 'Sven Johansson', 'Nils Petersen', 'Anders Larsson'
+      ];
+
+      const predictions = ['home', 'draw', 'away', null] as const;
+      
+      const users = userNames.map((name, index) => ({
+        userId: (index + 1).toString(),
+        userName: name,
+        predictions: games.map(game => ({
+          homeTeam: game.homeTeam,
+          awayTeam: game.awayTeam,
+          prediction: predictions[Math.floor(Math.random() * predictions.length)]
+        }))
+      }));
+
+      const sampleTransparencyData: TransparencyEmailData = {
+        roundId: 6,
+        roundName: 'Round 6',
+        users,
+        games
+      };
+
+      // Render the transparency email HTML
+      let htmlContent;
+      try {
+        const { render } = await import('@react-email/render');
+        htmlContent = await render(React.createElement(TransparencyEmail, { data: sampleTransparencyData }));
+      } catch (renderError) {
+        console.error('Email rendering error:', renderError);
+        return NextResponse.json(
+          { success: false, error: 'Failed to render transparency email' },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        preview: htmlContent,
+        email_type: 'transparency',
+        sample_data: sampleTransparencyData
+      });
     } else {
       return NextResponse.json(
         { success: false, error: 'Email type not supported in preview' },
@@ -101,7 +164,7 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   return NextResponse.json({
     message: 'Email preview endpoint - use POST with email_type parameter',
-    supported_types: ['simple-reminder'],
+    supported_types: ['simple-reminder', 'transparency'],
     example: {
       method: 'POST',
       body: { email_type: 'simple-reminder' }
