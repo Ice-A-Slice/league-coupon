@@ -23,6 +23,7 @@ interface Season {
   end_date: string
   is_current: boolean
   questionnaire_visible?: boolean
+  bonus_mode_active?: boolean
 }
 
 export default function RoundsManagement() {
@@ -54,9 +55,14 @@ export default function RoundsManagement() {
       setSeasons(seasonsData || [])
 
       const current = seasonsData?.find(s => s.is_current)
-      // Set default questionnaire_visible to true if not set
-      if (current && current.questionnaire_visible === undefined) {
-        current.questionnaire_visible = true
+      // Set default values if not set
+      if (current) {
+        if (current.questionnaire_visible === undefined) {
+          current.questionnaire_visible = true
+        }
+        if (current.bonus_mode_active === undefined) {
+          current.bonus_mode_active = false
+        }
       }
       setCurrentSeason(current || null)
 
@@ -166,6 +172,30 @@ export default function RoundsManagement() {
     }
   }
 
+  const toggleBonusModeActive = async () => {
+    if (!currentSeason) return
+
+    try {
+      setError(null)
+      setSuccessMessage(null)
+
+      const newBonusMode = !currentSeason.bonus_mode_active
+      
+      const { error: updateError } = await supabase
+        .from('seasons')
+        .update({ bonus_mode_active: newBonusMode })
+        .eq('id', currentSeason.id)
+
+      if (updateError) throw updateError
+
+      setSuccessMessage(`Bonus mode ${newBonusMode ? 'activated' : 'deactivated'} successfully`)
+      await fetchData()
+    } catch (err) {
+      console.error('Error toggling bonus mode:', err)
+      setError('Failed to toggle bonus mode')
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -201,25 +231,48 @@ export default function RoundsManagement() {
             <h3 className="text-lg font-medium text-gray-900 mb-4">
               Season Settings
             </h3>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-700">Dynamic Questionnaire</p>
-                <p className="text-sm text-gray-500">Show or hide the season-long prediction questions for all users</p>
-              </div>
-              <button
-                onClick={toggleQuestionnaireVisibility}
-                className={`${
-                  currentSeason.questionnaire_visible 
-                    ? 'bg-green-600 hover:bg-green-700' 
-                    : 'bg-gray-400 hover:bg-gray-500'
-                } relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2`}
-              >
-                <span
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Dynamic Questionnaire</p>
+                  <p className="text-sm text-gray-500">Show or hide the season-long prediction questions for all users</p>
+                </div>
+                <button
+                  onClick={toggleQuestionnaireVisibility}
                   className={`${
-                    currentSeason.questionnaire_visible ? 'translate-x-5' : 'translate-x-0'
-                  } pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out`}
-                />
-              </button>
+                    currentSeason.questionnaire_visible 
+                      ? 'bg-green-600 hover:bg-green-700' 
+                      : 'bg-gray-400 hover:bg-gray-500'
+                  } relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2`}
+                >
+                  <span
+                    className={`${
+                      currentSeason.questionnaire_visible ? 'translate-x-5' : 'translate-x-0'
+                    } pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out`}
+                  />
+                </button>
+              </div>
+              
+              <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Bonus Mode</p>
+                  <p className="text-sm text-gray-500">When active, all open rounds award 2x points for correct predictions</p>
+                </div>
+                <button
+                  onClick={toggleBonusModeActive}
+                  className={`${
+                    currentSeason.bonus_mode_active 
+                      ? 'bg-purple-600 hover:bg-purple-700' 
+                      : 'bg-gray-400 hover:bg-gray-500'
+                  } relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2`}
+                >
+                  <span
+                    className={`${
+                      currentSeason.bonus_mode_active ? 'translate-x-5' : 'translate-x-0'
+                    } pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out`}
+                  />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -329,7 +382,7 @@ export default function RoundsManagement() {
           </div>
           <div className="ml-3">
             <p className="text-sm text-blue-700">
-              <strong>Tips:</strong> Bonus rounds give extra points. Cup activation enables special cup scoring rules for that round.
+              <strong>Tips:</strong> Bonus Mode applies 2x points to all open rounds when activated globally. Individual bonus rounds can be toggled per round. Cup activation enables special cup scoring rules for that round.
             </p>
           </div>
         </div>

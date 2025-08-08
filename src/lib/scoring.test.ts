@@ -102,7 +102,17 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
       } else if (tableName === 'user_bets') {
         (builder.eq as jest.Mock).mockResolvedValue({ data: mockUserBets, error: null });
       } else if (tableName === 'betting_rounds') {
-        (builder.eq as jest.Mock).mockResolvedValue({ error: null });
+        // Mock for bonus round status check
+        (builder.single as jest.Mock).mockResolvedValue({ 
+          data: { is_bonus_round: false, competition_id: 1 }, 
+          error: null 
+        });
+      } else if (tableName === 'seasons') {
+        // Mock for season bonus mode check
+        (builder.single as jest.Mock).mockResolvedValue({ 
+          data: { bonus_mode_active: false }, 
+          error: null 
+        });
       } else if (tableName === 'competitions') {
         (builder.single as jest.Mock).mockResolvedValue({ error: { message: 'Complex mock not setup' } });
       }
@@ -134,6 +144,129 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
     // we expect the overall result to indicate partial success
     expect(result.success).toBe(false);
     expect(result.message).toContain('Match points stored, but dynamic points processing failed');
+  });
+
+  it('should correctly apply bonus round 2x multiplier when individual round is bonus', async () => {
+    const bettingRoundId = 101;
+    const mockFixtureLinks: Pick<MockFixtureLink, 'fixture_id'>[] = [
+      { fixture_id: 1 }, { fixture_id: 2 }
+    ];
+    const mockFixturesData: Partial<MockFixture>[] = [
+      { id: 1, home_goals: 2, away_goals: 1, status_short: 'FT', result: '1' },
+      { id: 2, home_goals: 0, away_goals: 0, status_short: 'FT', result: 'X' }
+    ];
+    const mockUserBets: Partial<MockUserBet>[] = [
+      { id: 'bet1', user_id: 'user1', fixture_id: 1, prediction: '1', points_awarded: null }, // Should get 2 points (1 * 2)
+      { id: 'bet2', user_id: 'user1', fixture_id: 2, prediction: '1', points_awarded: null }  // Should get 0 points (0 * 2)
+    ];
+
+    // Set up specific mock responses for different tables with BONUS ROUND ACTIVE
+    mockClient.from.mockImplementation((tableName: string) => {
+      const builder = createMockSupabaseClient().from();
+      
+      if (tableName === 'betting_round_fixtures') {
+        (builder.eq as jest.Mock).mockResolvedValue({ data: mockFixtureLinks, error: null });
+      } else if (tableName === 'fixtures') {
+        (builder.in as jest.Mock).mockResolvedValue({ data: mockFixturesData, error: null });
+      } else if (tableName === 'user_bets') {
+        (builder.eq as jest.Mock).mockResolvedValue({ data: mockUserBets, error: null });
+      } else if (tableName === 'betting_rounds') {
+        // Mock for bonus round status check - INDIVIDUAL BONUS ROUND ACTIVE
+        (builder.single as jest.Mock).mockResolvedValue({ 
+          data: { is_bonus_round: true, competition_id: 1 }, 
+          error: null 
+        });
+      } else if (tableName === 'seasons') {
+        // Mock for season bonus mode check
+        (builder.single as jest.Mock).mockResolvedValue({ 
+          data: { bonus_mode_active: false }, 
+          error: null 
+        });
+      } else if (tableName === 'competitions') {
+        (builder.single as jest.Mock).mockResolvedValue({ error: { message: 'Complex mock not setup' } });
+      }
+      
+      return builder;
+    });
+
+    // Mock successful RPC call for scoring
+    (mockClient.rpc as jest.Mock).mockResolvedValue({ error: null });
+
+    const { calculateAndStoreMatchPoints } = await import('./scoring');
+    const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
+
+    // Verify the RPC was called with 2x points
+    expect(mockClient.rpc).toHaveBeenCalledWith('handle_round_scoring', {
+      p_betting_round_id: bettingRoundId,
+      p_bet_updates: expect.arrayContaining([
+        expect.objectContaining({ bet_id: 'bet1', points: 2 }), // 1 * 2 = 2 points
+        expect.objectContaining({ bet_id: 'bet2', points: 0 }), // 0 * 2 = 0 points
+      ]),
+    });
+
+    expect(result.success).toBe(false); // Still fails on dynamic points, but that's expected
+    // The bonus points are working correctly - we can see this from the RPC call above
+    // The message doesn't contain "2x bonus points applied" because dynamic points processing fails and overrides the message
+  });
+
+  it('should correctly apply bonus round 2x multiplier when season bonus mode is active', async () => {
+    const bettingRoundId = 101;
+    const mockFixtureLinks: Pick<MockFixtureLink, 'fixture_id'>[] = [
+      { fixture_id: 1 }
+    ];
+    const mockFixturesData: Partial<MockFixture>[] = [
+      { id: 1, home_goals: 2, away_goals: 1, status_short: 'FT', result: '1' }
+    ];
+    const mockUserBets: Partial<MockUserBet>[] = [
+      { id: 'bet1', user_id: 'user1', fixture_id: 1, prediction: '1', points_awarded: null } // Should get 2 points (1 * 2)
+    ];
+
+    // Set up specific mock responses for different tables with SEASON BONUS MODE ACTIVE
+    mockClient.from.mockImplementation((tableName: string) => {
+      const builder = createMockSupabaseClient().from();
+      
+      if (tableName === 'betting_round_fixtures') {
+        (builder.eq as jest.Mock).mockResolvedValue({ data: mockFixtureLinks, error: null });
+      } else if (tableName === 'fixtures') {
+        (builder.in as jest.Mock).mockResolvedValue({ data: mockFixturesData, error: null });
+      } else if (tableName === 'user_bets') {
+        (builder.eq as jest.Mock).mockResolvedValue({ data: mockUserBets, error: null });
+      } else if (tableName === 'betting_rounds') {
+        // Mock for bonus round status check - INDIVIDUAL NOT BONUS
+        (builder.single as jest.Mock).mockResolvedValue({ 
+          data: { is_bonus_round: false, competition_id: 1 }, 
+          error: null 
+        });
+      } else if (tableName === 'seasons') {
+        // Mock for season bonus mode check - SEASON BONUS MODE ACTIVE
+        (builder.single as jest.Mock).mockResolvedValue({ 
+          data: { bonus_mode_active: true }, 
+          error: null 
+        });
+      } else if (tableName === 'competitions') {
+        (builder.single as jest.Mock).mockResolvedValue({ error: { message: 'Complex mock not setup' } });
+      }
+      
+      return builder;
+    });
+
+    // Mock successful RPC call for scoring
+    (mockClient.rpc as jest.Mock).mockResolvedValue({ error: null });
+
+    const { calculateAndStoreMatchPoints } = await import('./scoring');
+    const result = await calculateAndStoreMatchPoints(bettingRoundId, mockClient);
+
+    // Verify the RPC was called with 2x points
+    expect(mockClient.rpc).toHaveBeenCalledWith('handle_round_scoring', {
+      p_betting_round_id: bettingRoundId,
+      p_bet_updates: expect.arrayContaining([
+        expect.objectContaining({ bet_id: 'bet1', points: 2 }), // 1 * 2 = 2 points
+      ]),
+    });
+
+    expect(result.success).toBe(false); // Still fails on dynamic points, but that's expected
+    // The bonus points are working correctly - we can see this from the RPC call above
+    // The message doesn't contain "2x bonus points applied" because dynamic points processing fails and overrides the message
   });
 
   it('should return an error if the betting round fixtures cannot be fetched', async () => {
@@ -171,6 +304,18 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
         (builder.eq as jest.Mock).mockResolvedValue({ data: mockFixtureLinks, error: null });
       } else if (tableName === 'fixtures') {
         (builder.in as jest.Mock).mockResolvedValue({ data: mockFixturesData, error: null });
+      } else if (tableName === 'betting_rounds') {
+        // Mock for bonus round status check
+        (builder.single as jest.Mock).mockResolvedValue({ 
+          data: { is_bonus_round: false, competition_id: 1 }, 
+          error: null 
+        });
+      } else if (tableName === 'seasons') {
+        // Mock for season bonus mode check
+        (builder.single as jest.Mock).mockResolvedValue({ 
+          data: { bonus_mode_active: false }, 
+          error: null 
+        });
       }
       return builder;
     });
@@ -202,7 +347,17 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
       } else if (tableName === 'user_bets') {
         (builder.eq as jest.Mock).mockResolvedValue({ data: mockUserBets, error: null });
       } else if (tableName === 'betting_rounds') {
-        (builder.eq as jest.Mock).mockResolvedValue({ error: null });
+        // Mock for bonus round status check
+        (builder.single as jest.Mock).mockResolvedValue({ 
+          data: { is_bonus_round: false, competition_id: 1 }, 
+          error: null 
+        });
+      } else if (tableName === 'seasons') {
+        // Mock for season bonus mode check
+        (builder.single as jest.Mock).mockResolvedValue({ 
+          data: { bonus_mode_active: false }, 
+          error: null 
+        });
       } else if (tableName === 'competitions') {
         (builder.single as jest.Mock).mockResolvedValue({ error: { message: 'Complex mock not setup' } });
       }
@@ -484,6 +639,22 @@ describe('Non-participant Scoring Rule', () => {
               error: null
             })
           }));
+        } else if (table === 'betting_rounds') {
+          mock.select.mockImplementationOnce(() => ({
+            eq: jest.fn().mockReturnThis(),
+            single: jest.fn().mockResolvedValue({
+              data: { is_bonus_round: false, competition_id: 1 },
+              error: null
+            })
+          }));
+        } else if (table === 'seasons') {
+          mock.select.mockImplementationOnce(() => ({
+            eq: jest.fn().mockReturnThis(),
+            single: jest.fn().mockResolvedValue({
+              data: { bonus_mode_active: false },
+              error: null
+            })
+          }));
         }
 
         return mock;
@@ -517,6 +688,28 @@ describe('Non-participant Scoring Rule', () => {
             eq: jest.fn(() => Promise.resolve({ data: participantData, error: null }))
           }))
         };
+      } else if (table === 'betting_rounds') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({ 
+                data: { is_bonus_round: false, competition_id: 1 }, 
+                error: null 
+              }))
+            }))
+          }))
+        };
+      } else if (table === 'seasons') {
+        const mockBuilder = {
+          eq: jest.fn().mockReturnThis(),
+          single: jest.fn(() => Promise.resolve({ 
+            data: { bonus_mode_active: false }, 
+            error: null 
+          }))
+        };
+        return {
+          select: jest.fn(() => mockBuilder)
+        };
       } else if (table === 'profiles') {
         return {
           select: jest.fn(() => Promise.resolve({ data: allUsersData, error: null }))
@@ -532,19 +725,19 @@ describe('Non-participant Scoring Rule', () => {
     });
 
     // Override for the second user_bets call (getting points)
-    let callCount = 0;
+    let userBetsCallCount = 0;
     const originalFrom = mockClient.from;
     mockClient.from = jest.fn((table: string) => {
       if (table === 'user_bets') {
-        callCount++;
-        if (callCount === 1) {
+        userBetsCallCount++;
+        if (userBetsCallCount === 1) {
           // First call: get participants
           return {
             select: jest.fn(() => ({
               eq: jest.fn(() => Promise.resolve({ data: participantData, error: null }))
             }))
           };
-        } else if (callCount === 2) {
+        } else if (userBetsCallCount === 2) {
           // Second call: get user points
           return {
             select: jest.fn(() => ({
@@ -560,6 +753,7 @@ describe('Non-participant Scoring Rule', () => {
           };
         }
       }
+      // Reuse the mocks for other tables from originalFrom
       return originalFrom(table);
     });
 
@@ -580,7 +774,29 @@ describe('Non-participant Scoring Rule', () => {
     
     // Mock no participants
     mockClient.from = jest.fn((table: string) => {
-      if (table === 'user_bets') {
+      if (table === 'betting_rounds') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({ 
+                data: { is_bonus_round: false, competition_id: 1 }, 
+                error: null 
+              }))
+            }))
+          }))
+        };
+      } else if (table === 'seasons') {
+        const mockBuilder = {
+          eq: jest.fn().mockReturnThis(),
+          single: jest.fn(() => Promise.resolve({ 
+            data: { bonus_mode_active: false }, 
+            error: null 
+          }))
+        };
+        return {
+          select: jest.fn(() => mockBuilder)
+        };
+      } else if (table === 'user_bets') {
         return {
           select: jest.fn(() => ({
             eq: jest.fn(() => Promise.resolve({ data: [], error: null }))
@@ -608,7 +824,29 @@ describe('Non-participant Scoring Rule', () => {
     
     let callCount = 0;
     mockClient.from = jest.fn((table: string) => {
-      if (table === 'user_bets') {
+      if (table === 'betting_rounds') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({ 
+                data: { is_bonus_round: false, competition_id: 1 }, 
+                error: null 
+              }))
+            }))
+          }))
+        };
+      } else if (table === 'seasons') {
+        const mockBuilder = {
+          eq: jest.fn().mockReturnThis(),
+          single: jest.fn(() => Promise.resolve({ 
+            data: { bonus_mode_active: false }, 
+            error: null 
+          }))
+        };
+        return {
+          select: jest.fn(() => mockBuilder)
+        };
+      } else if (table === 'user_bets') {
         callCount++;
         if (callCount === 1) {
           return {
@@ -658,7 +896,29 @@ describe('Non-participant Scoring Rule', () => {
     
     let callCount = 0;
     mockClient.from = jest.fn((table: string) => {
-      if (table === 'user_bets') {
+      if (table === 'betting_rounds') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({ 
+                data: { is_bonus_round: false, competition_id: 1 }, 
+                error: null 
+              }))
+            }))
+          }))
+        };
+      } else if (table === 'seasons') {
+        const mockBuilder = {
+          eq: jest.fn().mockReturnThis(),
+          single: jest.fn(() => Promise.resolve({ 
+            data: { bonus_mode_active: false }, 
+            error: null 
+          }))
+        };
+        return {
+          select: jest.fn(() => mockBuilder)
+        };
+      } else if (table === 'user_bets') {
         callCount++;
         if (callCount === 1) {
           return {
@@ -708,20 +968,31 @@ describe('Non-participant Scoring Rule', () => {
   it('should handle database errors gracefully', async () => {
     const { applyNonParticipantScoringRule } = await import('./scoring');
     
-    // Mock database error
-    mockClient.from = jest.fn(() => ({
-      select: jest.fn(() => ({
-        eq: jest.fn(() => Promise.resolve({
-          data: null,
-          error: new Error('Database connection failed')
+    // Mock database error on first query (betting_rounds)
+    mockClient.from = jest.fn((table: string) => {
+      if (table === 'betting_rounds') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({
+                data: null,
+                error: new Error('Database connection failed')
+              }))
+            }))
+          }))
+        };
+      }
+      return {
+        select: jest.fn(() => ({
+          eq: jest.fn(() => Promise.resolve({ data: null, error: null }))
         }))
-      }))
-    }));
+      };
+    });
 
     const result = await applyNonParticipantScoringRule(mockBettingRoundId, mockClient);
     
     expect(result.success).toBe(false);
-    expect(result.message).toContain("Failed to fetch participants");
+    expect(result.message).toContain("Failed to fetch betting round bonus status");
     expect(result.details?.error).toBeInstanceOf(Error);
   });
 });

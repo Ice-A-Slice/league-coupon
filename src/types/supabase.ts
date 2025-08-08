@@ -130,6 +130,7 @@ export type Database = {
           created_at: string
           earliest_fixture_kickoff: string | null
           id: number
+          is_bonus_round: boolean | null
           latest_fixture_kickoff: string | null
           name: string
           reminder_sent_at: string | null
@@ -143,6 +144,7 @@ export type Database = {
           created_at?: string
           earliest_fixture_kickoff?: string | null
           id?: number
+          is_bonus_round?: boolean | null
           latest_fixture_kickoff?: string | null
           name: string
           reminder_sent_at?: string | null
@@ -156,6 +158,7 @@ export type Database = {
           created_at?: string
           earliest_fixture_kickoff?: string | null
           id?: number
+          is_bonus_round?: boolean | null
           latest_fixture_kickoff?: string | null
           name?: string
           reminder_sent_at?: string | null
@@ -523,6 +526,7 @@ export type Database = {
       seasons: {
         Row: {
           api_season_year: number
+          bonus_mode_active: boolean | null
           competition_id: number
           completed_at: string | null
           coverage_json: Json | null
@@ -539,6 +543,7 @@ export type Database = {
         }
         Insert: {
           api_season_year: number
+          bonus_mode_active?: boolean | null
           competition_id: number
           completed_at?: string | null
           coverage_json?: Json | null
@@ -555,6 +560,7 @@ export type Database = {
         }
         Update: {
           api_season_year?: number
+          bonus_mode_active?: boolean | null
           competition_id?: number
           completed_at?: string | null
           coverage_json?: Json | null
@@ -983,3 +989,4 @@ export const Constants = {
     },
   },
 } as const
+

@@ -175,6 +175,42 @@ export async function calculateAndStoreMatchPoints(
     const fixtureIds = fixtureLinks.map(link => link.fixture_id);
     logger.info({ bettingRoundId, fixtureCount: fixtureIds.length }, `Found ${fixtureIds.length} fixtures.`);
     
+    // Check if this is a bonus round (2x points) - check both individual round and global season setting
+    const { data: bettingRoundData, error: bettingRoundError } = await client
+      .from('betting_rounds')
+      .select('is_bonus_round, competition_id')
+      .eq('id', bettingRoundId)
+      .single();
+
+    if (bettingRoundError) {
+      logger.error({ bettingRoundId, error: bettingRoundError }, "Failed to fetch betting round bonus status.");
+      return { success: false, message: "Failed to fetch betting round bonus status.", details: { betsProcessed: 0, betsUpdated: 0, error: bettingRoundError } };
+    }
+
+    // Check season-level bonus mode setting
+    const { data: seasonData, error: seasonError } = await client
+      .from('seasons')
+      .select('bonus_mode_active')
+      .eq('competition_id', bettingRoundData.competition_id)
+      .eq('is_current', true)
+      .single();
+
+    if (seasonError) {
+      logger.warn({ bettingRoundId, error: seasonError }, "Failed to fetch season bonus mode - proceeding without bonus points");
+    }
+
+    // Determine if bonus points should be applied (either individual round OR global season setting)
+    const isBonusRound = bettingRoundData.is_bonus_round || (seasonData?.bonus_mode_active ?? false);
+    const pointMultiplier = isBonusRound ? 2 : 1;
+    
+    logger.info({ 
+      bettingRoundId, 
+      individualBonusRound: bettingRoundData.is_bonus_round,
+      globalBonusMode: seasonData?.bonus_mode_active ?? false,
+      isBonusRound, 
+      pointMultiplier 
+    }, `Bonus round status determined - using ${pointMultiplier}x point multiplier`);
+    
     // 3. Fetch final results for these fixtures
     const { data: fixturesData, error: fixturesError } = await client // Use passed-in client
       .from('fixtures')
@@ -268,8 +304,9 @@ export async function calculateAndStoreMatchPoints(
             continue; 
         }
 
-        // Calculate points (1 for correct, 0 for incorrect)
-        const points = bet.prediction === fixtureResult.result ? 1 : 0;
+        // Calculate points (base: 1 for correct, 0 for incorrect; then apply bonus multiplier)
+        const basePoints = bet.prediction === fixtureResult.result ? 1 : 0;
+        const points = basePoints * pointMultiplier;
 
         // Add to our list of updates for the RPC function
         betUpdatesForRPC.push({
@@ -409,10 +446,11 @@ export async function calculateAndStoreMatchPoints(
 
     // 7. Final success result (now indicates match, dynamic, and cup points were attempted)
     const duration = Date.now() - startTime;
-    logger.info({ bettingRoundId, durationMs: duration }, `Scoring completed successfully (match, dynamic, and cup points processed).`);
+    const bonusMessage = isBonusRound ? ` (${pointMultiplier}x bonus points applied)` : '';
+    logger.info({ bettingRoundId, durationMs: duration, isBonusRound, pointMultiplier }, `Scoring completed successfully (match, dynamic, and cup points processed)${bonusMessage}.`);
     return {
       success: true,
-      message: "Scoring completed successfully (match, dynamic, and cup points processed).",
+      message: `Scoring completed successfully (match, dynamic, and cup points processed)${bonusMessage}.`,
       details: { 
           betsProcessed: betsProcessed, 
           betsUpdated: betUpdatesForRPC.length, 
@@ -740,6 +778,40 @@ export async function applyNonParticipantScoringRule(
   client: SupabaseClient<Database>
 ): Promise<NonParticipantScoringResult> {
   try {
+    // 0. Check bonus round status to apply same multiplier as participants
+    const { data: bettingRoundData, error: bettingRoundError } = await client
+      .from('betting_rounds')
+      .select('is_bonus_round, competition_id')
+      .eq('id', bettingRoundId)
+      .single();
+
+    if (bettingRoundError) {
+      logger.error({ bettingRoundId, error: bettingRoundError }, "Failed to fetch betting round bonus status for non-participant scoring");
+      return { 
+        success: false, 
+        message: "Failed to fetch betting round bonus status", 
+        details: { nonParticipantsProcessed: 0, minimumParticipantScore: null, participantCount: 0, nonParticipantCount: 0, error: bettingRoundError } 
+      };
+    }
+
+    // Check season-level bonus mode setting
+    const { data: seasonData, error: seasonError } = await client
+      .from('seasons')
+      .select('bonus_mode_active')
+      .eq('competition_id', bettingRoundData.competition_id)
+      .eq('is_current', true)
+      .single();
+
+    if (seasonError) {
+      logger.warn({ bettingRoundId, error: seasonError }, "Failed to fetch season bonus mode for non-participant scoring");
+    }
+
+    // Determine bonus multiplier (same logic as main scoring)
+    const isBonusRound = bettingRoundData.is_bonus_round || (seasonData?.bonus_mode_active ?? false);
+    const pointMultiplier = isBonusRound ? 2 : 1;
+    
+    logger.info({ bettingRoundId, isBonusRound, pointMultiplier }, `Non-participant scoring using ${pointMultiplier}x multiplier`);
+
     // 1. Get all users who participated in this round (have at least one bet)
     const { data: participantData, error: participantError } = await client
       .from('user_bets')
@@ -848,24 +920,32 @@ export async function applyNonParticipantScoringRule(
     }
 
     // For each non-participant, create bet records with points that sum to minimumScore
-    // We'll distribute the points across fixtures (giving 1 point to the first fixtures until we reach minimumScore)
+    // We'll distribute the points across fixtures (giving base points * multiplier to the first fixtures until we reach minimumScore)
     const fixtureIds = roundFixtures.map(rf => rf.fixture_id);
-    const pointsPerFixture = Math.min(1, minimumScore); // Each bet can only give 0 or 1 point max
-    const fixturesToScore = Math.min(minimumScore, fixtureIds.length); // How many fixtures need to give 1 point
+    const fixturesToScore = Math.min(Math.ceil(minimumScore / pointMultiplier), fixtureIds.length); // How many fixtures need to give points
 
     let nonParticipantsProcessed = 0;
     
     for (const userId of nonParticipantUserIds) {
       // Create bet records for this non-participant
-      const betsToInsert = fixtureIds.map((fixtureId, index) => ({
-        user_id: userId,
-        fixture_id: fixtureId,
-        betting_round_id: bettingRoundId,
-        prediction: '1' as const, // Dummy prediction (doesn't matter since points are pre-set)
-        points_awarded: index < fixturesToScore ? pointsPerFixture : 0, // Give points to first N fixtures
-        submitted_at: new Date().toISOString(),
-        created_at: new Date().toISOString()
-      }));
+      let remainingPoints = minimumScore;
+      const betsToInsert = fixtureIds.map((fixtureId, index) => {
+        let pointsForThisFixture = 0;
+        if (remainingPoints > 0 && index < fixturesToScore) {
+          pointsForThisFixture = Math.min(pointMultiplier, remainingPoints);
+          remainingPoints -= pointsForThisFixture;
+        }
+        
+        return {
+          user_id: userId,
+          fixture_id: fixtureId,
+          betting_round_id: bettingRoundId,
+          prediction: '1' as const, // Dummy prediction (doesn't matter since points are pre-set)
+          points_awarded: pointsForThisFixture,
+          submitted_at: new Date().toISOString(),
+          created_at: new Date().toISOString()
+        };
+      });
 
       const { error: insertError } = await client
         .from('user_bets')
@@ -878,20 +958,23 @@ export async function applyNonParticipantScoringRule(
       }
 
       nonParticipantsProcessed++;
-      logger.debug({ bettingRoundId, userId, pointsAwarded: minimumScore }, "Created non-participant bets");
+      logger.debug({ bettingRoundId, userId, pointsAwarded: minimumScore, isBonusRound, pointMultiplier }, "Created non-participant bets");
     }
 
+    const bonusMessage = isBonusRound ? ` (bonus ${pointMultiplier}x)` : '';
     logger.info({ 
       bettingRoundId, 
       nonParticipantsProcessed, 
       minimumScore, 
       participantCount: participantUserIds.size,
-      nonParticipantCount: nonParticipantUserIds.length 
-    }, "Non-participant scoring rule applied successfully");
+      nonParticipantCount: nonParticipantUserIds.length,
+      isBonusRound,
+      pointMultiplier
+    }, `Non-participant scoring rule applied successfully${bonusMessage}`);
 
     return {
       success: true,
-      message: `Non-participant scoring completed: ${nonParticipantsProcessed} users given ${minimumScore} points`,
+      message: `Non-participant scoring completed: ${nonParticipantsProcessed} users given ${minimumScore} points${bonusMessage}`,
       details: { 
         nonParticipantsProcessed, 
         minimumParticipantScore: minimumScore, 
