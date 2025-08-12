@@ -67,6 +67,10 @@ export default async function HallOfFamePage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      <h1 className="text-3xl font-bold mb-2">Hall of Fame</h1>
+      <p className="text-gray-600 mb-6">
+        Celebrate the champions of each season and their outstanding achievements
+      </p>
       <HallOfFame 
         currentUserId={currentUserId}
         competitionId={competitionId}

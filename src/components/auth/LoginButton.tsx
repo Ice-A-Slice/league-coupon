@@ -168,24 +168,37 @@ export default function LoginButton() {
     }
   }
 
+  // Get user's display name from metadata or fallback to email
+  const getUserDisplayName = (user: { user_metadata?: { full_name?: string; name?: string; display_name?: string }; email?: string }): string => {
+    if (user?.user_metadata) {
+      const metadata = user.user_metadata;
+      const name = metadata.full_name || metadata.name || metadata.display_name;
+      if (name) return name;
+    }
+    // Fallback to email prefix if no name in metadata
+    return user?.email ? user.email.split('@')[0] : 'User';
+  };
+
   return (
-    <div className="flex flex-col gap-2 items-start">
+    <div className="flex items-center">
       {user ? (
-        <>
-          <p className="text-sm text-gray-600">Signed in as {user.email}</p>
+        <div className="flex items-center">
+          <span className="text-sm text-gray-600 hidden sm:inline sm:mr-3">
+            Welcome, <span className="font-medium">{getUserDisplayName(user)}</span>
+          </span>
           <button
             onClick={handleLogout}
-            className="bg-gray-200 px-4 py-1 rounded hover:bg-gray-300"
+            className="bg-gray-100 hover:bg-gray-200 border border-gray-300 px-3 py-2 rounded text-sm font-medium text-gray-700 transition-colors"
           >
             Sign out
           </button>
-        </>
+        </div>
       ) : (
         <button
           onClick={handleLogin}
-          className="bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
         >
-          Sign in / Register
+          Sign in
         </button>
       )}
     </div>

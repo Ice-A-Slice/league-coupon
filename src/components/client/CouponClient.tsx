@@ -2,7 +2,6 @@
 
 import React, { useRef, useState, useEffect, Suspense } from 'react';
 import { Button } from "@/components/ui/button";
-import { LoginButton } from '@/components/auth';
 import { Spinner } from "@/components/ui/spinner"; 
 import BettingCoupon, { BettingCouponRef } from '@/components/BettingCoupon/BettingCoupon';
 import type { Selections } from "@/components/BettingCoupon/types"; 
@@ -305,9 +304,8 @@ export default function CouponClient({
   if (!initialRoundData && !isTestEnvironment) {
        return (
          <div className="flex-1 w-full flex flex-col gap-10 items-center px-4 py-8">
-            <LoginButton />
             <div className="w-full max-w-4xl text-center">
-               <h1 className="text-3xl font-bold mb-6">League Coupon</h1>
+               <h1 className="text-3xl font-bold mb-6">Coupon</h1>
                <p className="text-xl text-gray-600">No current betting round found.</p> 
             </div>
          </div>
@@ -327,9 +325,8 @@ export default function CouponClient({
   // Main UI
   return (
     <div className="flex-1 w-full flex flex-col gap-10 items-center px-4 py-8">
-      <LoginButton />
       <div className="w-full max-w-4xl flex flex-col gap-8">
-        <h1 className="text-3xl font-bold text-center">League Coupon</h1>
+        <h1 className="text-3xl font-bold">Coupon</h1>
 
         {validationErrors.summary && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm w-full" role="alert">
