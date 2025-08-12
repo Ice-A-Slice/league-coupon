@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useState, Suspense } from 'react';
+import React, { useRef, useState, useEffect, Suspense } from 'react';
 import { Button } from "@/components/ui/button";
 import { LoginButton } from '@/components/auth';
 import { Spinner } from "@/components/ui/spinner"; 
@@ -18,6 +18,7 @@ import type { CurrentRoundFixturesResult } from '@/lib/supabase/queries'; // Typ
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useQuestionnaireData } from '@/features/questionnaire/hooks/useQuestionnaireData';
 import { useBettingFormStorage } from '@/lib/hooks/useLocalStorage';
+import { getStoredSession } from '@/utils/auth/storage';
 import {
   validateCouponSelections,
   validateQuestionnaireAnswers,
@@ -80,14 +81,95 @@ export default function CouponClient({
   const roundNameForTitle = initialRoundData?.roundName ?? 'Current Round';
   const matchesForCoupon = initialRoundData?.matches ?? [];
   
+  // State for user season answers (now fetched client-side)
+  const [userSeasonAnswers, setUserSeasonAnswers] = useState<Record<string, number> | null>(null);
+  const [answersLoading, setAnswersLoading] = useState(false);
+  
   // Transform user season answers to initial predictions format
-  const userSeasonAnswers = initialRoundData?.userSeasonAnswers;
   const initialPredictionsWithUserAnswers: Prediction = {
     leagueWinner: userSeasonAnswers?.league_winner?.toString() ?? null,
     topScorer: userSeasonAnswers?.top_scorer?.toString() ?? null,
     bestGoalDifference: userSeasonAnswers?.best_goal_difference?.toString() ?? null,
     lastPlace: userSeasonAnswers?.last_place?.toString() ?? null
   };
+
+  // Debug logging for the predictions
+  console.log('🔍 CouponClient data debug:', {
+    userSeasonAnswers,
+    initialPredictionsWithUserAnswers,
+    hasAnswers: !!userSeasonAnswers,
+    answersKeys: userSeasonAnswers ? Object.keys(userSeasonAnswers) : []
+  });
+
+  // Fetch user season answers when user is authenticated
+  useEffect(() => {
+    console.log('🔍 CouponClient useEffect triggered:', { 
+      hasUser: !!user, 
+      userEmail: user?.email,
+      answersLoading, 
+      hasUserSeasonAnswers: !!userSeasonAnswers 
+    });
+
+    async function fetchUserAnswers() {
+      if (!user) {
+        console.log('🔍 No user authenticated yet, skipping answer fetch');
+        return;
+      }
+      
+      if (answersLoading) {
+        console.log('🔍 Already loading answers, skipping');
+        return;
+      }
+      
+      if (userSeasonAnswers) {
+        console.log('🔍 Already have user answers, skipping');
+        return;
+      }
+
+      console.log('🔍 Starting to fetch user season answers for:', user.email);
+      setAnswersLoading(true);
+      
+      try {
+        // Get auth token from localStorage using our auth utility
+        const storedSession = getStoredSession();
+        const authToken = storedSession?.access_token;
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        
+        if (authToken) {
+          headers['Authorization'] = `Bearer ${authToken}`;
+        }
+
+        console.log('🔍 Fetching user season answers...');
+        const response = await fetch('/api/user-season-answers', {
+          method: 'GET',
+          headers,
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('🔍 User season answers response:', data);
+          
+          if (data.userSeasonAnswers) {
+            setUserSeasonAnswers(data.userSeasonAnswers);
+            console.log('✅ User season answers loaded for pre-population');
+          } else {
+            console.log('ℹ️ No previous answers found for user');
+          }
+        } else {
+          console.warn('Failed to fetch user season answers:', response.status, response.statusText);
+        }
+      } catch (error) {
+        console.error('Error fetching user season answers:', error);
+      } finally {
+        setAnswersLoading(false);
+      }
+    }
+
+    fetchUserAnswers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]); // answersLoading and userSeasonAnswers intentionally omitted to prevent dependency loops
   
   // Handlers
   const handleSelectionChange = (newSelections: Selections, matchId: string) => {

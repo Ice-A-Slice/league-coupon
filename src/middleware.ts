@@ -40,16 +40,16 @@ export async function middleware(request: NextRequest) {
     pathname === route || pathname.startsWith(`${route}/`)
   )
   
-  // Safety switch: disable whitelist via environment variable
-  const whitelistEnabled = process.env.WHITELIST_ENABLED === 'true'
-  
-  // If whitelist is disabled AND it's not an admin route, allow access
-  if (!whitelistEnabled && !isAdminRoute) {
+  // Allow public routes (non-admin) without authentication
+  if (isPublicRoute && !isAdminRoute) {
     return NextResponse.next()
   }
   
-  // Always require auth for admin routes, regardless of whitelist setting
-  if (isPublicRoute && !isAdminRoute) {
+  // Safety switch: disable whitelist via environment variable for non-admin routes
+  const whitelistEnabled = process.env.WHITELIST_ENABLED === 'true'
+  
+  // If whitelist is disabled AND it's not an admin route, allow access without auth
+  if (!whitelistEnabled && !isAdminRoute) {
     return NextResponse.next()
   }
   
@@ -110,8 +110,11 @@ export async function middleware(request: NextRequest) {
       .rpc('is_email_admin', { check_email: userEmail })
     
     if (adminError || !isAdmin) {
-      // User is not admin, redirect to home with error message
-      return NextResponse.redirect(new URL('/?error=unauthorized', request.url))
+      // User is not admin, redirect to signin with admin context and error
+      const redirectUrl = new URL('/auth/signin', request.url)
+      redirectUrl.searchParams.set('next', pathname)
+      redirectUrl.searchParams.set('error', 'admin_unauthorized')
+      return NextResponse.redirect(redirectUrl)
     }
   }
   

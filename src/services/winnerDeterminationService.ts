@@ -44,6 +44,46 @@ export class WinnerDeterminationService {
   }
 
   /**
+   * Get user display name with fallback logic
+   */
+  private async getUserDisplayName(userId: string): Promise<string | undefined> {
+    try {
+      // First try profiles table
+      const { data: profile } = await this.client
+        .from('profiles')
+        .select('full_name')
+        .eq('id', userId)
+        .single();
+
+      if (profile?.full_name) {
+        return profile.full_name;
+      }
+
+      // Fallback: try auth.users metadata
+      const { data: authUser } = await this.client.auth.admin.getUserById(userId);
+      
+      if (authUser?.user?.user_metadata) {
+        const metadata = authUser.user.user_metadata;
+        const name = metadata.full_name || metadata.name || metadata.display_name;
+        if (name) return name;
+      }
+
+      // Final fallback: use email prefix if available
+      if (authUser?.user?.email) {
+        const emailPrefix = authUser.user.email.split('@')[0];
+        return emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+      }
+
+      // Ultimate fallback
+      return `User ${userId.slice(-8)}`;
+
+    } catch (error) {
+      console.warn('Error getting user display name', { userId, error });
+      return `User ${userId.slice(-8)}`;
+    }
+  }
+
+  /**
    * Determines winners for a specific season and records them in the Hall of Fame.
    * 
    * @param seasonId - The ID of the season to determine winners for
@@ -170,10 +210,7 @@ export class WinnerDeterminationService {
           user_id,
           game_points,
           dynamic_points,
-          total_points,
-          profiles (
-            full_name
-          )
+          total_points
         `)
         .eq('season_id', seasonId)
         .order('total_points', { ascending: false });
@@ -189,15 +226,21 @@ export class WinnerDeterminationService {
         return [];
       }
 
-      const winners: SeasonWinner[] = data.map((winner) => ({
-        user_id: winner.user_id,
-        username: winner.profiles?.full_name || undefined,
-        game_points: winner.game_points,
-        dynamic_points: winner.dynamic_points,
-        total_points: winner.total_points,
-        rank: 1, // All existing winners are rank 1
-        is_tied: data.length > 1 // Tied if more than one winner
-      }));
+      // Use the same fallback logic for user names
+      const winners: SeasonWinner[] = await Promise.all(
+        data.map(async (winner) => {
+          const username = await this.getUserDisplayName(winner.user_id);
+          return {
+            user_id: winner.user_id,
+            username,
+            game_points: winner.game_points,
+            dynamic_points: winner.dynamic_points,
+            total_points: winner.total_points,
+            rank: 1, // All existing winners are rank 1
+            is_tied: data.length > 1 // Tied if more than one winner
+          };
+        })
+      );
 
       logger.debug({ ...loggerContext, winnerCount: winners.length }, 'Found existing season winners');
       return winners;

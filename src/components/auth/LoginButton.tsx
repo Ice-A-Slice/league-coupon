@@ -1,36 +1,13 @@
 'use client'
 
 import React from 'react'
-import { useEffect, useState } from 'react'
 import { createClient } from '../../utils/supabase/client'
-import { User } from '@supabase/supabase-js'
+import { useAuth } from '@/features/auth/hooks/useAuth'
+import { storeSession, removeSession, shouldUseAuthWorkaround } from '@/utils/auth/storage'
 
 export default function LoginButton() {
   const supabase = createClient()
-  const [user, setUser] = useState<User | null>(null)
-
-  useEffect(() => {
-    const getUser = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession()
-
-      if (error) {
-        console.error('Auth error:', error)
-      }
-
-      setUser(session?.user ?? null)
-    }
-
-    getUser()
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setUser(session?.user ?? null)
-      }
-    )
-
-    return () => subscription?.unsubscribe()
-  }, [supabase])
+  const { user } = useAuth() // Use the centralized auth hook
 
   const handleLogin = async () => {
     // For MVP testing, use email/password authentication
@@ -40,48 +17,155 @@ export default function LoginButton() {
     const password = prompt('Enter password (or create new):')
     if (!password) return
 
-    // Try login first
-    const { data: loginData, error } = await supabase.auth.signInWithPassword({
-      email: email,
-      password: password,
-    })
+    try {
+      if (shouldUseAuthWorkaround()) {
+        // Development workaround: Use direct API calls
+        // Attempting direct login
+        
+        const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          },
+          body: JSON.stringify({
+            email: email,
+            password: password,
+          }),
+        })
 
-    // If login fails, try signup
-    if (error && error.message.includes('Invalid login credentials')) {
-      // Get full name for new users
-      const fullName = prompt('Enter your full name (for display in standings):')
-      if (!fullName) return
+        if (response.ok) {
+          const authData = await response.json()
+          // Login successful
+          
+          // Store session using utility
+          storeSession(authData)
+          
+          alert('Login successful!')
+          window.location.reload()
+          
+        } else {
+          const errorData = await response.json()
+          // Login failed
+          
+          if (response.status === 400 && errorData.msg?.includes('Invalid login credentials')) {
+            // Try signup for new users
+            const fullName = prompt('Login failed. Enter your full name to create new account:')
+            if (!fullName) return
 
-      const { data: signupData, error: signupError } = await supabase.auth.signUp({
-        email: email,
-        password: password,
-        options: {
-          data: {
-            full_name: fullName
+            const signupResponse = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/signup`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+              },
+              body: JSON.stringify({
+                email: email,
+                password: password,
+                data: { full_name: fullName }
+              }),
+            })
+            
+            if (signupResponse.ok) {
+              const signupData = await signupResponse.json()
+              // Signup successful
+              
+              // Store session using utility
+              storeSession(signupData)
+              
+              // Ensure profile is created
+              try {
+                const { data: profileResult } = await supabase
+                  .rpc('ensure_profile_exists', {
+                    user_id: signupData.user.id,
+                    user_email: signupData.user.email,
+                    user_full_name: fullName
+                  })
+                
+                if (profileResult && !profileResult.success) {
+                  console.error('Profile creation warning:', profileResult.message)
+                }
+              } catch (profileError) {
+                console.error('Profile creation error:', profileError)
+                // Don't block the signup, just log the error
+              }
+              
+              alert('Account created and logged in!')
+              window.location.reload()
+            } else {
+              const signupError = await signupResponse.json()
+              alert('Signup error: ' + signupError.msg)
+            }
+          } else {
+            alert('Login error: ' + errorData.msg)
           }
         }
-      })
-      
-      if (signupError) {
-        alert('Signup error: ' + signupError.message)
       } else {
-        alert('Account created and logged in!')
-        // Set user immediately and refresh page
-        setUser(signupData.user)
-        window.location.reload()
+        // Production: Use standard Supabase auth
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
+
+        if (error) {
+          if (error.message.includes('Invalid login credentials')) {
+            // Try signup
+            const fullName = prompt('Login failed. Enter your full name to create new account:')
+            if (!fullName) return
+
+            const { data: signupData, error: signupError } = await supabase.auth.signUp({
+              email,
+              password,
+              options: {
+                data: { full_name: fullName }
+              }
+            })
+
+            if (signupError) {
+              alert('Signup error: ' + signupError.message)
+            } else if (signupData.user) {
+              // Ensure profile is created
+              try {
+                const { data: profileResult } = await supabase
+                  .rpc('ensure_profile_exists', {
+                    user_id: signupData.user.id,
+                    user_email: signupData.user.email,
+                    user_full_name: fullName
+                  })
+                
+                if (profileResult && !profileResult.success) {
+                  console.error('Profile creation warning:', profileResult.message)
+                }
+              } catch (profileError) {
+                console.error('Profile creation error:', profileError)
+              }
+              
+              alert('Account created! Please check your email for confirmation.')
+            }
+          } else {
+            alert('Login error: ' + error.message)
+          }
+        } else if (data.user) {
+          alert('Login successful!')
+          window.location.reload()
+        }
       }
-    } else if (error) {
-      alert('Login error: ' + error.message)
-    } else {
-      // Login successful - update state and refresh
-      setUser(loginData.user)
-      window.location.reload()
+    } catch (error) {
+      console.error('Network error:', error)
+      alert('Network error. Please try again.')
     }
   }
 
   const handleLogout = async () => {
-    await supabase.auth.signOut()
-    setUser(null)
+    if (shouldUseAuthWorkaround()) {
+      // Development workaround: Clear localStorage
+      removeSession()
+      window.location.reload()
+    } else {
+      // Production: Use Supabase signOut
+      await supabase.auth.signOut()
+      window.location.reload()
+    }
   }
 
   return (

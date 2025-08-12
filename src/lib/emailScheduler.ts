@@ -598,6 +598,7 @@ export class EmailSchedulerService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.CRON_SECRET}`, // Use cron secret for internal API calls
         },
         body: JSON.stringify({
           round_id: roundId

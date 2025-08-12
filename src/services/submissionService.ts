@@ -1,5 +1,6 @@
 import type { Selections, SelectionType } from "@/components/BettingCoupon/types"; // Adjust path if necessary
 import type { SeasonAnswers } from "@/components/Questionnaire/Questionnaire"; // Correct import path for SeasonAnswers
+import { getStoredSession } from '@/utils/auth/storage';
 
 /**
  * Defines the structure for the data expected by the service function.
@@ -71,9 +72,20 @@ export async function submitPredictions(
       prediction: prediction as SelectionType,
     }));
 
+    // Get auth token from localStorage using our auth utility
+    const storedSession = getStoredSession();
+    const authToken = storedSession?.access_token;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+
     const betsResponse = await fetch('/api/bets', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(bets),
     });
 
@@ -92,7 +104,7 @@ export async function submitPredictions(
       console.log('Submitting season answers...', answersData);
       const answersResponse = await fetch('/api/season-answers', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(answersData),
       });
 

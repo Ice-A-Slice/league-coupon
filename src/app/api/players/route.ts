@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { getPlayersForSeason } from '@/lib/supabase/queries';
 import { supabaseServerClient } from '@/lib/supabase/server';
 
 // Add the conditional server-only check
@@ -54,11 +53,22 @@ export async function GET(request: Request) {
 
   console.log(`API Route /api/players: Found season ID ${seasonId}. Fetching players...`);
   try {
-    const players = await getPlayersForSeason(seasonId);
-    if (players === null) {
+    // TEMPORARY FIX: Return all players with ID >= 200 (our Premier League players)
+    // TODO: Fix proper season/team linking later
+    const { data: players, error } = await supabaseServerClient
+      .from('players')
+      .select('id, name')
+      .not('name', 'is', null)
+      .gte('id', 200)
+      .order('name');
+    
+    if (error) {
+      console.error('Error fetching players directly:', error);
       return NextResponse.json({ error: 'Failed to fetch players from database' }, { status: 500 });
     }
-    return NextResponse.json(players);
+    
+    console.log(`API Route /api/players: Returning ${players?.length || 0} players directly`);
+    return NextResponse.json(players || []);
   } catch (error: unknown) {
     console.error('Error in /api/players route:', error);
     const message = error instanceof Error ? error.message : 'Internal server error';
