@@ -162,7 +162,7 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
       {/* League Winner Selection - Reverted to use TeamSelect */}
       <div className="pt-3 sm:pt-4 first:pt-0">
         <div className="flex items-center mb-1">
-          <label htmlFor="league-winner" className="block text-sm font-medium text-gray-700 mr-2">
+          <label htmlFor="league-winner" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mr-2">
             1. Which team will win the league?
           </label>
           <ValidationStatusIndicator 
@@ -193,7 +193,7 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
       {/* Last Place Selection */}
       <div className="pt-3 sm:pt-4">
         <div className="flex items-center mb-1">
-          <label htmlFor="last-place" className="block text-sm font-medium text-gray-700 mr-2">
+          <label htmlFor="last-place" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mr-2">
             2. Which team will finish in last place?
           </label>
            <ValidationStatusIndicator 
@@ -224,7 +224,7 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
       {/* Best Goal Difference Selection */}
       <div className="pt-3 sm:pt-4">
          <div className="flex items-center mb-1">
-           <label htmlFor="best-goal-difference" className="block text-sm font-medium text-gray-700 mr-2">
+           <label htmlFor="best-goal-difference" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mr-2">
             3. Which team will have the best goal difference?
            </label>
             <ValidationStatusIndicator 
@@ -255,7 +255,7 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
       {/* Top Scorer Selection */}
       <div className="pt-3 sm:pt-4">
          <div className="flex items-center mb-1">
-          <label htmlFor="top-scorer" className="block text-sm font-medium text-gray-700 mr-2">
+          <label htmlFor="top-scorer" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mr-2">
             4. Who will be the top scorer in the league?
           </label>
            <ValidationStatusIndicator 
