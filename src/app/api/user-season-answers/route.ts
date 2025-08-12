@@ -15,7 +15,7 @@ import { cookies } from 'next/headers';
  */
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     
     // Try to get auth from Authorization header first (for localStorage-based auth)
     const authHeader = request.headers.get('authorization');
@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
     console.log('🔍 User Season Answers API: User authenticated:', user.email);
 
     // Get current season ID
-    const { data: currentSeason, error: seasonError } = await supabase
+    const { data: currentSeason, error: seasonError } = await supabase!
       .from('seasons')
       .select('id')
       .eq('is_current', true)
@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch user's season answers
-    const { data: answersData, error: answersError } = await supabase
+    const { data: answersData, error: answersError } = await supabase!
       .from('user_season_answers')
       .select('question_type, answered_team_id, answered_player_id')
       .eq('user_id', user.id)
@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Transform the normalized rows into a formatted object
-    let userSeasonAnswers = {};
+    const userSeasonAnswers: Record<string, number> = {};
     if (answersData && answersData.length > 0) {
       answersData.forEach((answer) => {
         const value = answer.answered_team_id || answer.answered_player_id;

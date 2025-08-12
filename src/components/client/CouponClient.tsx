@@ -82,7 +82,7 @@ export default function CouponClient({
   const matchesForCoupon = initialRoundData?.matches ?? [];
   
   // State for user season answers (now fetched client-side)
-  const [userSeasonAnswers, setUserSeasonAnswers] = useState(null);
+  const [userSeasonAnswers, setUserSeasonAnswers] = useState<Record<string, number> | null>(null);
   const [answersLoading, setAnswersLoading] = useState(false);
   
   // Transform user season answers to initial predictions format

@@ -22,7 +22,7 @@ export function getAuthStorageKey(): string {
 /**
  * Get auth session from storage
  */
-export function getStoredSession(): any | null {
+export function getStoredSession(): Record<string, unknown> | null {
   if (typeof window === 'undefined') return null;
   
   try {
@@ -51,7 +51,7 @@ export function getStoredSession(): any | null {
 /**
  * Store auth session
  */
-export function storeSession(authData: any): void {
+export function storeSession(authData: Record<string, unknown>): void {
   if (typeof window === 'undefined') return;
   
   try {
@@ -81,6 +81,6 @@ export function removeSession(): void {
  */
 export function shouldUseAuthWorkaround(): boolean {
   // Only use workarounds in local development
-  return process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('127.0.0.1') || 
-         process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('localhost');
+  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('127.0.0.1')) || 
+         Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('localhost'));
 }

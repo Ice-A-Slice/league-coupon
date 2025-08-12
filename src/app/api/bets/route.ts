@@ -141,7 +141,7 @@ export async function POST(request: Request) {
     console.log(`Validating submission for fixture IDs: ${submittedFixtureIds.join(', ')}`);
 
     // 1. Find the betting round ID(s) these fixtures belong to
-    const { data: roundFixtureLinks, error: linkError } = await supabase
+    const { data: roundFixtureLinks, error: linkError } = await supabase!
       .from('betting_round_fixtures')
       .select('betting_round_id')
       .in('fixture_id', submittedFixtureIds);
@@ -165,7 +165,7 @@ export async function POST(request: Request) {
     bettingRoundId = uniqueBettingRoundIds[0]; // We have the correct ID now!
 
     // 3. Fetch the betting round details (status and deadline)
-    const { data: roundData, error: roundError } = await supabase
+    const { data: roundData, error: roundError } = await supabase!
       .from('betting_rounds')
       .select('status, earliest_fixture_kickoff') // Use the round's earliest kickoff as the deadline
       .eq('id', bettingRoundId)
@@ -220,7 +220,7 @@ export async function POST(request: Request) {
   // 5. Perform Upsert using supabase client
   try {
     console.log(`Upserting ${upsertData.length} bets for user ${user.id}, round ${bettingRoundId}...`);
-    const { error: upsertError } = await supabase
+    const { error: upsertError } = await supabase!
       .from('user_bets')
       .upsert(upsertData, {
         onConflict: 'user_id,fixture_id'

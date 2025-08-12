@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { getPlayersForSeason } from '@/lib/supabase/queries';
 import { supabaseServerClient } from '@/lib/supabase/server';
 
 // Add the conditional server-only check

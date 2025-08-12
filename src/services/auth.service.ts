@@ -20,7 +20,7 @@ export class AuthService {
   /**
    * Sign in with email and password
    */
-  async signIn(email: string, password: string): Promise<{ user: any; error: any }> {
+  async signIn(email: string, password: string): Promise<{ user: unknown; error: unknown }> {
     if (shouldUseAuthWorkaround()) {
       // Development workaround
       try {
@@ -41,7 +41,7 @@ export class AuthService {
           const errorData = await response.json();
           return { user: null, error: errorData };
         }
-      } catch (error) {
+      } catch (_error) {
         return { user: null, error: { message: 'Network error' } };
       }
     } else {
@@ -57,7 +57,7 @@ export class AuthService {
   /**
    * Sign up new user
    */
-  async signUp(email: string, password: string, metadata?: any): Promise<{ user: any; error: any }> {
+  async signUp(email: string, password: string, metadata?: Record<string, unknown>): Promise<{ user: unknown; error: unknown }> {
     if (shouldUseAuthWorkaround()) {
       // Development workaround
       try {
@@ -82,7 +82,7 @@ export class AuthService {
           const errorData = await response.json();
           return { user: null, error: errorData };
         }
-      } catch (error) {
+      } catch (_error) {
         return { user: null, error: { message: 'Network error' } };
       }
     } else {
@@ -112,25 +112,29 @@ export class AuthService {
   /**
    * Get current session
    */
-  async getSession(): Promise<{ session: any; error: any }> {
+  async getSession(): Promise<{ session: unknown; error: unknown }> {
     if (shouldUseAuthWorkaround()) {
-      const storedSession = require('@/utils/auth/storage').getStoredSession();
+      const { getStoredSession } = await import('@/utils/auth/storage');
+      const storedSession = getStoredSession();
       return { session: storedSession, error: null };
     } else {
-      return await this.client.auth.getSession();
+      const { data, error } = await this.client.auth.getSession();
+      return { session: data.session, error };
     }
   }
 
   /**
    * Refresh current session
    */
-  async refreshSession(): Promise<{ session: any; error: any }> {
+  async refreshSession(): Promise<{ session: unknown; error: unknown }> {
     if (shouldUseAuthWorkaround()) {
       // In development, just return the stored session
-      const storedSession = require('@/utils/auth/storage').getStoredSession();
+      const { getStoredSession } = await import('@/utils/auth/storage');
+      const storedSession = getStoredSession();
       return { session: storedSession, error: null };
     } else {
-      return await this.client.auth.refreshSession();
+      const { data, error } = await this.client.auth.refreshSession();
+      return { session: data.session, error };
     }
   }
 }

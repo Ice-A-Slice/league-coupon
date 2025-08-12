@@ -191,10 +191,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Transform data to include user information with fallback logic
-    let transformedData: any[] = [];
+    let transformedData: Array<typeof hallOfFameData[0] & { user: { id: string; full_name: string; avatar_url: string | null; updated_at: null } }> = [];
     if (hallOfFameData && hallOfFameData.length > 0) {
       transformedData = await Promise.all(
-        hallOfFameData.map(async (item: any) => {
+        hallOfFameData.map(async (item) => {
           const userInfo = await getUserDisplayName(item.user_id, supabase);
           return {
             ...item,

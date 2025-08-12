@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
 
     // 3. Prepare data for Supabase Upsert
     // Get the current season dynamically instead of hardcoding
-    const { data: currentSeason, error: seasonError } = await supabase
+    const { data: currentSeason, error: seasonError } = await supabase!
         .from('seasons')
         .select('id')
         .eq('is_current', true)
@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
 
     // 4. Upsert data into the database
     try {
-        const { data, error: dbError } = await supabase
+        const { data, error: dbError } = await supabase!
             .from('user_season_answers')
             .upsert(answersToUpsert, {
                 onConflict: 'user_id,season_id,question_type'

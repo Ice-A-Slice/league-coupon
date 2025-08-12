@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import type { User, AuthChangeEvent, Session } from "@supabase/supabase-js";
-import { getStoredSession, storeSession, removeSession, shouldUseAuthWorkaround, getAuthStorageKey } from '@/utils/auth/storage';
+import { getStoredSession, shouldUseAuthWorkaround, getAuthStorageKey } from '@/utils/auth/storage';
 
 /**
  * Defines the return shape of the useAuth hook.
@@ -24,7 +24,6 @@ interface UseAuthReturn {
 export function useAuth(): UseAuthReturn {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [lastRefresh, setLastRefresh] = useState(Date.now());
 
   const refreshSession = useCallback(async () => {
     const client = createClient();
@@ -33,7 +32,7 @@ export function useAuth(): UseAuthReturn {
       // In development with broken auth, just check localStorage
       const storedAuth = getStoredSession();
       if (storedAuth?.user) {
-        setUser(storedAuth.user);
+        setUser(storedAuth.user as User);
       }
     } else {
       // In production, use proper Supabase refresh
@@ -41,7 +40,6 @@ export function useAuth(): UseAuthReturn {
         const { data: { session }, error } = await client.auth.refreshSession();
         if (!error && session) {
           setUser(session.user);
-          setLastRefresh(Date.now());
         }
       } catch (error) {
         console.error('Error refreshing session:', error);
@@ -69,7 +67,7 @@ export function useAuth(): UseAuthReturn {
           
           if (storedAuth?.user) {
             if (isMounted) {
-              setUser(storedAuth.user);
+              setUser(storedAuth.user as User);
               setIsLoading(false);
             }
           } else {
@@ -85,10 +83,10 @@ export function useAuth(): UseAuthReturn {
             
             const currentAuth = getStoredSession();
             const currentUserId = user?.id;
-            const storedUserId = currentAuth?.user?.id;
+            const storedUserId = (currentAuth?.user as User)?.id;
             
             if (currentUserId !== storedUserId) {
-              setUser(currentAuth?.user || null);
+              setUser((currentAuth?.user as User) || null);
             }
           }, 1000);
 
@@ -101,7 +99,7 @@ export function useAuth(): UseAuthReturn {
               if (e.newValue) {
                 try {
                   const authData = JSON.parse(e.newValue);
-                  setUser(authData.user);
+                  setUser(authData.user as User);
                 } catch (error) {
                   console.error('Error parsing storage event:', error);
                 }
@@ -167,7 +165,7 @@ export function useAuth(): UseAuthReturn {
       isMounted = false;
       cleanup.then(cleanupFn => cleanupFn?.());
     };
-  }, [refreshSession]);
+  }, [refreshSession, user?.id]);
 
   return { user, isLoading, refreshSession };
 }
