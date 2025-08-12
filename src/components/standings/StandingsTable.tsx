@@ -62,9 +62,6 @@ const StandingsTable: React.FC<StandingsTableProps> = ({ standings, isLoading, e
     <TooltipProvider>
       <div className="border shadow-md sm:rounded-lg my-6 overflow-hidden">
         <Table>
-          <TableCaption className="text-sm text-gray-500 dark:text-gray-400 mt-4">
-            Current tournament standings. Updated after each round.
-          </TableCaption>
           <TableHeader className="bg-primary text-primary-foreground">
             <TableRow>
               <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold text-center">Rank</TableHead>
