@@ -4,7 +4,6 @@ import React from 'react';
 import {
   Table,
   TableBody,
-  TableCaption,
   TableCell,
   TableHead,
   TableHeader,
@@ -55,9 +54,6 @@ const CurrentAnswersTable: React.FC<CurrentAnswersTableProps> = ({ data }) => {
     <TooltipProvider>
       <div className="border shadow-md sm:rounded-lg my-6 overflow-hidden">
         <Table>
-          <TableCaption className="py-3 px-4 text-xs text-gray-500 dark:text-gray-400 text-left">
-            Current correct answers for season-long questions (updated dynamically)
-          </TableCaption>
           <TableHeader>
             <TableRow className="bg-primary hover:bg-primary/90">
               <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold">
@@ -132,16 +128,6 @@ const CurrentAnswersTable: React.FC<CurrentAnswersTableProps> = ({ data }) => {
           </TableBody>
         </Table>
         
-        {/* Additional transparency note */}
-        <div className="px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border-t">
-          <p className="text-xs text-blue-700 dark:text-blue-300">
-            <strong>Note:</strong> These answers update automatically as the season progresses. 
-            Users earn points when their predictions match the current leaders.
-            {sortedRowIndices.length > 1 && (
-              <span> Multiple rows indicate tied positions (e.g., tied top scorers).</span>
-            )}
-          </p>
-        </div>
       </div>
     </TooltipProvider>
   );

@@ -2,7 +2,6 @@
 
 import React, { useRef, useState, useEffect, Suspense } from 'react';
 import { Button } from "@/components/ui/button";
-import { LoginButton } from '@/components/auth';
 import { Spinner } from "@/components/ui/spinner"; 
 import BettingCoupon, { BettingCouponRef } from '@/components/BettingCoupon/BettingCoupon';
 import type { Selections } from "@/components/BettingCoupon/types"; 
@@ -305,10 +304,9 @@ export default function CouponClient({
   if (!initialRoundData && !isTestEnvironment) {
        return (
          <div className="flex-1 w-full flex flex-col gap-10 items-center px-4 py-8">
-            <LoginButton />
             <div className="w-full max-w-4xl text-center">
-               <h1 className="text-3xl font-bold mb-6">League Coupon</h1>
-               <p className="text-xl text-gray-600">Ingen nuvarande bettingomgång hittades.</p> 
+               <h1 className="text-3xl font-bold mb-6">Coupon</h1>
+               <p className="text-xl text-gray-600">No current betting round found.</p> 
             </div>
          </div>
        );
@@ -319,7 +317,7 @@ export default function CouponClient({
     return (
       <div className="flex flex-1 justify-center items-center min-h-screen">
         <Spinner size={32} className="mr-2" />
-        <p className="text-lg">Laddar...</p> 
+        <p className="text-lg">Loading...</p> 
       </div>
     );
   }
@@ -327,9 +325,8 @@ export default function CouponClient({
   // Main UI
   return (
     <div className="flex-1 w-full flex flex-col gap-10 items-center px-4 py-8">
-      <LoginButton />
       <div className="w-full max-w-4xl flex flex-col gap-8">
-        <h1 className="text-3xl font-bold text-center">League Coupon</h1>
+        <h1 className="text-3xl font-bold">Coupon</h1>
 
         {validationErrors.summary && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm w-full" role="alert">
@@ -393,20 +390,6 @@ export default function CouponClient({
         </Button>
 
       </div>
-      {/* Footer */}
-       <footer className="w-full border-t border-t-foreground/10 p-8 flex justify-center text-center text-xs">
-         <p>
-           Powered by{' '}
-           <a
-             href="https://supabase.com/?utm_source=create-next-app&utm_medium=template&utm_term=nextjs"
-             target="_blank"
-             className="font-bold hover:underline"
-             rel="noreferrer"
-           >
-             Supabase
-           </a>
-         </p>
-       </footer>
     </div>
   );
 } 

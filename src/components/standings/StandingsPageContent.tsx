@@ -62,7 +62,7 @@ export function StandingsPageContent({
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
-        <h1 className="text-2xl font-bold mb-4 sm:mb-0">Standings</h1>
+        <h1 className="text-3xl font-bold mb-4 sm:mb-0">Standings</h1>
         {showCupTab && cupStatus?.season_name && (
           <Badge variant="secondary" className="w-fit">
             Last Round Special Active
@@ -158,12 +158,13 @@ export function StandingsPageContent({
       )}
 
       {/* Help text */}
-      <div className="mt-8 text-sm text-gray-600">
-        <p>
-          Standings are updated in real-time as matches are completed. 
-          {showCupTab && ' The Last Round Special runs parallel to the regular season.'}
-        </p>
-      </div>
+      {showCupTab && (
+        <div className="mt-8 text-sm text-gray-600">
+          <p>
+            The Last Round Special runs parallel to the regular season.
+          </p>
+        </div>
+      )}
     </div>
   );
 } 

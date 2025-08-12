@@ -151,11 +151,6 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
                 {hasError && (
                   <span className="text-xs text-red-500 mt-1 font-medium">{errors[matchIdStr]}</span>
                 )}
-                {!isSelected && !hasError && (
-                  <span className="text-xs text-gray-400 mt-1">
-                    Choose: 1 (Home win), X (Draw), or 2 (Away win)
-                  </span>
-                )}
               </div>
             </div>
             {/* Selection Buttons using ToggleButton - Add padding to match inner div's horizontal padding */}
@@ -185,7 +180,7 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
   return (
     <SectionContainer
       title={title}
-      subtitle="Select match outcomes to fill your coupon"
+      subtitle="Choose: 1 (Home win), X (Draw), or 2 (Away win). 1 point for every correct bet."
       collapsible={false}
       aria-label={`${title} Betting Coupon`}
     >

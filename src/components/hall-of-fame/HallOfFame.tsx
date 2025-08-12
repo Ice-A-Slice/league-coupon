@@ -45,12 +45,6 @@ const HallOfFame: React.FC<HallOfFameProps> = ({
 
         {/* Season Winners View */}
         <TabsContent value="seasons" className="space-y-6">
-          <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Hall of Fame</h2>
-            <p className="text-gray-600">
-              Celebrate the champions of each season and their outstanding achievements
-            </p>
-          </div>
           
           <SeasonWinnersList
             currentUserId={currentUserId}
@@ -61,12 +55,6 @@ const HallOfFame: React.FC<HallOfFameProps> = ({
 
         {/* Leaderboard View */}
         <TabsContent value="leaderboard" className="space-y-6">
-          <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Player Leaderboard</h2>
-            <p className="text-gray-600">
-              Rankings and statistics for all players across multiple seasons
-            </p>
-          </div>
           
           <LeaderboardTable
             currentUserId={currentUserId}
