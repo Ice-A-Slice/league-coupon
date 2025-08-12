@@ -158,12 +158,13 @@ export function StandingsPageContent({
       )}
 
       {/* Help text */}
-      <div className="mt-8 text-sm text-gray-600">
-        <p>
-          Standings are updated in real-time as matches are completed. 
-          {showCupTab && ' The Last Round Special runs parallel to the regular season.'}
-        </p>
-      </div>
+      {showCupTab && (
+        <div className="mt-8 text-sm text-gray-600">
+          <p>
+            The Last Round Special runs parallel to the regular season.
+          </p>
+        </div>
+      )}
     </div>
   );
 } 
