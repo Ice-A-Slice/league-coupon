@@ -5,6 +5,48 @@ import { getAllUsersPerformanceData, type UserPerformanceData } from '@/lib/user
 import { logger } from '@/utils/logger';
 import type { Database } from '@/types/supabase';
 
+/**
+ * Get user display name and email with fallback logic
+ */
+async function getUserInfoWithFallback(userId: string, client: ReturnType<typeof createSupabaseServiceRoleClient>): Promise<{ full_name: string, email: string | null }> {
+  try {
+    // First try profiles table
+    const { data: profile } = await client
+      .from('profiles')
+      .select('full_name')
+      .eq('id', userId)
+      .single();
+
+    // Always get email from auth.users since that's the source of truth
+    const { data: authUser } = await client.auth.admin.getUserById(userId);
+    const email = authUser?.user?.email || null;
+
+    if (profile?.full_name) {
+      return { full_name: profile.full_name, email };
+    }
+
+    // Fallback: try auth.users metadata
+    if (authUser?.user?.user_metadata) {
+      const metadata = authUser.user.user_metadata;
+      const name = metadata.full_name || metadata.name || metadata.display_name;
+      if (name) return { full_name: name, email };
+    }
+
+    // Final fallback: use email prefix if available
+    if (email) {
+      const emailPrefix = email.split('@')[0];
+      return { full_name: emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1), email };
+    }
+
+    // Ultimate fallback
+    return { full_name: `User ${userId.slice(-8)}`, email };
+
+  } catch (error) {
+    console.warn('Error getting user info', { userId, error });
+    return { full_name: `User ${userId.slice(-8)}`, email: null };
+  }
+}
+
 // ===== TYPE DEFINITIONS =====
 
 /**
@@ -301,7 +343,6 @@ export class EmailDataFetchingService {
           fixture_id,
           prediction,
           points_awarded,
-          profiles!inner(full_name, email),
           fixtures(
             home_team:teams!fixtures_home_team_id_fkey(name),
             away_team:teams!fixtures_away_team_id_fkey(name),
@@ -330,7 +371,8 @@ export class EmailDataFetchingService {
       for (const [userId, bets] of userBetsMap) {
         if (bets.length === 0) continue;
 
-        const userProfile = Array.isArray(bets[0].profiles) ? bets[0].profiles[0] : bets[0].profiles;
+        // Get user info with fallback logic
+        const userInfo = await getUserInfoWithFallback(userId, this.client);
         
         const predictions = bets.map(bet => {
           const fixture = Array.isArray(bet.fixtures) ? bet.fixtures[0] : bet.fixtures;
@@ -357,8 +399,8 @@ export class EmailDataFetchingService {
 
         userPredictions.push({
           userId,
-          userName: userProfile?.full_name || null,
-          userEmail: userProfile?.email || '',
+          userName: userInfo.full_name,
+          userEmail: userInfo.email || '',
           predictions,
           totalPredictions: predictions.length,
           correctPredictions,

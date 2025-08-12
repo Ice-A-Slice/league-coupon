@@ -14,8 +14,8 @@ import CouponClient from '@/components/client/CouponClient';
 export default async function Index() {
   const supabase = await createClient();
 
-  // Get the authenticated user
-  const { data: { user } } = await supabase.auth.getUser();
+  // DON'T get user on server side - causes hydration mismatch
+  // const { data: { user } } = await supabase.auth.getUser();
 
   // Fetch the current season to determine the active league and season year
   const { data: currentSeasonData, error: seasonError } = await supabase
@@ -40,9 +40,9 @@ export default async function Index() {
     // Decide how to handle this error - maybe fall back to defaults or show an error page
   }
 
-  // Fetch data for the current betting round - this function returns the data directly or null
-  // Pass the user ID if authenticated
-  const currentRoundData = await getCurrentBettingRoundFixtures(user?.id);
+  // Fetch data for the current betting round WITHOUT user ID to avoid server/client mismatch
+  // Client will handle user-specific data
+  const currentRoundData = await getCurrentBettingRoundFixtures();
 
   // Render the client component, passing down all necessary data
   return (

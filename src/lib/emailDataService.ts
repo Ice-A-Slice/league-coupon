@@ -529,21 +529,52 @@ export class EmailDataService {
           .from('season_winners')
           .select(`
             user_id,
-            total_points,
-            profiles!inner(full_name)
+            total_points
           `)
           .eq('season_id', cupStatus.seasonId)
           .eq('competition_type', 'last_round_special')
           .order('total_points', { ascending: false });
 
         if (winners && winners.length > 0) {
-          cupData.winners = winners.map((winner, index) => ({
-            user_id: winner.user_id,
-            username: winner.profiles?.full_name || 'Unknown User',
-            total_points: winner.total_points || 0,
-            rank: index + 1, // Calculate rank based on order
-            is_tied: false // TODO: Could enhance this with tie detection
-          }));
+          // Add user info with fallback logic
+          const winnersWithNames = await Promise.all(
+            winners.map(async (winner, index) => {
+              // Get user display name with fallback
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('full_name')
+                .eq('id', winner.user_id)
+                .single();
+              
+              let displayName = profile?.full_name;
+              
+              if (!displayName) {
+                // Fallback to auth metadata
+                const { data: authUser } = await supabase.auth.admin.getUserById(winner.user_id);
+                if (authUser?.user?.user_metadata) {
+                  const metadata = authUser.user.user_metadata;
+                  displayName = metadata.full_name || metadata.name || metadata.display_name;
+                }
+                
+                if (!displayName && authUser?.user?.email) {
+                  const emailPrefix = authUser.user.email.split('@')[0];
+                  displayName = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+                }
+                
+                displayName = displayName || `User ${winner.user_id.slice(-8)}`;
+              }
+              
+              return {
+                user_id: winner.user_id,
+                username: displayName,
+                total_points: winner.total_points || 0,
+                rank: index + 1, // Calculate rank based on order
+                is_tied: false // TODO: Could enhance this with tie detection
+              };
+            })
+          );
+          
+          cupData.winners = winnersWithNames;
         }
       }
 

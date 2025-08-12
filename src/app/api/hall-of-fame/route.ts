@@ -3,6 +3,46 @@ import { logger } from '@/utils/logger';
 import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
 
 /**
+ * Get user display name from multiple sources (fallback logic)
+ */
+async function getUserDisplayName(userId: string, supabase: ReturnType<typeof createSupabaseServiceRoleClient>): Promise<{ full_name: string, avatar_url: string | null }> {
+  try {
+    // First try profiles table
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('full_name, avatar_url')
+      .eq('id', userId)
+      .single();
+
+    if (profile?.full_name) {
+      return { full_name: profile.full_name, avatar_url: profile.avatar_url };
+    }
+
+    // Fallback: try auth.users metadata
+    const { data: authUser } = await supabase.auth.admin.getUserById(userId);
+    
+    if (authUser?.user?.user_metadata) {
+      const metadata = authUser.user.user_metadata;
+      const name = metadata.full_name || metadata.name || metadata.display_name;
+      if (name) return { full_name: name, avatar_url: metadata.avatar_url || null };
+    }
+
+    // Final fallback: use email prefix if available
+    if (authUser?.user?.email) {
+      const emailPrefix = authUser.user.email.split('@')[0];
+      return { full_name: emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1), avatar_url: null };
+    }
+
+    // Ultimate fallback
+    return { full_name: `User ${userId.slice(-8)}`, avatar_url: null };
+
+  } catch (error) {
+    console.warn('Error getting user display name', { userId, error });
+    return { full_name: `User ${userId.slice(-8)}`, avatar_url: null };
+  }
+}
+
+/**
  * GET /api/hall-of-fame
  * 
  * Public endpoint to retrieve all season winners (Hall of Fame entries) from both competitions.
@@ -67,12 +107,7 @@ export async function GET(request: NextRequest) {
             logo_url
           )
         ),
-        user:profiles!inner(
-          id,
-          full_name,
-          avatar_url,
-          updated_at
-        )
+        user_id
       `);
 
     // Apply competition type filter
@@ -155,8 +190,27 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Transform data to include user information with fallback logic
+    let transformedData: any[] = [];
+    if (hallOfFameData && hallOfFameData.length > 0) {
+      transformedData = await Promise.all(
+        hallOfFameData.map(async (item: any) => {
+          const userInfo = await getUserDisplayName(item.user_id, supabase);
+          return {
+            ...item,
+            user: {
+              id: item.user_id,
+              full_name: userInfo.full_name,
+              avatar_url: userInfo.avatar_url,
+              updated_at: null // Not available from fallback
+            }
+          };
+        })
+      );
+    }
+
     const total = count || 0;
-    const resultCount = hallOfFameData?.length || 0;
+    const resultCount = transformedData?.length || 0;
     const processingTime = Date.now() - startTime;
 
     logger.info('HallOfFame API: Request completed', {
@@ -169,7 +223,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: hallOfFameData || [],
+      data: transformedData,
       pagination: {
         total_items: total,
         total_pages: Math.ceil(total / limit),

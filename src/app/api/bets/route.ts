@@ -58,25 +58,63 @@ export async function POST(request: Request) {
     // The auth check below will handle returning the 401.
   }
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore ? cookieStore.get(name)?.value : undefined;
-        },
-      },
-    }
-  );
+  // Try to get auth from Authorization header first (for localStorage-based auth)
+  const authHeader = request.headers.get('authorization');
+  let user = null;
+  let supabase = null;
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  console.log('🔍 Bets API: Auth header present:', !!authHeader);
+
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.replace('Bearer ', '');
+    console.log('🔍 Bets API: Using token auth, token length:', token.length);
+    
+    // Create a supabase client with the token
+    supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        },
+        cookies: {
+          get() { return undefined; },
+        },
+      }
+    );
+
+    const { data: { user: tokenUser }, error: tokenError } = await supabase.auth.getUser();
+    console.log('🔍 Bets API: Token auth result - user:', !!tokenUser, 'error:', tokenError?.message);
+    user = tokenUser;
+  }
+
+  // Fallback to cookie-based auth
+  if (!user) {
+    supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore ? cookieStore.get(name)?.value : undefined;
+          },
+        },
+      }
+    );
+
+    const { data: { user: cookieUser }, error: cookieError } = await supabase.auth.getUser();
+    console.log('🔍 Bets API: Cookie auth result - user:', !!cookieUser, 'error:', cookieError?.message);
+    user = cookieUser;
+  }
 
   if (!user) {
+    console.log('🔍 Bets API: No user found, returning 401');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  console.log('🔍 Bets API: User authenticated:', user.email);
   
   // Now we know we have a user, we can safely proceed with the original logic
   const body = await request.json();

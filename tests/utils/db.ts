@@ -462,6 +462,30 @@ export async function seedTestData(): Promise<void> {
 
     if (brfError) throw new Error(`Failed to create betting round fixtures: ${brfError.message}`);
 
+    // 8. Create Premier League players for top scorer questions
+    console.log('[TEST_DB] Creating Premier League players...');
+    const players = [
+      { id: 200, api_player_id: 18, name: 'Erling Haaland' },
+      { id: 201, api_player_id: 635, name: 'Mohamed Salah' },
+      { id: 202, api_player_id: 2692, name: 'Harry Kane' },
+      { id: 203, api_player_id: 882, name: 'Bukayo Saka' },
+      { id: 204, api_player_id: 563, name: 'Gabriel Jesus' },
+      { id: 205, api_player_id: 1100, name: 'Darwin Núñez' },
+      { id: 206, api_player_id: 2399, name: 'Marcus Rashford' },
+      { id: 207, api_player_id: 652, name: 'Son Heung-min' },
+      { id: 208, api_player_id: 640, name: 'Kevin De Bruyne' },
+      { id: 209, api_player_id: 653, name: 'Bruno Fernandes' },
+      { id: 210, api_player_id: 1499, name: 'Phil Foden' },
+      { id: 211, api_player_id: 19761, name: 'Julian Alvarez' }
+    ];
+
+    const { error: playersError } = await client
+      .from('players')
+      .upsert(players, { onConflict: 'id' });
+
+    if (playersError) throw new Error(`Failed to create players: ${playersError.message}`);
+    console.log(`[TEST_DB] Created ${players.length} Premier League players`);
+
     console.log('[TEST_DB] Test data seeded successfully!');
     console.log('[TEST_DB] Available test IDs:', testIds);
 
