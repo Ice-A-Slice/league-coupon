@@ -40,16 +40,16 @@ export async function middleware(request: NextRequest) {
     pathname === route || pathname.startsWith(`${route}/`)
   )
   
-  // Safety switch: disable whitelist via environment variable
-  const whitelistEnabled = process.env.WHITELIST_ENABLED === 'true'
-  
-  // If whitelist is disabled AND it's not an admin route, allow access
-  if (!whitelistEnabled && !isAdminRoute) {
+  // Allow public routes (non-admin) without authentication
+  if (isPublicRoute && !isAdminRoute) {
     return NextResponse.next()
   }
   
-  // Always require auth for admin routes, regardless of whitelist setting
-  if (isPublicRoute && !isAdminRoute) {
+  // Safety switch: disable whitelist via environment variable for non-admin routes
+  const whitelistEnabled = process.env.WHITELIST_ENABLED === 'true'
+  
+  // If whitelist is disabled AND it's not an admin route, allow access without auth
+  if (!whitelistEnabled && !isAdminRoute) {
     return NextResponse.next()
   }
   

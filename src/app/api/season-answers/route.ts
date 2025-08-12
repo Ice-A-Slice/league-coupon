@@ -74,23 +74,53 @@ const requestBodySchema = z.array(answerSchema);
  * @returns {Promise<NextResponse>} A promise that resolves to a Next.js response object.
  */
 export async function POST(request: NextRequest) {
-    const cookieStore = await cookies();
-    const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-            cookies: {
-                get: (name: string) => cookieStore.get(name)?.value,
-                // No set/remove needed for Route Handlers read-only access
+    // Try to get auth from Authorization header first (for localStorage-based auth)
+    const authHeader = request.headers.get('authorization');
+    let user = null;
+    let supabase = null;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.replace('Bearer ', '');
+        
+        // Create a supabase client with the token
+        supabase = createServerClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            {
+                global: {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                },
+                cookies: {
+                    get() { return undefined; },
+                },
+            }
+        );
+
+        const { data: { user: tokenUser } } = await supabase.auth.getUser();
+        user = tokenUser;
+    }
+
+    // Fallback to cookie-based auth
+    if (!user) {
+        const cookieStore = await cookies();
+        supabase = createServerClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            {
+                cookies: {
+                    get: (name: string) => cookieStore.get(name)?.value,
+                },
             },
-        },
-    );
+        );
 
-    // 1. Authenticate User
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+        const { data: { user: cookieUser } } = await supabase.auth.getUser();
+        user = cookieUser;
+    }
 
-    if (authError || !user) {
-        console.error('POST /api/season-answers: Auth Error:', authError);
+    if (!user) {
+        console.error('POST /api/season-answers: Auth Error - no user found');
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -187,21 +217,9 @@ export async function GET(_request: NextRequest) {
 
         console.log(`GET /api/season-answers: Using current season ${seasonId} - League ${leagueId}, Year ${seasonYear}`);
 
-        // 2. Fetch ALL user profiles first (to show all users, even those who haven't answered)
-        // Use service role client to bypass RLS and read all profiles
-        const { data: profiles, error: profilesError } = await serviceRoleClient
-            .from('profiles')
-            .select('id, full_name');
-
-        if (profilesError) {
-            console.error('GET /api/season-answers: Failed to fetch user profiles:', profilesError);
-            return NextResponse.json({ error: 'Failed to fetch user profiles' }, { status: 500 });
-        }
-
-        console.log(`GET /api/season-answers: Found ${profiles?.length || 0} total profiles in database`);
-
-        // 2b. Fetch user predictions without joins first to see what IDs we have
+        // 2. Fetch ALL users who have submitted answers (don't require profiles)
         // Use service role client to bypass RLS and read all user answers
+
         const { data: userAnswers, error: userAnswersError } = await serviceRoleClient
             .from('user_season_answers')
             .select(`
@@ -218,9 +236,6 @@ export async function GET(_request: NextRequest) {
         }
 
         console.log(`GET /api/season-answers: Found ${userAnswers?.length || 0} user answers for season ${seasonId}`);
-
-        // Create profile lookup map (handle null full_name values)
-        const profileMap = new Map(profiles?.map(p => [p.id, p.full_name || `User ${p.id}`]) || []);
 
         // 3. Get current correct answers using our multiple answers logic
         // Use the dynamic league/season from the database
@@ -276,8 +291,8 @@ export async function GET(_request: NextRequest) {
             })() : Promise.resolve('TBD')
         ]);
 
-        // 4. Manually fetch team and player names for user answers
-        const userPredictionsWithNames = await transformUserPredictionsWithNames(userAnswers, profileMap, profiles, serviceRoleClient);
+        // 4. Transform user answers with fallback logic (like Standings API)
+        const userPredictionsWithNames = await transformUserPredictionsWithNames(userAnswers, serviceRoleClient);
 
         // 5. Create current answers data with support for multiple rows when tied
         const currentAnswers = [];
@@ -340,32 +355,77 @@ export async function GET(_request: NextRequest) {
 }
 
 /**
+ * Get user display name from multiple sources (copied from Standings API)
+ * @param userId User ID to look up
+ * @param supabase Supabase service role client
+ * @returns Promise resolving to display name
+ */
+async function getUserDisplayName(userId: string, supabase: ServiceRoleClient): Promise<string> {
+    try {
+        // First try profiles table
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', userId)
+            .single();
+
+        if (profile?.full_name) {
+            return profile.full_name;
+        }
+
+        // Fallback: try auth.users metadata (for Google OAuth)
+        const { data: authUser } = await supabase.auth.admin.getUserById(userId);
+        
+        if (authUser?.user?.user_metadata) {
+            const metadata = authUser.user.user_metadata;
+            // Try different metadata fields that might contain the name
+            const name = metadata.full_name || metadata.name || metadata.display_name;
+            if (name) return name;
+        }
+
+        // Final fallback: use email prefix if available
+        if (authUser?.user?.email) {
+            const emailPrefix = authUser.user.email.split('@')[0];
+            return emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+        }
+
+        // Ultimate fallback
+        return `User ${userId.slice(-8)}`;
+
+    } catch (error) {
+        console.warn('Error getting user display name', { userId, error });
+        return `User ${userId.slice(-8)}`;
+    }
+}
+
+/**
  * Transform raw user answers data into the format expected by the UI
- * Shows ALL users from profiles, with answers where they exist and null where they don't
+ * Uses fallback logic to show ALL users with answers, even without profiles
  * Manually fetches team and player names for user answers
  */
 async function transformUserPredictionsWithNames(
     userAnswers: RawUserAnswer[], 
-    profileMap: Map<string, string>,
-    allProfiles: { id: string; full_name: string | null }[],
     serviceRoleClient: ServiceRoleClient
 ): Promise<UserPrediction[]> {
     const userMap = new Map<string, UserPrediction>();
 
-    // First, create entries for ALL users (even those who haven't answered)
-    allProfiles.forEach(profile => {
-        userMap.set(profile.id, {
-            user_id: profile.id,
-            username: profile.full_name || `User ${profile.id}`,
+    // Get unique user IDs from answers and create entries with fallback names
+    const uniqueUserIds = [...new Set(userAnswers.map(answer => answer.user_id))];
+    
+    // Initialize user entries with fallback display names
+    for (const userId of uniqueUserIds) {
+        const displayName = await getUserDisplayName(userId, serviceRoleClient);
+        userMap.set(userId, {
+            user_id: userId,
+            username: displayName,
             league_winner: null,
             best_goal_difference: null,
             top_scorer: null,
             last_place: null
         });
-    });
+    }
 
-    // Then, populate answers for users who have them
-    // First get all unique team and player IDs to fetch names efficiently
+    // Get all unique team and player IDs to fetch names efficiently
     const teamIds: number[] = [];
     const playerIds: number[] = [];
     
