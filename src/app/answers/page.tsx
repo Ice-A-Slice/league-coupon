@@ -72,7 +72,7 @@ export default async function AnswersPage() {
   if (!transparencyData) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-4">Season Answers</h1>
+        <h1 className="text-3xl font-bold mb-4">Answers</h1>
         <p className="text-red-500">Failed to load answers data. Please try again later.</p>
       </div>
     );
@@ -85,7 +85,7 @@ export default async function AnswersPage() {
   if (!hasUserPredictions && !hasCurrentAnswers) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-4">Season Answers</h1>
+        <h1 className="text-3xl font-bold mb-4">Answers</h1>
         <p className="text-gray-600">No transparency data available at this time.</p>
       </div>
     );

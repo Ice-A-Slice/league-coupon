@@ -288,7 +288,7 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
   return (
     <SectionContainer 
       title="Questions"
-      subtitle="Complete all questions for bonus points"
+      subtitle="Complete all questions for bonus points. 3 points for every correct question."
       collapsible={true}
       initialCollapsed={!isContentVisible}
       onToggleVisibility={handleToggleContent}
