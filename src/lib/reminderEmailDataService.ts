@@ -229,7 +229,7 @@ export class ReminderEmailDataService {
       // Get unique users who have submitted bets for this round
       const { data: submittedUsers, error: submittedError } = await supabaseServerClient
         .from('user_bets')
-        .select('user_id', { count: 'exact' })
+        .select('user_id')
         .eq('betting_round_id', roundId);
 
       if (submittedError) {
@@ -239,7 +239,7 @@ export class ReminderEmailDataService {
       // Get total number of active users (those who have made any bets ever)
       const { data: totalUsers, error: totalError } = await supabaseServerClient
         .from('user_bets')
-        .select('user_id', { count: 'exact' });
+        .select('user_id');
 
       if (totalError) {
         logger.error('ReminderEmailDataService: Error fetching total users', { error: totalError });
@@ -248,6 +248,13 @@ export class ReminderEmailDataService {
       // Count unique users who have submitted for this round
       const uniqueSubmittedUsers = new Set(submittedUsers?.map(bet => bet.user_id) || []);
       const uniqueTotalUsers = new Set(totalUsers?.map(bet => bet.user_id) || []);
+
+      logger.info('ReminderEmailDataService: Competitor submission stats', {
+        roundId,
+        submittedUsersCount: submittedUsers?.length || 0,
+        uniqueSubmittedCount: uniqueSubmittedUsers.size,
+        uniqueSubmittedUserIds: Array.from(uniqueSubmittedUsers)
+      });
 
       // Get names of users who have submitted
       const submittedNames = await this.getSubmittedUserNames(Array.from(uniqueSubmittedUsers));
@@ -269,27 +276,78 @@ export class ReminderEmailDataService {
    */
   private async getSubmittedUserNames(userIds: string[]): Promise<string[]> {
     try {
-      if (userIds.length === 0) return [];
+      if (userIds.length === 0) {
+        logger.info('ReminderEmailDataService: No user IDs provided for name lookup');
+        return [];
+      }
 
+      logger.info('ReminderEmailDataService: Looking up names for users', { userIds, count: userIds.length });
+
+      // First try to get names from profiles table
       const { data: profiles, error } = await supabaseServerClient
         .from('profiles')
         .select('id, full_name')
         .in('id', userIds);
 
       if (error) {
-        logger.error('ReminderEmailDataService: Error fetching user profiles', { error });
-        return [];
+        logger.error('ReminderEmailDataService: Error fetching user profiles', { error, userIds });
+        // Fallback to using user IDs instead
+        return userIds.map(id => `User ${id.slice(0, 8)}...`).sort();
       }
 
-      // Sort names alphabetically and return
-      return profiles
-        ?.map(profile => profile.full_name || 'Unknown User')
-        .filter(name => name !== 'Unknown User')
-        .sort() || [];
+      logger.info('ReminderEmailDataService: Found profiles', { 
+        profileCount: profiles?.length || 0,
+        profiles: profiles?.map(p => ({ id: p.id, name: p.full_name })) || []
+      });
+
+      // Get names from profiles
+      const namesFromProfiles = profiles
+        ?.filter(profile => profile.full_name && profile.full_name.trim() !== '')
+        .map(profile => profile.full_name) || [];
+
+      // For users without profile names, try to get their email from auth.users as fallback
+      const profileUserIds = new Set(profiles?.map(p => p.id) || []);
+      const missingProfileIds = userIds.filter(id => !profileUserIds.has(id) || 
+        !profiles?.find(p => p.id === id && p.full_name && p.full_name.trim() !== ''));
+
+      logger.info('ReminderEmailDataService: Users missing profile names', { 
+        missingProfileIds, 
+        count: missingProfileIds.length 
+      });
+
+      // Try to get emails as fallback for users without proper profile names
+      let emailFallbacks: string[] = [];
+      if (missingProfileIds.length > 0) {
+        try {
+          // Note: This requires service role key to access auth.users
+          const { data: authUsers, error: authError } = await supabaseServerClient.auth.admin.listUsers();
+          if (!authError && authUsers) {
+            emailFallbacks = authUsers.users
+              .filter(user => missingProfileIds.includes(user.id) && user.email)
+              .map(user => user.email!.split('@')[0]) // Use email part before @
+              .filter(name => name && name.trim() !== '');
+          }
+        } catch (authError) {
+          logger.warn('ReminderEmailDataService: Could not fetch auth users for email fallback', { authError });
+        }
+      }
+
+      // Combine names and email fallbacks
+      const allNames = [...namesFromProfiles, ...emailFallbacks].sort();
+
+      logger.info('ReminderEmailDataService: Returning submitted user names', { 
+        allNames, 
+        count: allNames.length,
+        fromProfiles: namesFromProfiles.length,
+        fromEmails: emailFallbacks.length
+      });
+
+      return allNames;
 
     } catch (error) {
-      logger.error('ReminderEmailDataService: Error getting submitted user names', { error });
-      return [];
+      logger.error('ReminderEmailDataService: Error getting submitted user names', { error, userIds });
+      // Ultimate fallback: return user ID prefixes
+      return userIds.map(id => `User ${id.slice(0, 8)}...`).sort();
     }
   }
 
