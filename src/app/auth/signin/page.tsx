@@ -8,8 +8,15 @@ function SignInForm() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const next = searchParams.get('next') || '/'
+  const urlError = searchParams.get('error')
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(() => {
+    // Set initial error based on URL parameter
+    if (urlError === 'admin_unauthorized') {
+      return 'Access denied: Admin privileges required for this page'
+    }
+    return null
+  })
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isSignUp, setIsSignUp] = useState(false)
@@ -79,7 +86,7 @@ function SignInForm() {
           </h2>
           {next !== '/' && (
             <p className="mt-2 text-center text-sm text-gray-600">
-              You need to sign in to access this page
+              {next.startsWith('/admin') ? 'Admin access required' : 'You need to sign in to access this page'}
             </p>
           )}
         </div>

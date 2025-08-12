@@ -110,8 +110,11 @@ export async function middleware(request: NextRequest) {
       .rpc('is_email_admin', { check_email: userEmail })
     
     if (adminError || !isAdmin) {
-      // User is not admin, redirect to home with error message
-      return NextResponse.redirect(new URL('/?error=unauthorized', request.url))
+      // User is not admin, redirect to signin with admin context and error
+      const redirectUrl = new URL('/auth/signin', request.url)
+      redirectUrl.searchParams.set('next', pathname)
+      redirectUrl.searchParams.set('error', 'admin_unauthorized')
+      return NextResponse.redirect(redirectUrl)
     }
   }
   

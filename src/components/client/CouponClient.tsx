@@ -168,7 +168,8 @@ export default function CouponClient({
     }
 
     fetchUserAnswers();
-  }, [user, answersLoading, userSeasonAnswers]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]); // answersLoading and userSeasonAnswers intentionally omitted to prevent dependency loops
   
   // Handlers
   const handleSelectionChange = (newSelections: Selections, matchId: string) => {
