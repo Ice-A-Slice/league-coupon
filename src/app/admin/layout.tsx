@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import AdminLogoutButton from '@/components/admin/AdminLogoutButton'
 
 export default function AdminLayout({
   children,
@@ -49,6 +50,7 @@ export default function AdminLayout({
               >
                 ← Tillbaka till app
               </Link>
+              <AdminLogoutButton />
             </div>
           </div>
         </div>

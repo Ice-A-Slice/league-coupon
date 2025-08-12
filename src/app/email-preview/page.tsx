@@ -41,7 +41,7 @@ export default function EmailPreviewPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          email_type: emailType === 'transparency' ? 'transparency' : emailType === 'simple-reminder' ? 'simple-reminder' : 'simple-reminder'
+          email_type: emailType === 'transparency' ? 'transparency' : emailType === 'summary' ? 'summary' : 'simple-reminder'
         })
       });
 

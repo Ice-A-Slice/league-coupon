@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import React from 'react';
 import { SimpleReminderEmail } from '@/components/emails/SimpleReminderEmail';
 import { TransparencyEmail } from '@/components/emails/TransparencyEmail';
+import { SummaryEmail } from '@/components/emails/SummaryEmail';
 import type { TransparencyEmailData } from '@/lib/userDataAggregationService';
+import { mockSummaryData } from '@/components/emails/mockData';
 
 /**
  * Public email preview endpoint for development
@@ -145,6 +147,26 @@ export async function POST(request: NextRequest) {
         email_type: 'transparency',
         sample_data: sampleTransparencyData
       });
+    } else if (emailType === 'summary') {
+      // Render the summary email HTML
+      let htmlContent;
+      try {
+        const { render } = await import('@react-email/render');
+        htmlContent = await render(React.createElement(SummaryEmail, mockSummaryData));
+      } catch (renderError) {
+        console.error('Email rendering error:', renderError);
+        return NextResponse.json(
+          { success: false, error: 'Failed to render summary email' },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        preview: htmlContent,
+        email_type: 'summary',
+        sample_data: mockSummaryData
+      });
     } else {
       return NextResponse.json(
         { success: false, error: 'Email type not supported in preview' },
@@ -164,7 +186,7 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   return NextResponse.json({
     message: 'Email preview endpoint - use POST with email_type parameter',
-    supported_types: ['simple-reminder', 'transparency'],
+    supported_types: ['simple-reminder', 'transparency', 'summary'],
     example: {
       method: 'POST',
       body: { email_type: 'simple-reminder' }
