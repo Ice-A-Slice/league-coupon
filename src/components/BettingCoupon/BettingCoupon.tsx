@@ -126,7 +126,7 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
         return (
           <div 
             key={matchIdStr} 
-            className={`flex w-full flex-row items-center justify-between border-b border-gray-200 last:border-b-0 hover:bg-gray-50 transition-colors duration-150 py-2 sm:py-3`}
+            className={`flex w-full flex-row items-center justify-between border-b border-gray-200 dark:border-gray-600 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-150 py-2 sm:py-3`}
           >
             {/* Match Info - Apply conditional background/border/padding here */}
             <div className={`flex-1 mr-2 sm:mr-3 flex items-center rounded-md transition-colors duration-150 ${
@@ -142,10 +142,10 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
                 className="mr-2 flex-shrink-0"
               />
               <div className="flex flex-col text-left">
-                <span className={`text-sm sm:text-base ${hasError ? 'text-red-700 font-medium' : 'text-gray-800'}`}>
+                <span className={`text-sm sm:text-base ${hasError ? 'text-red-700 dark:text-red-400 font-medium' : 'text-gray-800 dark:text-gray-200'}`}>
                   {match.homeTeam}
                 </span>
-                <span className={`text-sm sm:text-base ${hasError ? 'text-red-700 font-medium' : 'text-gray-800'}`}>
+                <span className={`text-sm sm:text-base ${hasError ? 'text-red-700 dark:text-red-400 font-medium' : 'text-gray-800 dark:text-gray-200'}`}>
                   {match.awayTeam}
                 </span>
                 {hasError && (

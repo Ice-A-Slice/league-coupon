@@ -435,8 +435,9 @@ export function Combobox({
               aria-autocomplete="list"
               className={cn(
                 'w-full justify-between', 
-                'border-gray-300 text-gray-800 font-medium',
-                'hover:border-teal-400 focus-visible:border-teal-500',
+                'border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-100 font-medium',
+                'bg-white dark:bg-gray-700',
+                'hover:border-teal-400 dark:hover:border-gray-500 focus-visible:border-teal-500 dark:focus-visible:border-[#FDD964]',
                 'transition-all duration-200',
                 'shadow-sm h-10 sm:h-10',
                 'text-sm sm:text-base',
@@ -449,7 +450,11 @@ export function Combobox({
               data-state={open ? "open" : "closed"}
             >
               <span className="truncate">
-                {selectedOption?.label || <span className="text-gray-500">{placeholder}</span>}
+                {selectedOption?.label ? (
+                  <span className="text-gray-900 dark:text-gray-100">{selectedOption.label}</span>
+                ) : (
+                  <span className="text-gray-500 dark:text-gray-400">{placeholder}</span>
+                )}
               </span>
               <ChevronsUpDown className={cn(
                 "ml-2 h-4 w-4 shrink-0 transition-transform duration-200",
@@ -488,7 +493,7 @@ export function Combobox({
           className={cn(
             "p-0 border border-gray-200 shadow-lg",
             "rounded-md overflow-hidden",
-            "bg-white text-gray-800",
+            "bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100",
             "animate-in fade-in-0 zoom-in-95 duration-150",
             "data-[side=bottom]:slide-in-from-top-2",
             "data-[side=top]:slide-in-from-bottom-2",
@@ -605,14 +610,15 @@ export function Combobox({
                         data-highlighted={isHighlighted}
                         className={cn(
                           "px-4 py-2.5 cursor-pointer text-sm",
+                          "text-gray-900 dark:text-gray-100",
                           "aria-selected:bg-accent aria-selected:text-accent-foreground",
-                          "data-[highlighted=true]:bg-teal-50 data-[highlighted=true]:text-teal-700",
-                          "hover:bg-teal-50 hover:text-teal-700",
-                          "focus:bg-teal-50 focus:text-teal-700",
+                          "data-[highlighted=true]:bg-teal-50 dark:data-[highlighted=true]:bg-gray-700 data-[highlighted=true]:text-teal-700 dark:data-[highlighted=true]:text-gray-100",
+                          "hover:bg-teal-50 dark:hover:bg-gray-700 hover:text-teal-700 dark:hover:text-gray-100",
+                          "focus:bg-teal-50 dark:focus:bg-gray-700 focus:text-teal-700 dark:focus:text-gray-100",
                           "focus:outline-none",
                           "transition-colors duration-150",
                        
-                          isHighlighted && "bg-teal-50 text-teal-700",
+                          isHighlighted && "bg-teal-50 dark:bg-gray-700 text-teal-700 dark:text-gray-100",
                           option.disabled && "opacity-50 pointer-events-none text-gray-400"
                         )}
                         role="option"

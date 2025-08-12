@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import LoginButton from '@/components/auth/LoginButton';
+import { ThemeToggle } from '@/components/theme/ThemeToggle';
 
 export function DesktopHeader() {
   return (
@@ -46,8 +47,9 @@ export function DesktopHeader() {
           </div>
         </div>
 
-        {/* Right: Login Button */}
-        <div className="flex-shrink-0">
+        {/* Right: Theme Toggle + Login Button */}
+        <div className="flex items-center space-x-2">
+          <ThemeToggle />
           <LoginButton />
         </div>
       </nav>

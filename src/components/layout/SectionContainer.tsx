@@ -149,10 +149,10 @@ const SectionContainer: React.FC<SectionContainerProps> = ({
   };
 
   // Base container styles
-  const containerBaseStyle = "w-full bg-white rounded-lg overflow-hidden shadow-md border border-gray-200";
+  const containerBaseStyle = "w-full bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-md border border-gray-200 dark:border-gray-700";
   
   // Header gradient background style
-  const headerBaseStyle = `p-3 sm:p-4 bg-gradient-to-r from-teal-500 to-teal-600 text-white flex justify-between items-center ${collapsible ? 'cursor-pointer' : ''}`;
+  const headerBaseStyle = `p-3 sm:p-4 bg-gradient-to-r from-teal-500 to-teal-600 dark:from-[#FDD964] dark:to-[#F5D03A] text-white dark:text-gray-900 flex justify-between items-center ${collapsible ? 'cursor-pointer' : ''}`;
 
   // Generate a stable ID based on the title for linking heading and section
   const sectionIdBase = title.replace(/\s+/g, '-').toLowerCase(); // Create a base ID from title
@@ -202,9 +202,9 @@ const SectionContainer: React.FC<SectionContainerProps> = ({
             }}
           >
             {isCollapsed ? (
-              <ChevronDownIcon className="h-5 w-5 sm:h-6 sm:w-6 text-white" aria-hidden="true" />
+              <ChevronDownIcon className="h-5 w-5 sm:h-6 sm:w-6 text-white dark:text-gray-900" aria-hidden="true" />
             ) : (
-              <ChevronUpIcon className="h-5 w-5 sm:h-6 sm:w-6 text-white" aria-hidden="true" />
+              <ChevronUpIcon className="h-5 w-5 sm:h-6 sm:w-6 text-white dark:text-gray-900" aria-hidden="true" />
             )}
           </button>
         )}
@@ -222,7 +222,7 @@ const SectionContainer: React.FC<SectionContainerProps> = ({
 
       {/* Optional Footer */}
       {!isCollapsed && footer && (
-        <div className={`bg-gray-50 p-3 text-xs text-gray-500 border-t border-gray-200 ${footerClassName}`}>
+        <div className={`bg-gray-50 dark:bg-gray-900 p-3 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 ${footerClassName}`}>
           {footer}
         </div>
       )}
