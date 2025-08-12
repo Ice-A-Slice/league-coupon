@@ -308,7 +308,7 @@ export default function CouponClient({
             <LoginButton />
             <div className="w-full max-w-4xl text-center">
                <h1 className="text-3xl font-bold mb-6">League Coupon</h1>
-               <p className="text-xl text-gray-600">Ingen nuvarande bettingomgång hittades.</p> 
+               <p className="text-xl text-gray-600">No current betting round found.</p> 
             </div>
          </div>
        );
@@ -319,7 +319,7 @@ export default function CouponClient({
     return (
       <div className="flex flex-1 justify-center items-center min-h-screen">
         <Spinner size={32} className="mr-2" />
-        <p className="text-lg">Laddar...</p> 
+        <p className="text-lg">Loading...</p> 
       </div>
     );
   }

@@ -172,12 +172,12 @@ export default function LoginButton() {
     <div className="flex flex-col gap-2 items-start">
       {user ? (
         <>
-          <p className="text-sm text-gray-600">Inloggad som {user.email}</p>
+          <p className="text-sm text-gray-600">Signed in as {user.email}</p>
           <button
             onClick={handleLogout}
             className="bg-gray-200 px-4 py-1 rounded hover:bg-gray-300"
           >
-            Logga ut
+            Sign out
           </button>
         </>
       ) : (
@@ -185,7 +185,7 @@ export default function LoginButton() {
           onClick={handleLogin}
           className="bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700"
         >
-          Logga in / Registrera
+          Sign in / Register
         </button>
       )}
     </div>

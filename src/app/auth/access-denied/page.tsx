@@ -22,16 +22,16 @@ export default function AccessDeniedPage() {
           </div>
           
           <h1 className="text-2xl font-bold text-gray-900 mb-4">
-            Åtkomst nekad
+            Access Denied
           </h1>
           
           <p className="text-gray-600 mb-6">
-            Du är inte registrerad för tävlingen ännu.
+            You are not registered for the competition yet.
           </p>
           
           <div className="bg-gray-50 rounded-lg p-4 mb-6">
             <p className="text-sm text-gray-700 mb-2">
-              Vänligen kontakta:
+              Please contact:
             </p>
             <a 
               href="mailto:pierluigi@apl.zone" 
@@ -40,7 +40,7 @@ export default function AccessDeniedPage() {
               pierluigi@apl.zone
             </a>
             <p className="text-sm text-gray-700 mt-2">
-              för att få tillgång
+              for access
             </p>
           </div>
           
@@ -49,14 +49,14 @@ export default function AccessDeniedPage() {
               href="/auth/signin" 
               className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
-              Försök logga in igen
+              Try signing in again
             </Link>
             
             <Link 
               href="/" 
               className="w-full inline-flex justify-center items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
-              Tillbaka till startsidan
+              Back to homepage
             </Link>
           </div>
         </div>

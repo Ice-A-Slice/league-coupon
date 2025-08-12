@@ -10,17 +10,17 @@ export function DesktopHeader() {
         <div className="flex items-center space-x-6">
           <Link href="/" passHref>
             <span className="text-sm font-medium text-muted-foreground hover:text-primary cursor-pointer">
-              Kupong
+              Coupon
             </span>
           </Link>
           <Link href="/standings" passHref>
             <span className="text-sm font-medium text-muted-foreground hover:text-primary cursor-pointer">
-              Tabell
+              Standings
             </span>
           </Link>
           <Link href="/answers" passHref>
             <span className="text-sm font-medium text-muted-foreground hover:text-primary cursor-pointer">
-              Svar
+              Answers
             </span>
           </Link>
           <Link href="/hall-of-fame" passHref>
