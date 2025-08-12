@@ -43,9 +43,6 @@ const UserPredictionsTable: React.FC<UserPredictionsTableProps> = ({ data }) => 
     <TooltipProvider>
       <div className="border shadow-md sm:rounded-lg my-6 overflow-hidden">
         <Table>
-          <TableCaption className="py-3 px-4 text-xs text-gray-500 dark:text-gray-400 text-left">
-            All user predictions for season-long questions
-          </TableCaption>
           <TableHeader>
             <TableRow className="bg-primary hover:bg-primary/90">
               <TableHead className="px-6 py-3 text-xs text-primary-foreground font-semibold">Name</TableHead>
