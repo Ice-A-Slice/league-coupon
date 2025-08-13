@@ -26,15 +26,28 @@ export default function ResetPasswordPage() {
           // In development, we'll assume the session is valid for now
           setIsValidSession(true)
         } else {
-          // Check for password recovery event
-          supabase.auth.onAuthStateChange(async (event, session) => {
-            if (event === "PASSWORD_RECOVERY") {
-              setIsValidSession(true)
-            } else if (!session) {
-              toast.error('Invalid or expired password reset link')
-              router.push('/')
-            }
-          })
+          // First check if we already have a session (user came from email link)
+          const { data: { session }, error } = await supabase.auth.getSession()
+          
+          if (!error && session?.user) {
+            // User has a valid session, allow password reset
+            console.log('Valid session found for password reset')
+            setIsValidSession(true)
+          } else {
+            // Listen for password recovery events (backup method)
+            const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+              console.log('Auth state change:', event, !!session)
+              if (event === "PASSWORD_RECOVERY" || (event === "SIGNED_IN" && session?.user)) {
+                setIsValidSession(true)
+              } else if (event === "SIGNED_OUT" || (!session && event !== "INITIAL_SESSION")) {
+                toast.error('Invalid or expired password reset link')
+                router.push('/')
+              }
+            })
+
+            // Cleanup subscription
+            return () => subscription?.unsubscribe()
+          }
         }
       } catch (error) {
         console.error('Error checking session:', error)
@@ -43,7 +56,10 @@ export default function ResetPasswordPage() {
       }
     }
 
-    checkSession()
+    const cleanup = checkSession()
+    return () => {
+      cleanup?.then(cleanupFn => cleanupFn?.())
+    }
   }, [router, supabase.auth])
 
   const handleSubmit = async (e: React.FormEvent) => {

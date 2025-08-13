@@ -52,7 +52,7 @@ export default function AuthModal({ children }: AuthModalProps) {
     setIsLoading(true)
 
     try {
-      const redirectTo = `${window.location.origin}/auth/reset-password`
+      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent('/auth/reset-password')}`
       
       if (shouldUseAuthWorkaround()) {
         // Development workaround: Use direct API call
