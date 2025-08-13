@@ -288,31 +288,69 @@ export async function calculateAndStoreMatchPoints(
 
     // 5. Calculate Points & Prepare Payload for RPC
     const betUpdatesForRPC: BetUpdatePayload[] = []; // Changed variable name and type
-
+    
+    // Group bets by user_id to check for perfect rounds
+    const betsByUser = new Map<string, typeof userBets>();
     for (const bet of userBets) {
-        betsProcessed++;
+        if (!betsByUser.has(bet.user_id)) {
+            betsByUser.set(bet.user_id, []);
+        }
+        betsByUser.get(bet.user_id)!.push(bet);
+    }
+    
+    // Process each user's bets to check for perfect rounds
+    for (const [userId, userBetsForRound] of betsByUser) {
+        let userCorrectCount = 0;
+        let userTotalBets = 0;
+        const userBetUpdates: { bet: typeof userBets[0], basePoints: number }[] = [];
         
-        // Skip if points already awarded (idempotency)
-        if (bet.points_awarded !== null) {
-            continue; 
+        // First pass: calculate base points for each bet and count correct predictions
+        for (const bet of userBetsForRound) {
+            betsProcessed++;
+            
+            // Skip if points already awarded (idempotency)
+            if (bet.points_awarded !== null) {
+                continue; 
+            }
+
+            const fixtureResult = finishedFixtureResults.get(bet.fixture_id);
+
+            if (!fixtureResult || !fixtureResult.result) {
+                logger.warn({ bettingRoundId, betId: bet.id, fixtureId: bet.fixture_id, userId }, `Skipping bet scoring: Missing or invalid final result for fixture.`);
+                continue; 
+            }
+
+            const basePoints = bet.prediction === fixtureResult.result ? 1 : 0;
+            userBetUpdates.push({ bet, basePoints });
+            
+            if (basePoints === 1) userCorrectCount++;
+            userTotalBets++;
         }
-
-        const fixtureResult = finishedFixtureResults.get(bet.fixture_id);
-
-        if (!fixtureResult || !fixtureResult.result) {
-            logger.warn({ bettingRoundId, betId: bet.id, fixtureId: bet.fixture_id }, `Skipping bet scoring: Missing or invalid final result for fixture.`);
-            continue; 
+        
+        // Check for perfect round bonus (only apply in non-bonus rounds)
+        const hasPerfectRound = userTotalBets > 0 && userCorrectCount === userTotalBets;
+        const perfectRoundMultiplier = hasPerfectRound && !isBonusRound ? 2 : 1;
+        const finalMultiplier = pointMultiplier * perfectRoundMultiplier;
+        
+        if (hasPerfectRound && !isBonusRound) {
+            logger.info({ 
+                bettingRoundId, 
+                userId, 
+                correctPredictions: userCorrectCount, 
+                totalPredictions: userTotalBets,
+                finalMultiplier 
+            }, `Perfect round bonus applied! User got all ${userTotalBets} predictions correct.`);
         }
+        
+        // Second pass: apply final multiplier and prepare updates
+        for (const { bet, basePoints } of userBetUpdates) {
+            const points = basePoints * finalMultiplier;
 
-        // Calculate points (base: 1 for correct, 0 for incorrect; then apply bonus multiplier)
-        const basePoints = bet.prediction === fixtureResult.result ? 1 : 0;
-        const points = basePoints * pointMultiplier;
-
-        // Add to our list of updates for the RPC function
-        betUpdatesForRPC.push({
-            bet_id: bet.id, // Use the bet's primary key
-            points: points
-        });
+            betUpdatesForRPC.push({
+                bet_id: bet.id,
+                points: points
+            });
+        }
     }
     
     logger.info({ bettingRoundId, calculatedCount: betUpdatesForRPC.length, totalBets: betsProcessed }, `Calculated scores for bets.`);
