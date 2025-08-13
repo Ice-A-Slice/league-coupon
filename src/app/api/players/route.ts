@@ -53,22 +53,37 @@ export async function GET(request: Request) {
 
   console.log(`API Route /api/players: Found season ID ${seasonId}. Fetching players...`);
   try {
-    // TEMPORARY FIX: Return all players with ID >= 200 (our Premier League players)
-    // TODO: Fix proper season/team linking later
-    const { data: players, error } = await supabaseServerClient
-      .from('players')
-      .select('id, name')
-      .not('name', 'is', null)
-      .gte('id', 200)
-      .order('name');
+    // Fetch players linked to this season via player_statistics
+    const { data: playerStats, error } = await supabaseServerClient
+      .from('player_statistics')
+      .select(`
+        player_id,
+        players!inner(
+          id,
+          name
+        )
+      `)
+      .eq('season_id', seasonId);
     
     if (error) {
-      console.error('Error fetching players directly:', error);
+      console.error('Error fetching players for season:', error);
       return NextResponse.json({ error: 'Failed to fetch players from database' }, { status: 500 });
     }
     
-    console.log(`API Route /api/players: Returning ${players?.length || 0} players directly`);
-    return NextResponse.json(players || []);
+    // Extract unique players from the result
+    const playersMap = new Map();
+    
+    playerStats?.forEach(ps => {
+      const player = ps.players;
+      if (player && typeof player === 'object' && 'id' in player && 'name' in player) {
+        playersMap.set(player.id, { id: player.id, name: player.name });
+      }
+    });
+    
+    const uniquePlayers = Array.from(playersMap.values());
+    
+    console.log(`API Route /api/players: Returning ${uniquePlayers.length} players for season ${seasonId}`);
+    return NextResponse.json(uniquePlayers);
   } catch (error: unknown) {
     console.error('Error in /api/players route:', error);
     const message = error instanceof Error ? error.message : 'Internal server error';
