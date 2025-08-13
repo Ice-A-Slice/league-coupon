@@ -61,8 +61,8 @@ const ToggleButton: React.FC<ToggleButtonProps> = ({
         "focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500",
         sizeClasses[size],
         isSelected
-          ? "bg-teal-600 dark:bg-[#FF9A34] text-white dark:text-white border-teal-700 dark:border-[#E68A2E] shadow-sm font-bold !important"
-          : "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 hover:border-gray-400 dark:hover:border-gray-500",
+          ? "bg-teal-600 dark:bg-[#FF9A34] text-white dark:text-white border-teal-700 dark:border-[#E68A2E] shadow-sm font-bold cursor-pointer !important"
+          : "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 hover:border-gray-400 dark:hover:border-gray-500 cursor-pointer",
         disabled && "opacity-50 cursor-not-allowed",
         className
       )}

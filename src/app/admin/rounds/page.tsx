@@ -353,14 +353,14 @@ export default function RoundsManagement() {
                     {round.cup_activated_at ? (
                       <button
                         onClick={() => deactivateCup(round.id)}
-                        className="text-red-600 hover:text-red-900 font-medium"
+                        className="text-red-600 hover:text-red-900 font-medium cursor-pointer"
                       >
                         Deactivate Cup
                       </button>
                     ) : (
                       <button
                         onClick={() => activateCup(round.id)}
-                        className="text-blue-600 hover:text-blue-900 font-medium"
+                        className="text-blue-600 hover:text-blue-900 font-medium cursor-pointer"
                       >
                         Activate Cup
                       </button>

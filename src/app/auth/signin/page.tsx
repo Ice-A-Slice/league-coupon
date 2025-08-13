@@ -159,7 +159,7 @@ function SignInForm() {
             <button
               type="button"
               onClick={() => setIsSignUp(!isSignUp)}
-              className="w-full text-center text-sm text-indigo-600 hover:text-indigo-500"
+              className="w-full text-center text-sm text-indigo-600 hover:text-indigo-500 cursor-pointer"
             >
               {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
             </button>
@@ -174,7 +174,7 @@ function SignInForm() {
             Contact{' '}
             <a 
               href="mailto:pierluigi@apl.zone" 
-              className="font-medium text-indigo-600 hover:text-indigo-500"
+              className="font-medium text-indigo-600 hover:text-indigo-500 cursor-pointer"
             >
               pierluigi@apl.zone
             </a>{' '}

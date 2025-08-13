@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { DesktopHeader } from "@/components/layout/DesktopHeader";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
+import { FeedbackModal } from "@/components/feedback/FeedbackModal";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -50,6 +51,7 @@ export default function RootLayout({
             {children}
           </main>
           <MobileBottomNav />
+          <FeedbackModal />
         </ThemeProvider>
       </body>
     </html>

@@ -17,8 +17,9 @@ export interface SectionContainerProps {
   /** 
    * Optional subtitle text to display below the title.
    * Useful for additional context or description.
+   * Can be a string or React element for more complex content.
    */
-  subtitle?: string;
+  subtitle?: string | ReactNode;
   
   /** 
    * Whether the section should be collapsible.

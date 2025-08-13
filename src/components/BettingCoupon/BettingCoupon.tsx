@@ -195,7 +195,13 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
   return (
     <SectionContainer
       title={title}
-      subtitle="Choose: 1 (Home win), X (Draw), or 2 (Away win). 1 point for every correct bet."
+      subtitle={
+        <>
+          Choose: 1 (Home win), X (Draw), or 2 (Away win).
+          <br className="sm:hidden" />
+          <span className="sm:inline block"> 1 point for every correct bet.</span>
+        </>
+      }
       collapsible={false}
       aria-label={`${title} Betting Coupon`}
     >

@@ -126,6 +126,7 @@ export type Database = {
       }
       betting_rounds: {
         Row: {
+          admin_summary_sent_at: string | null
           competition_id: number
           created_at: string
           earliest_fixture_kickoff: string | null
@@ -140,6 +141,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          admin_summary_sent_at?: string | null
           competition_id: number
           created_at?: string
           earliest_fixture_kickoff?: string | null
@@ -154,6 +156,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          admin_summary_sent_at?: string | null
           competition_id?: number
           created_at?: string
           earliest_fixture_kickoff?: string | null
@@ -829,14 +832,18 @@ export type Database = {
     }
     Functions: {
       activate_last_round_special: {
-        Args: { p_activation_timestamp: string; p_season_id: number }
+        Args: { p_season_id: number; p_activation_timestamp: string }
+        Returns: Json
+      }
+      ensure_profile_exists: {
+        Args: { user_id: string; user_email: string; user_full_name?: string }
         Returns: Json
       }
       get_user_points_up_to_round: {
         Args: { target_round_id: number }
         Returns: {
-          total_points: number
           user_id: string
+          total_points: number
         }[]
       }
       get_user_total_points: {
@@ -847,11 +854,11 @@ export type Database = {
         }[]
       }
       handle_dynamic_points_update: {
-        Args: { p_round_id: number; p_dynamic_point_updates: Json }
+        Args: { p_dynamic_point_updates: Json; p_round_id: number }
         Returns: undefined
       }
       handle_round_scoring: {
-        Args: { p_bet_updates: Json; p_betting_round_id: number }
+        Args: { p_betting_round_id: number; p_bet_updates: Json }
         Returns: undefined
       }
       is_email_admin: {
@@ -861,6 +868,10 @@ export type Database = {
       is_email_whitelisted: {
         Args: { check_email: string }
         Returns: boolean
+      }
+      truncate_all_test_tables: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
       }
     }
     Enums: {

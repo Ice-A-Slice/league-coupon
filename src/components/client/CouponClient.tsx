@@ -393,7 +393,7 @@ export default function CouponClient({
                 !!questionnaireDataError || 
                 matchesForCoupon.length === 0 
               } 
-              className="w-full md:w-auto self-center mt-4"
+              className="w-full md:w-auto self-center mt-4 cursor-pointer disabled:cursor-not-allowed"
             >
               {(isSubmitting || authLoading || questionnaireDataLoading) ? 'Submitting...' : 'Sign In to Submit'} 
             </Button>
@@ -408,7 +408,7 @@ export default function CouponClient({
               !!questionnaireDataError || 
               matchesForCoupon.length === 0 
             } 
-            className="w-full md:w-auto self-center mt-4"
+            className="w-full md:w-auto self-center mt-4 cursor-pointer disabled:cursor-not-allowed"
           >
             {(isSubmitting || authLoading || questionnaireDataLoading) ? 'Submitting...' : 'Submit Coupon'} 
           </Button>

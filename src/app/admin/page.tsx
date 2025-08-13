@@ -13,7 +13,7 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <Link
           href="/admin/whitelist"
-          className="block p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow"
+          className="block p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
         >
           <div className="flex items-center">
             <div className="flex-shrink-0">
@@ -30,7 +30,7 @@ export default function AdminDashboard() {
 
         <Link
           href="/admin/rounds"
-          className="block p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow"
+          className="block p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
         >
           <div className="flex items-center">
             <div className="flex-shrink-0">
@@ -47,7 +47,7 @@ export default function AdminDashboard() {
 
         <Link
           href="/admin/coupon"
-          className="block p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow"
+          className="block p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
         >
           <div className="flex items-center">
             <div className="flex-shrink-0">
@@ -64,7 +64,7 @@ export default function AdminDashboard() {
 
         <Link
           href="/admin/audit"
-          className="block p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow"
+          className="block p-6 bg-white rounded-lg shadow hover:shadow-md transition-shadow focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
         >
           <div className="flex items-center">
             <div className="flex-shrink-0">

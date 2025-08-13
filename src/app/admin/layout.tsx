@@ -22,31 +22,31 @@ export default function AdminLayout({
             <div className="flex items-center space-x-4">
               <Link 
                 href="/admin" 
-                className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+                className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium cursor-pointer"
               >
                 Dashboard
               </Link>
               <Link 
                 href="/admin/rounds" 
-                className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+                className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium cursor-pointer"
               >
                 Rounds
               </Link>
               <Link 
                 href="/admin/coupon" 
-                className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+                className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium cursor-pointer"
               >
                 Coupon
               </Link>
               <Link 
                 href="/admin/audit" 
-                className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+                className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium cursor-pointer"
               >
                 Audit Log
               </Link>
               <Link 
                 href="/" 
-                className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium"
+                className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium cursor-pointer"
               >
                 ← Tillbaka till app
               </Link>

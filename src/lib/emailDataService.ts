@@ -1073,6 +1073,190 @@ export class EmailDataService {
 
     return results;
   }
+
+  /**
+   * Get admin summary email data for a completed round
+   * This is sent to admins after a round goes from 'scoring' to 'scored'
+   */
+  async getAdminSummaryEmailProps(roundId: number): Promise<{
+    roundName: string;
+    roundId: number;
+    totalParticipants: number;
+    averagePoints: number;
+    userScores: Array<{
+      userId: string;
+      userName: string;
+      matchPoints: number;
+      dynamicPoints?: number;
+      totalPoints: number;
+      correctPredictions: number;
+      totalPredictions: number;
+    }>;
+    topScorers: Array<{
+      userId: string;
+      userName: string;
+      matchPoints: number;
+      dynamicPoints?: number;
+      totalPoints: number;
+      correctPredictions: number;
+      totalPredictions: number;
+    }>;
+    completedAt: string;
+  }> {
+    try {
+      logger.info('EmailDataService: Fetching admin summary email data', { roundId });
+      
+      const supabase = createSupabaseServiceRoleClient();
+      
+      // Get round information
+      const { data: round, error: roundError } = await supabase
+        .from('betting_rounds')
+        .select('id, name, scored_at')
+        .eq('id', roundId)
+        .single();
+        
+      if (roundError || !round) {
+        throw new Error(`Round not found: ${roundId}`);
+      }
+
+      // Get all user bets for this round with points
+      const { data: userBets, error: betsError } = await supabase
+        .from('user_bets')
+        .select('user_id, prediction, points_awarded')
+        .eq('betting_round_id', roundId)
+        .not('points_awarded', 'is', null);
+
+      if (betsError) {
+        throw new Error(`Failed to fetch user bets: ${betsError.message}`);
+      }
+
+      // Get unique user IDs
+      const userIds = [...new Set(userBets?.map(bet => bet.user_id) || [])];
+      
+      // Get user names (fallback to auth.users like other parts of the codebase)
+      const userNamesMap = new Map<string, string>();
+      
+      for (const userId of userIds) {
+        try {
+          // Try profiles first
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('user_id', userId)
+            .single();
+
+          if (profile?.full_name?.trim()) {
+            userNamesMap.set(userId, profile.full_name.trim());
+          } else {
+            // Fallback: try auth.users metadata
+            const { data: authUser } = await supabase.auth.admin.getUserById(userId);
+            if (authUser?.user?.user_metadata) {
+              const metadata = authUser.user.user_metadata;
+              const name = metadata.full_name || metadata.name || metadata.display_name;
+              if (name?.trim()) {
+                userNamesMap.set(userId, name.trim());
+              }
+            }
+          }
+        } catch (error) {
+          logger.warn(`Failed to get name for user ${userId}`, { error });
+        }
+        
+        // Final fallback
+        if (!userNamesMap.has(userId)) {
+          userNamesMap.set(userId, 'Unknown User');
+        }
+      }
+
+      // Get dynamic points for this round (questionnaire points)
+      const { data: dynamicPoints } = await supabase
+        .from('user_round_dynamic_points')
+        .select('user_id, dynamic_points')
+        .eq('betting_round_id', roundId);
+
+      // Aggregate data by user
+      const userScoresMap = new Map<string, {
+        userId: string;
+        userName: string;
+        matchPoints: number;
+        dynamicPoints: number;
+        totalPoints: number;
+        correctPredictions: number;
+        totalPredictions: number;
+      }>();
+
+      // Process match points
+      userBets?.forEach(bet => {
+        const userId = bet.user_id;
+        const existing = userScoresMap.get(userId) || {
+          userId,
+          userName: userNamesMap.get(userId) || 'Unknown User',
+          matchPoints: 0,
+          dynamicPoints: 0,
+          totalPoints: 0,
+          correctPredictions: 0,
+          totalPredictions: 0
+        };
+
+        existing.matchPoints += bet.points_awarded || 0;
+        existing.totalPredictions += 1;
+        if (bet.points_awarded && bet.points_awarded > 0) {
+          existing.correctPredictions += 1;
+        }
+
+        userScoresMap.set(userId, existing);
+      });
+
+      // Add dynamic points
+      dynamicPoints?.forEach(dp => {
+        const existing = userScoresMap.get(dp.user_id);
+        if (existing) {
+          existing.dynamicPoints = dp.dynamic_points || 0;
+        }
+      });
+
+      // Calculate total points and convert to array
+      const userScores = Array.from(userScoresMap.values()).map(score => ({
+        ...score,
+        totalPoints: score.matchPoints + score.dynamicPoints
+      }));
+
+      // Sort by total points descending
+      userScores.sort((a, b) => b.totalPoints - a.totalPoints);
+
+      // Calculate statistics
+      const totalParticipants = userScores.length;
+      const totalPoints = userScores.reduce((sum, user) => sum + user.totalPoints, 0);
+      const averagePoints = totalParticipants > 0 ? totalPoints / totalParticipants : 0;
+
+      // Get top 3 scorers
+      const topScorers = userScores.slice(0, 3);
+
+      logger.info('EmailDataService: Successfully prepared admin summary data', {
+        roundId,
+        totalParticipants,
+        averagePoints: averagePoints.toFixed(1),
+        topScorer: topScorers[0]?.userName
+      });
+
+      return {
+        roundName: round.name || `Round ${roundId}`,
+        roundId,
+        totalParticipants,
+        averagePoints,
+        userScores,
+        topScorers,
+        completedAt: round.scored_at || new Date().toISOString()
+      };
+
+    } catch (error) {
+      logger.error('EmailDataService: Failed to get admin summary email props', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        roundId
+      });
+      throw error;
+    }
+  }
 }
 
 export const emailDataService = new EmailDataService(); 
