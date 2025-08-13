@@ -133,10 +133,10 @@ describe('Scoring Logic - calculateAndStoreMatchPoints', () => {
     expect(mockClient.rpc).toHaveBeenCalledWith('handle_round_scoring', {
       p_betting_round_id: bettingRoundId,
       p_bet_updates: expect.arrayContaining([
-        expect.objectContaining({ bet_id: 'bet1', points: 1 }),
-        expect.objectContaining({ bet_id: 'bet2', points: 0 }),
-        expect.objectContaining({ bet_id: 'bet3', points: 1 }),
-        expect.objectContaining({ bet_id: 'bet5', points: 0 }),
+        expect.objectContaining({ bet_id: 'bet1', points: 1 }), // user1: 1 correct out of 2, no perfect bonus
+        expect.objectContaining({ bet_id: 'bet2', points: 0 }), // user1: 1 correct out of 2, no perfect bonus  
+        expect.objectContaining({ bet_id: 'bet3', points: 2 }), // user2: 2 correct out of 2, perfect round bonus (1 × 2)
+        expect.objectContaining({ bet_id: 'bet5', points: 0 }), // user3: 0 correct out of 1, no perfect bonus
       ]),
     });
 
