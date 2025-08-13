@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -24,6 +24,7 @@ interface AuthModalProps {
 export default function AuthModal({ children }: AuthModalProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isLogin, setIsLogin] = useState(true)
+  const [isForgotPassword, setIsForgotPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -32,8 +33,82 @@ export default function AuthModal({ children }: AuthModalProps) {
 
   const supabase = createClient()
 
+  useEffect(() => {
+    // Listen for password recovery events
+    if (!shouldUseAuthWorkaround()) {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, _session) => {
+        if (event === "PASSWORD_RECOVERY") {
+          // User came back from email link - they'll be redirected to reset-password page
+          console.log('Password recovery event detected')
+        }
+      })
+
+      return () => subscription.unsubscribe()
+    }
+  }, [supabase.auth])
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+
+    try {
+      const redirectTo = `${window.location.origin}/auth/reset-password`
+      
+      if (shouldUseAuthWorkaround()) {
+        // Development workaround: Use direct API call
+        const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/recover`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          },
+          body: JSON.stringify({
+            email: email,
+            gotrue_meta_security: {
+              redirect_to: redirectTo
+            }
+          }),
+        })
+
+        if (response.ok) {
+          toast.success('Password reset email sent! Check your inbox.')
+          setIsForgotPassword(false)
+          setIsLogin(true)
+          setEmail('')
+        } else {
+          const errorData = await response.json()
+          toast.error('Error sending reset email: ' + errorData.msg)
+        }
+      } else {
+        // Production: Use Supabase resetPasswordForEmail
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: redirectTo
+        })
+
+        if (error) {
+          toast.error('Error sending reset email: ' + error.message)
+        } else {
+          toast.success('Password reset email sent! Check your inbox.')
+          setIsForgotPassword(false)
+          setIsLogin(true)
+          setEmail('')
+        }
+      }
+    } catch (error) {
+      console.error('Network error:', error)
+      toast.error('Network error. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (isForgotPassword) {
+      return handleForgotPassword(e)
+    }
+    
     setIsLoading(true)
 
     try {
@@ -185,11 +260,23 @@ export default function AuthModal({ children }: AuthModalProps) {
     setPassword('')
     setFullName('')
     setRememberMe(false)
+    setIsForgotPassword(false)
   }
 
   const toggleMode = () => {
     setIsLogin(!isLogin)
+    setIsForgotPassword(false)
     resetForm()
+  }
+
+  const showForgotPassword = () => {
+    setIsForgotPassword(true)
+    setIsLogin(true)
+  }
+
+  const backToLogin = () => {
+    setIsForgotPassword(false)
+    setIsLogin(true)
   }
 
   return (
@@ -202,11 +289,16 @@ export default function AuthModal({ children }: AuthModalProps) {
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>{isLogin ? 'Sign In' : 'Create Account'}</DialogTitle>
+          <DialogTitle>
+            {isForgotPassword ? 'Reset Password' : (isLogin ? 'Sign In' : 'Create Account')}
+          </DialogTitle>
           <DialogDescription>
-            {isLogin 
-              ? 'Enter your credentials to access your account.' 
-              : 'Create a new account to start playing.'
+            {isForgotPassword 
+              ? 'Enter your email address and we\'ll send you a link to reset your password.'
+              : (isLogin 
+                ? 'Enter your credentials to access your account.' 
+                : 'Create a new account to start playing.'
+              )
             }
           </DialogDescription>
         </DialogHeader>
@@ -226,22 +318,24 @@ export default function AuthModal({ children }: AuthModalProps) {
               required
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">
-              Password
-            </Label>
-            <Input
-              id="password"
-              name="password"
-              type="password"
-              placeholder="Enter your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete={isLogin ? "current-password" : "new-password"}
-              required
-            />
-          </div>
-          {!isLogin && (
+          {!isForgotPassword && (
+            <div className="space-y-2">
+              <Label htmlFor="password">
+                Password
+              </Label>
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete={isLogin ? "current-password" : "new-password"}
+                required
+              />
+            </div>
+          )}
+          {!isLogin && !isForgotPassword && (
             <div className="space-y-2">
               <Label htmlFor="fullName">
                 Full Name
@@ -258,7 +352,7 @@ export default function AuthModal({ children }: AuthModalProps) {
               />
             </div>
           )}
-          {isLogin && (
+          {isLogin && !isForgotPassword && (
             <div className="flex items-center space-x-2">
               <Checkbox
                 id="rememberMe"
@@ -275,16 +369,42 @@ export default function AuthModal({ children }: AuthModalProps) {
           )}
           <div className="flex flex-col space-y-2">
             <Button type="submit" disabled={isLoading} className="w-full">
-              {isLoading ? 'Please wait...' : (isLogin ? 'Sign In' : 'Create Account')}
+              {isLoading ? 'Please wait...' : 
+               (isForgotPassword ? 'Send Reset Link' : 
+                (isLogin ? 'Sign In' : 'Create Account'))}
             </Button>
-            <Button 
-              type="button" 
-              variant="ghost" 
-              onClick={toggleMode}
-              className="w-full"
-            >
-              {isLogin ? 'Need an account? Sign up' : 'Already have an account? Sign in'}
-            </Button>
+            
+            {isForgotPassword ? (
+              <Button 
+                type="button" 
+                variant="ghost" 
+                onClick={backToLogin}
+                className="w-full"
+              >
+                Back to Sign In
+              </Button>
+            ) : (
+              <>
+                {isLogin && (
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    onClick={showForgotPassword}
+                    className="w-full text-sm"
+                  >
+                    Forgot Password?
+                  </Button>
+                )}
+                <Button 
+                  type="button" 
+                  variant="ghost" 
+                  onClick={toggleMode}
+                  className="w-full"
+                >
+                  {isLogin ? 'Need an account? Sign up' : 'Already have an account? Sign in'}
+                </Button>
+              </>
+            )}
           </div>
         </form>
       </DialogContent>
