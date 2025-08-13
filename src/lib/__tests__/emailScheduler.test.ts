@@ -65,16 +65,24 @@ describe('EmailSchedulerService', () => {
       });
 
       // Mock successful summary email trigger
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ success: true, emails_sent: 5 })
-      } as Response);
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ success: true, emails_sent: 5 })
+        } as Response)
+        // Mock successful admin summary email trigger  
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ success: true, recipients: ['admin1@test.com', 'admin2@test.com'] })
+        } as Response);
 
       const results = await schedulerService.checkAndScheduleEmails();
 
-      expect(results).toHaveLength(1);
+      expect(results).toHaveLength(2);
       expect(results[0].emailType).toBe('summary');
       expect(results[0].success).toBe(true);
+      expect(results[1].emailType).toBe('admin-summary');
+      expect(results[1].success).toBe(true);
       expect(mockRoundCompletionDetectorService.detectAndMarkCompletedRounds).toHaveBeenCalled();
     });
 
@@ -101,25 +109,41 @@ describe('EmailSchedulerService', () => {
         errors: []
       });
 
-      // Mock successful API calls
+      // Mock successful API calls - now includes admin summary emails
       mockFetch
+        // Round 1: summary email
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({ success: true, emails_sent: 5 })
         } as Response)
+        // Round 1: admin summary email
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ success: true, recipients: ['admin1@test.com', 'admin2@test.com'] })
+        } as Response)
+        // Round 2: summary email
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({ success: true, emails_sent: 5 })
+        } as Response)
+        // Round 2: admin summary email
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ success: true, recipients: ['admin1@test.com', 'admin2@test.com'] })
         } as Response);
 
       const results = await schedulerService.checkForSummaryEmails();
 
-      expect(results).toHaveLength(2);
+      expect(results).toHaveLength(4);
       expect(results[0].roundId).toBe(1);
-      expect(results[1].roundId).toBe(2);
       expect(results[0].emailType).toBe('summary');
-      expect(results[1].emailType).toBe('summary');
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(results[1].roundId).toBe(1);
+      expect(results[1].emailType).toBe('admin-summary');
+      expect(results[2].roundId).toBe(2);
+      expect(results[2].emailType).toBe('summary');
+      expect(results[3].roundId).toBe(2);
+      expect(results[3].emailType).toBe('admin-summary');
+      expect(mockFetch).toHaveBeenCalledTimes(4);
     });
 
     it('should handle no completed rounds gracefully', async () => {
@@ -140,23 +164,31 @@ describe('EmailSchedulerService', () => {
         errors: []
       });
 
-      // First call fails, second succeeds
+      // Round 1 summary fails, Round 2 summary succeeds + admin summary
       mockFetch
+        // Round 1: summary email fails
         .mockResolvedValueOnce({
           ok: false,
           status: 500,
           text: async () => 'Internal Server Error'
         } as Response)
+        // Round 2: summary email succeeds
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({ success: true, emails_sent: 5 })
+        } as Response)
+        // Round 2: admin summary email succeeds
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ success: true, recipients: ['admin1@test.com', 'admin2@test.com'] })
         } as Response);
 
       const results = await schedulerService.checkForSummaryEmails();
 
-      expect(results).toHaveLength(2);
-      expect(results[0].success).toBe(false);
-      expect(results[1].success).toBe(true);
+      expect(results).toHaveLength(3);
+      expect(results[0].success).toBe(false); // Round 1 summary failed
+      expect(results[1].success).toBe(true);  // Round 2 summary succeeded
+      expect(results[2].success).toBe(true);  // Round 2 admin summary succeeded
     });
   });
 
@@ -420,6 +452,46 @@ describe('EmailSchedulerService', () => {
           })
         })
       );
+    });
+  });
+
+  describe('triggerAdminSummaryEmail', () => {
+    it('should successfully trigger admin summary email API', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true, recipients: ['admin1@test.com', 'admin2@test.com'] })
+      } as Response);
+
+      const result = await schedulerService.triggerAdminSummaryEmail(1);
+
+      expect(result.success).toBe(true);
+      expect(result.emailsSent).toBe(2);
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:3000/api/send-admin-summary',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer test-secret'
+          }),
+          body: JSON.stringify({
+            roundId: 1
+          })
+        })
+      );
+    });
+
+    it('should handle API failures gracefully', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: async () => 'Internal Server Error'
+      } as Response);
+
+      const result = await schedulerService.triggerAdminSummaryEmail(1);
+
+      expect(result.success).toBe(false);
+      expect(result.errors).toContain('Admin summary email API call failed: 500 Internal Server Error');
     });
   });
 

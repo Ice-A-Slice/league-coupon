@@ -3,6 +3,7 @@ import React from 'react';
 import { SimpleReminderEmail } from '@/components/emails/SimpleReminderEmail';
 import { TransparencyEmail } from '@/components/emails/TransparencyEmail';
 import { SummaryEmail } from '@/components/emails/SummaryEmail';
+import AdminSummaryEmail from '@/components/emails/AdminSummaryEmail';
 import type { TransparencyEmailData } from '@/lib/userDataAggregationService';
 import { mockSummaryData } from '@/components/emails/mockData';
 
@@ -167,6 +168,138 @@ export async function POST(request: NextRequest) {
         email_type: 'summary',
         sample_data: mockSummaryData
       });
+    } else if (emailType === 'admin-summary') {
+      // Sample data for admin summary email
+      const sampleAdminData = {
+        roundName: 'Round 6 - Premier League',
+        roundId: 6,
+        totalParticipants: 15,
+        averagePoints: 7.2,
+        topScorers: [
+          {
+            userId: '1',
+            userName: 'Arnar Steinn',
+            matchPoints: 12,
+            dynamicPoints: 3,
+            totalPoints: 15,
+            correctPredictions: 8,
+            totalPredictions: 10
+          },
+          {
+            userId: '2',
+            userName: 'PierLuigi',
+            matchPoints: 10,
+            dynamicPoints: 3,
+            totalPoints: 13,
+            correctPredictions: 7,
+            totalPredictions: 10
+          },
+          {
+            userId: '3',
+            userName: 'Johann Johannsson',
+            matchPoints: 9,
+            dynamicPoints: 0,
+            totalPoints: 9,
+            correctPredictions: 6,
+            totalPredictions: 10
+          }
+        ],
+        userScores: [
+          {
+            userId: '1',
+            userName: 'Arnar Steinn',
+            matchPoints: 12,
+            dynamicPoints: 3,
+            totalPoints: 15,
+            correctPredictions: 8,
+            totalPredictions: 10
+          },
+          {
+            userId: '2',
+            userName: 'PierLuigi',
+            matchPoints: 10,
+            dynamicPoints: 3,
+            totalPoints: 13,
+            correctPredictions: 7,
+            totalPredictions: 10
+          },
+          {
+            userId: '3',
+            userName: 'Johann Johannsson',
+            matchPoints: 9,
+            dynamicPoints: 0,
+            totalPoints: 9,
+            correctPredictions: 6,
+            totalPredictions: 10
+          },
+          {
+            userId: '4',
+            userName: 'Sævar Freyr',
+            matchPoints: 8,
+            dynamicPoints: 0,
+            totalPoints: 8,
+            correctPredictions: 5,
+            totalPredictions: 10
+          },
+          {
+            userId: '5',
+            userName: 'Divya',
+            matchPoints: 7,
+            dynamicPoints: 0,
+            totalPoints: 7,
+            correctPredictions: 4,
+            totalPredictions: 10
+          },
+          {
+            userId: '6',
+            userName: 'Jóhannes Arelakis',
+            matchPoints: 6,
+            dynamicPoints: 3,
+            totalPoints: 9,
+            correctPredictions: 4,
+            totalPredictions: 10
+          },
+          {
+            userId: '7',
+            userName: 'Tommi Sigurbjorns',
+            matchPoints: 5,
+            dynamicPoints: 0,
+            totalPoints: 5,
+            correctPredictions: 3,
+            totalPredictions: 10
+          },
+          {
+            userId: '8',
+            userName: 'Kristjan',
+            matchPoints: 4,
+            dynamicPoints: 0,
+            totalPoints: 4,
+            correctPredictions: 2,
+            totalPredictions: 10
+          }
+        ],
+        completedAt: new Date().toISOString()
+      };
+
+      // Render the admin summary email HTML
+      let htmlContent;
+      try {
+        const { render } = await import('@react-email/render');
+        htmlContent = await render(React.createElement(AdminSummaryEmail, sampleAdminData));
+      } catch (renderError) {
+        console.error('Email rendering error:', renderError);
+        return NextResponse.json(
+          { success: false, error: 'Failed to render admin summary email' },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        preview: htmlContent,
+        email_type: 'admin-summary',
+        sample_data: sampleAdminData
+      });
     } else {
       return NextResponse.json(
         { success: false, error: 'Email type not supported in preview' },
@@ -186,7 +319,7 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   return NextResponse.json({
     message: 'Email preview endpoint - use POST with email_type parameter',
-    supported_types: ['simple-reminder', 'transparency', 'summary'],
+    supported_types: ['simple-reminder', 'transparency', 'summary', 'admin-summary'],
     example: {
       method: 'POST',
       body: { email_type: 'simple-reminder' }
