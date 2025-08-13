@@ -101,8 +101,23 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
   };
 
   // Sync with initialSelections if they change externally (only if localStorage is empty)
+  // Filter out any stored selections that don't match current available matches
   /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
+    const validMatchIds = new Set(matches.map(m => String(m.id)));
+    const storedMatchIds = Object.keys(selections);
+    
+    // Instead of clearing all data, filter out only invalid entries
+    const invalidIds = storedMatchIds.filter(id => !validMatchIds.has(id));
+    
+    if (invalidIds.length > 0 && matches.length > 0) {
+      console.warn('Filtering out invalid fixture IDs from localStorage:', invalidIds);
+      const filteredSelections = Object.fromEntries(
+        Object.entries(selections).filter(([id]) => validMatchIds.has(id))
+      );
+      setSelections(filteredSelections);
+    }
+    
     // Only override localStorage if there are actual initialSelections and localStorage is empty
     const hasStoredData = Object.keys(selections).length > 0;
     const hasInitialData = initialSelections && Object.keys(initialSelections).length > 0;
@@ -110,7 +125,7 @@ const BettingCoupon = forwardRef<BettingCouponRef, BettingCouponProps>(({
     if (hasInitialData && !hasStoredData) {
       setSelections(initialSelections);
     }
-  }, [initialSelections]);
+  }, [initialSelections, matches]);
   /* eslint-enable react-hooks/exhaustive-deps */
 
   // Content for the betting coupon

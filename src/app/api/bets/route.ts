@@ -220,6 +220,7 @@ export async function POST(request: Request) {
   // 5. Perform Upsert using supabase client
   try {
     console.log(`Upserting ${upsertData.length} bets for user ${user.id}, round ${bettingRoundId}...`);
+    console.log('Fixture IDs being submitted:', upsertData.map(d => d.fixture_id));
     const { error: upsertError } = await supabase!
       .from('user_bets')
       .upsert(upsertData, {

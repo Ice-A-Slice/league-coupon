@@ -67,10 +67,15 @@ export async function submitPredictions(
   try {
     // 1. Submit Bets (Coupon Selections)
     console.log('Submitting coupon data...', couponData);
-    const bets = Object.entries(couponData).map(([fixtureId, prediction]) => ({
-      fixture_id: parseInt(fixtureId, 10),
-      prediction: prediction as SelectionType,
-    }));
+    console.log('Coupon data keys:', Object.keys(couponData));
+    const bets = Object.entries(couponData).map(([fixtureId, prediction]) => {
+      const parsedId = parseInt(fixtureId, 10);
+      console.log(`Processing fixtureId: "${fixtureId}" -> parsed: ${parsedId}, prediction: ${prediction}`);
+      return {
+        fixture_id: parsedId,
+        prediction: prediction as SelectionType,
+      };
+    });
 
     // Get auth token from localStorage using our auth utility
     const storedSession = getStoredSession();
