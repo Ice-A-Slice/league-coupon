@@ -130,9 +130,15 @@ export function useAuth(): UseAuthReturn {
 
           // Listen for auth state changes
           const { data: { subscription } } = client.auth.onAuthStateChange(
-            (_event: AuthChangeEvent, session: Session | null) => {
+            (event: AuthChangeEvent, session: Session | null) => {
               if (isMounted) {
                 setUser(session?.user ?? null);
+                
+                // Handle email confirmation success
+                if (event === 'SIGNED_IN' && session?.user?.email_confirmed_at) {
+                  console.log('✅ Email confirmed and user signed in');
+                  // You could add a toast notification here if desired
+                }
               }
             }
           );
