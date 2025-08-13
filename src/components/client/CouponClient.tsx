@@ -24,7 +24,8 @@ import {
   // prepareBetSubmissionData, // Removed unused import
   // prepareAnswersSubmissionData // Removed unused import
 } from '@/features/betting/utils/submissionHelpers';
-import { submitPredictions } from '@/services/submissionService'; 
+import { submitPredictions } from '@/services/submissionService';
+import AuthModal from '@/components/auth/AuthModal';
 
 // --- Component Definition ---
 
@@ -99,6 +100,7 @@ export default function CouponClient({
     hasAnswers: !!userSeasonAnswers,
     answersKeys: userSeasonAnswers ? Object.keys(userSeasonAnswers) : []
   });
+
 
   // Fetch user season answers when user is authenticated
   useEffect(() => {
@@ -236,9 +238,7 @@ export default function CouponClient({
       toast.error('An unexpected error occurred (questionnaire ref). Please try again.');
       return;
     }
-    setValidationErrors({});
-    setIsSubmitting(true);
-
+    
     const currentSelections = bettingCouponRef.current.getSelections();
     const currentAnswers = questionnaireVisible && questionnaireRef.current ? questionnaireRef.current.getAnswers() : [];
     const currentMatches = matchesForCoupon; 
@@ -258,10 +258,18 @@ export default function CouponClient({
       combinedErrors.summary = 'Please fix the errors highlighted below.';
       setValidationErrors(combinedErrors);
       toast.error("Please fix the errors highlighted below.");
-      setIsSubmitting(false);
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
+
+    // If user is not authenticated, the AuthModal will handle the login flow via DialogTrigger
+    // After login, user can press submit again
+    if (!user) {
+      return;
+    }
+
+    setValidationErrors({});
+    setIsSubmitting(true);
     
     try {
       const submissionResult = await submitPredictions({ 
@@ -374,20 +382,37 @@ export default function CouponClient({
             {submitStatus.message}
           </div>
         )}
-        <Button
-          onClick={handleCombinedSubmit}
-          disabled={
-            isSubmitting || 
-            authLoading || 
-            questionnaireDataLoading || 
-            !user || 
-            !!questionnaireDataError || 
-            matchesForCoupon.length === 0 
-          } 
-          className="w-full md:w-auto self-center mt-4"
-        >
-          {(isSubmitting || authLoading || questionnaireDataLoading) ? 'Submitting...' : 'Submit Coupon'} 
-        </Button>
+        {!user ? (
+          <AuthModal>
+            <Button
+              onClick={handleCombinedSubmit}
+              disabled={
+                isSubmitting || 
+                authLoading || 
+                questionnaireDataLoading || 
+                !!questionnaireDataError || 
+                matchesForCoupon.length === 0 
+              } 
+              className="w-full md:w-auto self-center mt-4"
+            >
+              {(isSubmitting || authLoading || questionnaireDataLoading) ? 'Submitting...' : 'Sign In to Submit'} 
+            </Button>
+          </AuthModal>
+        ) : (
+          <Button
+            onClick={handleCombinedSubmit}
+            disabled={
+              isSubmitting || 
+              authLoading || 
+              questionnaireDataLoading || 
+              !!questionnaireDataError || 
+              matchesForCoupon.length === 0 
+            } 
+            className="w-full md:w-auto self-center mt-4"
+          >
+            {(isSubmitting || authLoading || questionnaireDataLoading) ? 'Submitting...' : 'Submit Coupon'} 
+          </Button>
+        )}
 
       </div>
     </div>
