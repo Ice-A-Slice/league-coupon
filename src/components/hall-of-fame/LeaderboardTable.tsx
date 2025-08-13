@@ -135,7 +135,7 @@ const LeaderboardTable: React.FC<LeaderboardTableProps> = ({
             <select
               value={filters.sort}
               onChange={(e) => handleSortChange(e.target.value as LeaderboardFilters['sort'])}
-              className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+              className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 cursor-pointer"
             >
               <option value="wins_desc">Most Wins</option>
               <option value="wins_asc">Fewest Wins</option>

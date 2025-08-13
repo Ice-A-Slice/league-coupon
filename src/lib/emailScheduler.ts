@@ -27,7 +27,7 @@ export interface SchedulingResult {
   success: boolean;
   message: string;
   roundId?: number;
-  emailType?: 'summary' | 'reminder' | 'transparency';
+  emailType?: 'summary' | 'reminder' | 'transparency' | 'admin-summary';
   scheduledTime?: string;
   errors?: string[];
 }
@@ -123,6 +123,21 @@ export class EmailSchedulerService {
             scheduledTime: new Date().toISOString(),
             errors: triggerResult.errors
           });
+
+          // If user summary emails were successful, also send admin summary
+          if (triggerResult.success) {
+            logger.info(`EmailScheduler: Triggering admin summary email for round ${roundId}`);
+            const adminResult = await this.triggerAdminSummaryEmail(roundId);
+            
+            results.push({
+              success: adminResult.success,
+              message: adminResult.message,
+              roundId,
+              emailType: 'admin-summary',
+              scheduledTime: new Date().toISOString(),
+              errors: adminResult.errors
+            });
+          }
 
           if (triggerResult.success) {
             logger.info(`EmailScheduler: Successfully scheduled summary email for round ${roundId}`);
@@ -360,6 +375,49 @@ export class EmailSchedulerService {
       return {
         success: false,
         message: `Failed to trigger summary email for round ${roundId}`,
+        errors: [errorMessage]
+      };
+    }
+  }
+
+  /**
+   * Trigger an admin summary email for a completed round
+   */
+  async triggerAdminSummaryEmail(roundId: number): Promise<EmailTriggerResult> {
+    logger.info(`EmailScheduler: Triggering admin summary email for round ${roundId}`);
+
+    try {
+      const response = await fetch(`${this.API_BASE_URL}/api/send-admin-summary`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.CRON_SECRET}`,
+        },
+        body: JSON.stringify({
+          roundId: roundId
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Admin summary email API call failed: ${response.status} ${errorText}`);
+      }
+
+      const result = await response.json();
+      
+      return {
+        success: true,
+        message: `Admin summary email triggered successfully for round ${roundId}`,
+        emailsSent: result.recipients?.length || 0
+      };
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`EmailScheduler: Failed to trigger admin summary email for round ${roundId}`, { error: errorMessage });
+      
+      return {
+        success: false,
+        message: `Failed to trigger admin summary email for round ${roundId}`,
         errors: [errorMessage]
       };
     }

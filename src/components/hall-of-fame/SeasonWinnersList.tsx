@@ -65,9 +65,11 @@ function CircularBadge({
   const isCurrentUser = currentUserId && winner.user_id === currentUserId;
   
   return (
-    <div 
-      className="flex flex-col items-center space-y-3 cursor-pointer"
+    <button
+      type="button"
+      className="flex flex-col items-center space-y-3 cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 rounded-lg p-2 transition-all"
       onClick={() => onWinnerSelect?.(winner.id.toString())}
+      aria-label={`View details for ${winner.user.full_name}, ${isLeague ? 'League' : 'Last Round'} winner with ${winner.total_points} points`}
     >
       <div className={`
         w-36 h-36 rounded-full flex flex-col items-center justify-center text-white text-center p-4
@@ -93,7 +95,7 @@ function CircularBadge({
           </div>
         )}
       </div>
-    </div>
+    </button>
   );
 }
 

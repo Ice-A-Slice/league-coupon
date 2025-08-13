@@ -152,7 +152,7 @@ export default function CouponManagement() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <button
                       onClick={() => deleteSeasonAnswer(answer.id)}
-                      className="text-red-600 hover:text-red-900 font-medium"
+                      className="text-red-600 hover:text-red-900 font-medium cursor-pointer"
                     >
                       Delete
                     </button>

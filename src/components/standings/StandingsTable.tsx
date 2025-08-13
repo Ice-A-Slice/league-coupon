@@ -63,12 +63,13 @@ const StandingsTable: React.FC<StandingsTableProps> = ({ standings, isLoading, e
         <Table>
           <TableHeader className="bg-primary text-primary-foreground">
             <TableRow>
-              <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold text-center">Rank</TableHead>
+              <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold text-center">#</TableHead>
               <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold text-left">Player</TableHead>
               <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold text-center">
                 <Tooltip>
-                  <TooltipTrigger className="cursor-help underline decoration-dotted underline-offset-2">
-                    Game Points
+                  <TooltipTrigger className="cursor-help underline decoration-dotted underline-offset-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 rounded">
+                    <span className="hidden sm:inline">Game Points</span>
+                    <span className="sm:hidden">GP</span>
                   </TooltipTrigger>
                   <TooltipContent>
                     <p>Points from match outcome predictions</p>
@@ -77,15 +78,26 @@ const StandingsTable: React.FC<StandingsTableProps> = ({ standings, isLoading, e
               </TableHead>
               <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold text-center">
                 <Tooltip>
-                  <TooltipTrigger className="cursor-help underline decoration-dotted underline-offset-2">
-                    Dynamic Points
+                  <TooltipTrigger className="cursor-help underline decoration-dotted underline-offset-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 rounded">
+                    <span className="hidden sm:inline">Question Points</span>
+                    <span className="sm:hidden">QP</span>
                   </TooltipTrigger>
                   <TooltipContent>
                     <p>Points from season-long questionnaire predictions</p>
                   </TooltipContent>
                 </Tooltip>
               </TableHead>
-              <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold text-center">Total</TableHead>
+              <TableHead className="px-3 py-3 text-xs text-primary-foreground font-semibold text-center">
+                <Tooltip>
+                  <TooltipTrigger className="cursor-help underline decoration-dotted underline-offset-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 rounded">
+                    <span className="hidden sm:inline">Total Points</span>
+                    <span className="sm:hidden">TP</span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Combined total of game points and question points</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

@@ -26,7 +26,7 @@ const sampleSimpleReminderData: SimpleReminderEmailProps = {
 };
 
 export default function EmailPreviewPage() {
-  const [emailType, setEmailType] = useState<'summary' | 'reminder' | 'simple-reminder' | 'transparency'>('simple-reminder');
+  const [emailType, setEmailType] = useState<'summary' | 'reminder' | 'simple-reminder' | 'transparency' | 'admin-summary'>('simple-reminder');
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
@@ -41,7 +41,7 @@ export default function EmailPreviewPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          email_type: emailType === 'transparency' ? 'transparency' : emailType === 'summary' ? 'summary' : 'simple-reminder'
+          email_type: emailType === 'admin-summary' ? 'admin-summary' : emailType === 'transparency' ? 'transparency' : emailType === 'summary' ? 'summary' : 'simple-reminder'
         })
       });
 
@@ -112,13 +112,19 @@ export default function EmailPreviewPage() {
             >
               Transparency Email
             </Button>
+            <Button
+              onClick={() => setEmailType('admin-summary')}
+              variant={emailType === 'admin-summary' ? 'default' : 'outline'}
+            >
+              Admin Summary Email
+            </Button>
           </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-lg p-6">
           <div className="mb-4 border-b pb-4">
             <h2 className="text-xl font-semibold text-gray-800">
-              Preview: {emailType === 'summary' ? 'Round Summary' : emailType === 'reminder' ? 'Round Reminder (Old)' : emailType === 'transparency' ? 'Transparency' : 'Simple Reminder'} Email
+              Preview: {emailType === 'admin-summary' ? 'Admin Summary' : emailType === 'summary' ? 'Round Summary' : emailType === 'reminder' ? 'Round Reminder (Old)' : emailType === 'transparency' ? 'Transparency' : 'Simple Reminder'} Email
             </h2>
             <p className="text-sm text-gray-500 mt-1">
               This preview shows how the email will look when sent to users
@@ -203,6 +209,85 @@ export default function EmailPreviewPage() {
                   <div className="mt-6 pt-4 border-t text-center">
                     <p className="font-medium">Good luck to everyone! May the best predictor win! 🏆</p>
                     <p className="text-sm text-gray-600 mt-1">TippSlottet - Fair Play, Transparent Predictions</p>
+                  </div>
+                </div>
+              ) : emailType === 'admin-summary' ? (
+                <div className="space-y-4 font-sans">
+                  <div className="text-lg font-medium">Subject: 📊 Round 6 - Premier League Admin Summary - 15 participants</div>
+                  <hr />
+                  
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="font-bold text-lg mb-2">🏆 Top Performers</h3>
+                      <div className="space-y-2">
+                        <div className="flex justify-between bg-yellow-50 p-2 rounded">
+                          <span><strong>1. Arnar Steinn</strong></span>
+                          <span><strong>15 pts</strong> (12 match + 3 dynamic)</span>
+                        </div>
+                        <div className="flex justify-between bg-gray-50 p-2 rounded">
+                          <span><strong>2. PierLuigi</strong></span>
+                          <span><strong>13 pts</strong> (10 match + 3 dynamic)</span>
+                        </div>
+                        <div className="flex justify-between bg-gray-50 p-2 rounded">
+                          <span><strong>3. Johann Johannsson</strong></span>
+                          <span><strong>9 pts</strong> (9 match + 0 dynamic)</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="font-bold text-lg mb-2">📈 Round Statistics</h3>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div className="flex justify-between">
+                          <span>Total Participants:</span>
+                          <span className="font-bold">15</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Average Points:</span>
+                          <span className="font-bold">7.2</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Highest Score:</span>
+                          <span className="font-bold">15</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="font-bold text-lg mb-2">📋 All Participants (Sample)</h3>
+                      <div className="text-sm">
+                        <div className="grid grid-cols-4 gap-2 bg-gray-100 p-2 rounded font-bold">
+                          <div>Name</div>
+                          <div className="text-center">Match Points</div>
+                          <div className="text-center">Correct/Total</div>
+                          <div className="text-center">Total Points</div>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2 p-2 border-b">
+                          <div>Arnar Steinn</div>
+                          <div className="text-center">12</div>
+                          <div className="text-center">8/10</div>
+                          <div className="text-center font-bold">15</div>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2 p-2 border-b bg-gray-50">
+                          <div>PierLuigi</div>
+                          <div className="text-center">10</div>
+                          <div className="text-center">7/10</div>
+                          <div className="text-center font-bold">13</div>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2 p-2 border-b">
+                          <div>Johann Johannsson</div>
+                          <div className="text-center">9</div>
+                          <div className="text-center">6/10</div>
+                          <div className="text-center font-bold">9</div>
+                        </div>
+                        <div className="text-center text-gray-500 mt-2 text-xs">... and 12 more participants</div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-6 pt-4 border-t text-center text-sm text-gray-600">
+                    <p>This admin summary was automatically generated when the round completed scoring.</p>
+                    <p className="mt-1">🤖 APL League Coupon Admin System</p>
                   </div>
                 </div>
               ) : emailType === 'summary' ? (
