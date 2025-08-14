@@ -15,15 +15,17 @@ export async function GET() {
   try {
     console.log(`🚀 Starting population for league ${leagueId}, season ${seasonYear}...`);
     
-    // Await the populate function so we can see the results immediately
-    await populateFixturesForSeason(leagueId, seasonYear);
-
-    console.log(`✅ Population completed for league ${leagueId}, season ${seasonYear}.`);
+    // Run asynchronously to avoid Vercel timeout, but logs will show progress
+    populateFixturesForSeason(leagueId, seasonYear).then(() => {
+      console.log(`✅ Population completed for league ${leagueId}, season ${seasonYear}.`);
+    }).catch((error) => {
+      console.error(`❌ Population failed for league ${leagueId}, season ${seasonYear}:`, error);
+    });
 
     return NextResponse.json({
-      message: `Population completed successfully for league ${leagueId}, season ${seasonYear}.`,
+      message: `Population started for league ${leagueId}, season ${seasonYear}. Check server logs for progress.`,
       success: true
-    }, { status: 200 }); // 200 OK indicates the process completed
+    }, { status: 202 }); // 202 Accepted indicates the process has started
 
   } catch (error: unknown) {
     console.error('Error triggering population route:', error);
