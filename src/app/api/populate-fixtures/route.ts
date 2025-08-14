@@ -13,16 +13,17 @@ export async function GET() {
   const seasonYear = 2025;
 
   try {
-    // We run this asynchronously but don't necessarily wait for it here.
-    // The console logs in populateFixturesForSeason will show progress.
-    // For a real job, you might want better status reporting or use a background queue.
-    populateFixturesForSeason(leagueId, seasonYear);
+    console.log(`🚀 Starting population for league ${leagueId}, season ${seasonYear}...`);
+    
+    // Await the populate function so we can see the results immediately
+    await populateFixturesForSeason(leagueId, seasonYear);
 
-    console.log(`Triggered population for league ${leagueId}, season ${seasonYear}. Check server console for progress.`);
+    console.log(`✅ Population completed for league ${leagueId}, season ${seasonYear}.`);
 
     return NextResponse.json({
-      message: `Triggered population for league ${leagueId}, season ${seasonYear}. Check server console for progress.`,
-    }, { status: 202 }); // 202 Accepted indicates the process has started
+      message: `Population completed successfully for league ${leagueId}, season ${seasonYear}.`,
+      success: true
+    }, { status: 200 }); // 200 OK indicates the process completed
 
   } catch (error: unknown) {
     console.error('Error triggering population route:', error);
