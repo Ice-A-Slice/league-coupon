@@ -407,12 +407,44 @@ export class UserDataAggregationService {
         .single();
 
       if (profileError) {
-        logger.warn({ userId, error: profileError }, 'Failed to get user profile, using default');
+        logger.warn({ userId, error: profileError }, 'Failed to get user profile, will try auth.users fallback');
+      }
+      
+      if (!profile?.full_name) {
+        logger.info({ userId, hasProfile: !!profile, profileFullName: profile?.full_name }, 'Profile missing full_name, trying fallback sources');
+      }
+
+      // Try multiple sources for the full name
+      let fullName = profile?.full_name;
+      let nameSource = 'profile';
+      
+      // Fallback to auth.users user_metadata if profile name is missing
+      if (!fullName && authUser.user.user_metadata) {
+        fullName = authUser.user.user_metadata.full_name || 
+                  authUser.user.user_metadata.name || 
+                  authUser.user.user_metadata.display_name;
+        if (fullName) {
+          nameSource = 'auth_metadata';
+        }
+      }
+      
+      // Final fallback: derive name from email
+      if (!fullName && authUser.user.email) {
+        fullName = authUser.user.email.split('@')[0].replace(/[._-]/g, ' ');
+        // Capitalize first letter of each word
+        fullName = fullName.split(' ').map(word => 
+          word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+        ).join(' ');
+        nameSource = 'email_derived';
+      }
+      
+      if (nameSource !== 'profile') {
+        logger.info({ userId, fullName, nameSource }, `Using fallback name source: ${nameSource}`);
       }
 
       return {
         email: authUser.user.email || '',
-        full_name: profile?.full_name || null
+        full_name: fullName || null
       };
 
     } catch (error) {
