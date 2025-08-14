@@ -1,4 +1,5 @@
 import React from 'react';
+import { Metadata } from 'next';
 // Removed 'use client'
 // Removed unused client-side imports (useState, useRef, Suspense, client hooks, components, types)
 
@@ -8,6 +9,11 @@ import { createClient } from '@/utils/supabase/server';
 
 // Import the new Client Component
 import CouponClient from '@/components/client/CouponClient';
+
+export const metadata: Metadata = {
+  title: "Coupon",
+  description: "Place your Premier League predictions",
+};
 
 // --- Server Component Definition ---
 

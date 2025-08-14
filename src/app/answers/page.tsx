@@ -1,8 +1,14 @@
 import React from 'react';
+import { Metadata } from 'next';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import UserPredictionsTable from '@/components/answers/UserPredictionsTable';
 import CurrentAnswersTable from '@/components/answers/CurrentAnswersTable';
 import { logger } from '@/utils/logger';
+
+export const metadata: Metadata = {
+  title: "Answers",
+  description: "View all predictions and answers",
+};
 
 // Types for the data we'll fetch
 interface UserPrediction {
