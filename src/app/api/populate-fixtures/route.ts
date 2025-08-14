@@ -8,9 +8,9 @@ import 'server-only';
 export async function GET() {
   console.log('API route /api/populate-fixtures called.');
 
-  // Example: Populate Premier League 2024/25
+  // Populate Premier League 2025/26
   const leagueId = 39;
-  const seasonYear = 2024;
+  const seasonYear = 2025;
 
   try {
     // We run this asynchronously but don't necessarily wait for it here.
