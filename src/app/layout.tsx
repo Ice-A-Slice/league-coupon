@@ -75,21 +75,16 @@ export default function RootLayout({
       <head>
         <style dangerouslySetInnerHTML={{
           __html: `
-            /* Prevent white flash before theme loads */
-            html, body { 
+            /* Only prevent white flash on body background in dark mode */
+            html.dark, html.dark body { 
               background-color: #1a1a1a !important; 
-              color: #ffffff !important;
-            }
-            /* Override any potential white backgrounds */
-            * { 
-              background-color: inherit; 
             }
           `
         }} />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-        style={{ backgroundColor: '#1a1a1a', color: '#ffffff' }}
+        style={{ backgroundColor: '#1a1a1a' }}
       >
         <ThemeProvider
           attribute="class"
