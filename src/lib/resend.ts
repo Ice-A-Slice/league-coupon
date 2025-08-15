@@ -1,5 +1,6 @@
 import { Resend } from 'resend';
 import { logger } from '@/utils/logger';
+import { emailRateLimiter } from './rateLimiter';
 
 // Environment variable getters (lazy evaluation)
 const getResendApiKey = () => process.env.RESEND_API_KEY;
@@ -138,8 +139,8 @@ function formatRecipientsForLog(recipients: string | string[]): string {
   }).join(', ');
 }
 
-// Main email sending function
-export async function sendEmail(options: EmailOptions): Promise<EmailResponse> {
+// Main email sending function (internal - not rate limited)
+async function sendEmailInternal(options: EmailOptions): Promise<EmailResponse> {
   const startTime = Date.now();
   
   // Validate environment at runtime
@@ -256,6 +257,17 @@ export async function sendEmail(options: EmailOptions): Promise<EmailResponse> {
   }
 }
 
+// Public email sending function WITH rate limiting
+export async function sendEmail(options: EmailOptions): Promise<EmailResponse> {
+  // If in test mode, skip rate limiting
+  if (isEmailTestMode()) {
+    return sendEmailInternal(options);
+  }
+  
+  // Apply rate limiting for production emails
+  return emailRateLimiter.execute(() => sendEmailInternal(options));
+}
+
 // Utility function for sending simple text emails
 export async function sendSimpleEmail(
   to: string | string[],
@@ -294,6 +306,64 @@ export function getEmailServiceStatus(): {
     configured: !!(getResendApiKey() || isEmailTestMode()),
     testMode: isEmailTestMode(),
     apiKeyPresent: !!getResendApiKey()
+  };
+}
+
+// Bulk email sending with built-in rate limiting and progress tracking
+export async function sendBulkEmails(
+  recipients: Array<{ email: string; options: EmailOptions }>,
+  options?: {
+    onProgress?: (completed: number, total: number, failures: number) => void;
+    continueOnError?: boolean;
+  }
+): Promise<{
+  total: number;
+  sent: number;
+  failed: number;
+  results: Array<{ email: string; result: EmailResponse }>;
+}> {
+  const results: Array<{ email: string; result: EmailResponse }> = [];
+  let sentCount = 0;
+  let failedCount = 0;
+  
+  logger.info(`Starting bulk email send to ${recipients.length} recipients`);
+  
+  // Process emails with rate limiting
+  await emailRateLimiter.processWithRateLimit(
+    recipients,
+    async (recipient) => {
+      const result = await sendEmailInternal(recipient.options);
+      
+      if (result.success) {
+        sentCount++;
+      } else {
+        failedCount++;
+        logger.warn(`Failed to send email to ${recipient.email}: ${result.error}`);
+      }
+      
+      results.push({ email: recipient.email, result });
+      
+      // Report progress
+      if (options?.onProgress) {
+        options.onProgress(results.length, recipients.length, failedCount);
+      }
+      
+      // Stop on error if requested
+      if (!result.success && !options?.continueOnError) {
+        throw new Error(`Failed to send email to ${recipient.email}: ${result.error}`);
+      }
+      
+      return result;
+    }
+  );
+  
+  logger.info(`Bulk email send completed: ${sentCount} sent, ${failedCount} failed out of ${recipients.length} total`);
+  
+  return {
+    total: recipients.length,
+    sent: sentCount,
+    failed: failedCount,
+    results
   };
 }
 
