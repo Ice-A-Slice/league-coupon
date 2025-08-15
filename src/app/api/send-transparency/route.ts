@@ -8,6 +8,7 @@ import { TransparencyEmail } from '@/components/emails/TransparencyEmail';
 import { getAllUsersPredictionsForRound } from '@/lib/userDataAggregationService';
 import { sendEmail } from '@/lib/resend';
 import { emailMonitoringService } from '@/lib/emailMonitoringService';
+import { getSuperAdminEmails } from '@/lib/adminEmails';
 import { logger } from '@/utils/logger';
 
 /**
@@ -203,6 +204,73 @@ export async function POST(request: Request) {
           userId: user.userId,
           success: false,
           error: errorMessage
+        });
+      }
+    }
+
+    // Send transparency emails to super admins (optional feature)
+    const superAdminEmails = getSuperAdminEmails();
+    if (superAdminEmails.length > 0) {
+      logger.info('TransparencyEmailAPI: Sending transparency emails to super admins', { 
+        operationId, 
+        superAdminCount: superAdminEmails.length,
+        superAdminEmails,
+        roundId: round_id
+      });
+      
+      try {
+        // Generate email HTML (reuse the same transparency data)
+        const emailHtml = await render(
+          React.createElement(TransparencyEmail, {
+            data: transparencyData
+          })
+        );
+        
+        // Send to each super admin
+        for (const adminEmail of superAdminEmails) {
+          try {
+            const emailResponse = await sendEmail({
+              from: process.env.RESEND_FROM_EMAIL || 'noreply@tippslottet.com',
+              to: adminEmail,
+              subject: `APL - ${transparencyData.roundName} - The Bets (Admin Copy)`,
+              html: emailHtml,
+              tags: [
+                { name: 'type', value: 'transparency' },
+                { name: 'recipient_type', value: 'super_admin' },
+                { name: 'round', value: round_id.toString() }
+              ]
+            });
+
+            if (emailResponse.error) {
+              throw new Error(emailResponse.error);
+            }
+
+            emailResults.push({
+              userId: 'super_admin',
+              email: adminEmail,
+              success: true,
+              messageId: emailResponse.id
+            });
+
+            logger.info(`Transparency email sent successfully to super admin ${adminEmail}`);
+
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            logger.error(`Failed to send transparency email to super admin ${adminEmail}:`, errorMessage);
+            
+            emailResults.push({
+              userId: 'super_admin',
+              email: adminEmail,
+              success: false,
+              error: errorMessage
+            });
+          }
+        }
+      } catch (error) {
+        logger.warn('TransparencyEmailAPI: Failed to send super admin emails', { 
+          operationId,
+          roundId: round_id,
+          error: error instanceof Error ? error.message : 'Unknown error'
         });
       }
     }
