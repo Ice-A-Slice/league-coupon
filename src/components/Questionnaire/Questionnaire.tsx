@@ -158,7 +158,7 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
 
   // Content for the questionnaire
   const questionnaireContent = (
-    <div className="px-3 sm:px-4 py-3 sm:py-5 divide-y divide-gray-200 space-y-3 sm:space-y-4 w-full">
+    <div className="px-3 sm:px-4 py-3 sm:py-5 space-y-3 sm:space-y-4 w-full [&>*]:!border-b-0">
       {/* League Winner Selection - Reverted to use TeamSelect */}
       <div className="pt-3 sm:pt-4 first:pt-0">
         <div className="flex items-center mb-1">
