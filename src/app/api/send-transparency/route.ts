@@ -174,7 +174,7 @@ export async function POST(request: Request) {
         const emailResponse = await sendEmail({
           from: process.env.RESEND_FROM_EMAIL || 'noreply@tippslottet.com',
           to: [authUser.user.email],
-          subject: `Round ${transparencyData.roundName} - All Predictions Revealed`,
+          subject: `APL - ${transparencyData.roundName} - The Bets`,
           html: emailHtml,
           tags: [
             { name: 'type', value: 'transparency' },
