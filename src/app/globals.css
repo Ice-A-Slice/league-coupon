@@ -65,6 +65,14 @@
 body {
   background: hsl(var(--background));
   color: hsl(var(--foreground));
+  /* Fallback for webviews that don't load CSS properly */
+  background-color: #1a1a1a !important;
+  color: #ffffff !important;
+}
+
+/* Ensure root html element also has dark background */
+html {
+  background-color: #1a1a1a !important;
 }
 
 /* Custom responsive utilities */
