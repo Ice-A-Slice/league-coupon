@@ -67,13 +67,22 @@ body {
   color: hsl(var(--foreground));
 }
 
-/* Only override background color in dark mode for webview compatibility */
+/* Override background colors for webview compatibility */
 html.dark {
   background-color: #1a1a1a;
 }
 
 html.dark body {
   background-color: #1a1a1a;
+}
+
+/* Ensure light mode has proper white background */
+html:not(.dark) {
+  background-color: #ffffff;
+}
+
+html:not(.dark) body {
+  background-color: #ffffff;
 }
 
 /* Custom responsive utilities */
