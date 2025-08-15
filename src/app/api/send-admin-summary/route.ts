@@ -6,14 +6,7 @@ import { render } from '@react-email/render';
 import AdminSummaryEmail from '@/components/emails/AdminSummaryEmail';
 import { headers } from 'next/headers';
 
-// Admin emails to send summary to - loaded from environment variable
-const getAdminEmails = (): string[] => {
-  const adminEmailsEnv = process.env.ADMIN_EMAILS;
-  if (!adminEmailsEnv) {
-    throw new Error('ADMIN_EMAILS environment variable is not configured');
-  }
-  return adminEmailsEnv.split(',').map(email => email.trim()).filter(email => email.length > 0);
-};
+import { getAdminEmails } from '@/lib/adminEmails';
 
 export async function POST(request: Request) {
   try {

@@ -8,6 +8,7 @@ import { SimpleReminderEmail } from '@/components/emails/SimpleReminderEmail';
 import { reminderEmailDataService } from '@/lib/reminderEmailDataService';
 import { sendEmail } from '@/lib/resend';
 import { emailMonitoringService } from '@/lib/emailMonitoringService';
+import { getSuperAdminEmails } from '@/lib/adminEmails';
 import { logger } from '@/utils/logger';
 
 /**
@@ -420,6 +421,83 @@ export async function POST(request: Request) {
       // Add small delay between batches to avoid rate limiting
       if (i + batchSize < targetUsers.length) {
         await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+    
+    // Send reminder emails to super admins (optional feature)
+    const superAdminEmails = getSuperAdminEmails();
+    if (superAdminEmails.length > 0 && targetUsers.length > 0) {
+      logger.info('ReminderEmailAPI: Sending reminder emails to super admins', { 
+        operationId, 
+        superAdminCount: superAdminEmails.length,
+        superAdminEmails 
+      });
+      
+      try {
+        // Get reminder data for super admin emails (using first target user as template)
+        const adminReminderData = await reminderEmailDataService.getReminderEmailData(
+          targetUsers[0].id,
+          payload.round_id,
+          payload.deadline_hours
+        );
+        
+        // Create email props for super admins
+        const simpleEmailProps = {
+          roundName: adminReminderData.roundContext.roundName,
+          submittedUsers: adminReminderData.submissionStatus.submittedUserNames,
+          gameLeaderInitials: 'PC', // TODO: Make this configurable
+          appUrl: process.env.NEXT_PUBLIC_APP_URL
+        };
+        
+        // Render email HTML
+        const htmlContent = await render(React.createElement(SimpleReminderEmail, simpleEmailProps));
+        
+        // Send to each super admin
+        for (const adminEmail of superAdminEmails) {
+          try {
+            const emailResponse = await sendEmail({
+              from: process.env.RESEND_FROM_EMAIL || 'noreply@tippslottet.com',
+              to: adminEmail,
+              subject: `APL - Round ${adminReminderData.roundContext.roundNumber} - Friendly Reminder (Admin Copy)`,
+              html: htmlContent,
+              tags: [
+                { name: 'type', value: 'reminder' },
+                { name: 'recipient_type', value: 'super_admin' },
+                { name: 'round', value: adminReminderData.roundContext.roundNumber.toString() },
+                { name: 'urgent', value: adminReminderData.fixtures.deadline.isUrgent.toString() }
+              ]
+            });
+            
+            if (emailResponse.success) {
+              emailResults.push({
+                userId: 'super_admin',
+                email: adminEmail,
+                status: 'sent' as const,
+                emailId: emailResponse.id
+              });
+            } else {
+              emailResults.push({
+                userId: 'super_admin',
+                email: adminEmail,
+                status: 'failed' as const,
+                error: emailResponse.error || 'Email sending failed'
+              });
+            }
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            emailResults.push({
+              userId: 'super_admin',
+              email: adminEmail,
+              status: 'failed' as const,
+              error: errorMessage
+            });
+          }
+        }
+      } catch (error) {
+        logger.warn('ReminderEmailAPI: Failed to send super admin emails', { 
+          operationId,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
       }
     }
     
