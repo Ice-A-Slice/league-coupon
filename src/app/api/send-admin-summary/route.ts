@@ -6,11 +6,14 @@ import { render } from '@react-email/render';
 import AdminSummaryEmail from '@/components/emails/AdminSummaryEmail';
 import { headers } from 'next/headers';
 
-// Admin emails to send summary to
-const ADMIN_EMAILS = [
-  'arnarsteinnjohannnsson@gmail.com',
-  'pierluigi@apl.zone'
-];
+// Admin emails to send summary to - loaded from environment variable
+const getAdminEmails = (): string[] => {
+  const adminEmailsEnv = process.env.ADMIN_EMAILS;
+  if (!adminEmailsEnv) {
+    throw new Error('ADMIN_EMAILS environment variable is not configured');
+  }
+  return adminEmailsEnv.split(',').map(email => email.trim()).filter(email => email.length > 0);
+};
 
 export async function POST(request: Request) {
   try {
@@ -31,7 +34,8 @@ export async function POST(request: Request) {
 
     logger.info('Starting admin summary email send', { roundId });
 
-    // Get admin summary data
+    // Get admin emails and summary data
+    const adminEmails = getAdminEmails();
     const adminSummaryData = await emailDataService.getAdminSummaryEmailProps(roundId);
 
     // Render email HTML
@@ -51,7 +55,7 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         from: 'APL League Coupon <noreply@apl.zone>',
-        to: ADMIN_EMAILS,
+        to: adminEmails,
         subject: `📊 ${adminSummaryData.roundName} Admin Summary - ${adminSummaryData.totalParticipants} participants`,
         html: emailHtml,
       }),
@@ -81,7 +85,7 @@ export async function POST(request: Request) {
     logger.info('Admin summary email sent successfully', {
       roundId,
       roundName: adminSummaryData.roundName,
-      recipients: ADMIN_EMAILS,
+      recipients: adminEmails,
       emailId: result.id,
     });
 
@@ -89,7 +93,7 @@ export async function POST(request: Request) {
       success: true,
       message: 'Admin summary email sent successfully',
       emailId: result.id,
-      recipients: ADMIN_EMAILS,
+      recipients: adminEmails,
     });
 
   } catch (error) {
