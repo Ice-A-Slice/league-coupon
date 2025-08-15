@@ -38,26 +38,26 @@ export const metadata: Metadata = {
   },
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'),
   openGraph: {
-    title: "APL - Premier League Predictions",
-    description: "Join the ultimate Premier League prediction competition. Make your predictions and compete with friends!",
+    title: "APL - APL",
+    description: "The ultimate Premier League prediction competition. Lets crown the next king or queen of the APL!",
     url: '/',
     siteName: 'APL',
     locale: 'en_US',
     type: 'website',
     images: [
       {
-        url: '/og-image.jpg', // You'll need to add this image
+        url: '/header_apl_medpil-01-01.png',
         width: 1200,
         height: 630,
-        alt: 'APL - Premier League Predictions',
+        alt: 'APL - The ultimate Premier League prediction competition',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: "APL - Premier League Predictions",
-    description: "Join the ultimate Premier League prediction competition. Make your predictions and compete with friends!",
-    images: ['/og-image.jpg'],
+    title: "APL - APL",
+    description: "The ultimate Premier League prediction competition. Lets crown the next king or queen of the APL!",
+    images: ['/header_apl_medpil-01-01.png'],
   },
   other: {
     'theme-color': '#0d9488', // Teal-600 for dark theme
