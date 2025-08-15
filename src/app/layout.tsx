@@ -79,12 +79,15 @@ export default function RootLayout({
             html.dark, html.dark body { 
               background-color: #1a1a1a !important; 
             }
+            /* Ensure light mode works properly */
+            html:not(.dark), html:not(.dark) body {
+              background-color: #ffffff !important;
+            }
           `
         }} />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-        style={{ backgroundColor: '#1a1a1a' }}
       >
         <ThemeProvider
           attribute="class"
