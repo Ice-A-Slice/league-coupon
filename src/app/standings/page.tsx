@@ -4,7 +4,7 @@ import { logger } from '@/utils/logger';
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Standings - TippSlottet',
+  title: 'Standings',
   description: 'View current tournament standings and leaderboard'
 };
 
