@@ -1,4 +1,10 @@
 import React from 'react';
+import { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: "Rules",
+  description: "Competition rules and scoring system",
+};
 
 export default function RulesPage() {
   return (

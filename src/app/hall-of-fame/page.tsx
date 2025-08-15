@@ -5,7 +5,7 @@ import { createClient } from '@/utils/supabase/server';
 import { logger } from '@/utils/logger';
 
 export const metadata: Metadata = {
-  title: 'Hall of Fame | TippSlottet',
+  title: 'Hall of Fame',
   description: 'Celebrate the champions and view player rankings across multiple seasons in our Hall of Fame.',
   keywords: ['hall of fame', 'champions', 'leaderboard', 'rankings', 'winners', 'statistics'],
 };
