@@ -124,20 +124,18 @@ export class EmailSchedulerService {
             errors: triggerResult.errors
           });
 
-          // If user summary emails were successful, also send admin summary
-          if (triggerResult.success) {
-            logger.info(`EmailScheduler: Triggering admin summary email for round ${roundId}`);
-            const adminResult = await this.triggerAdminSummaryEmail(roundId);
-            
-            results.push({
-              success: adminResult.success,
-              message: adminResult.message,
-              roundId,
-              emailType: 'admin-summary',
-              scheduledTime: new Date().toISOString(),
-              errors: adminResult.errors
-            });
-          }
+          // Always send admin summary email for completed rounds (independent of user summary)
+          logger.info(`EmailScheduler: Triggering admin summary email for round ${roundId}`);
+          const adminResult = await this.triggerAdminSummaryEmail(roundId);
+          
+          results.push({
+            success: adminResult.success,
+            message: adminResult.message,
+            roundId,
+            emailType: 'admin-summary',
+            scheduledTime: new Date().toISOString(),
+            errors: adminResult.errors
+          });
 
           if (triggerResult.success) {
             logger.info(`EmailScheduler: Successfully scheduled summary email for round ${roundId}`);

@@ -164,7 +164,7 @@ describe('EmailSchedulerService', () => {
         errors: []
       });
 
-      // Round 1 summary fails, Round 2 summary succeeds + admin summary
+      // Round 1 summary fails, admin summary succeeds; Round 2 summary succeeds, admin summary fails
       mockFetch
         // Round 1: summary email fails
         .mockResolvedValueOnce({
@@ -172,23 +172,34 @@ describe('EmailSchedulerService', () => {
           status: 500,
           text: async () => 'Internal Server Error'
         } as Response)
+        // Round 1: admin summary email succeeds (now runs regardless of summary result)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ success: true, recipients: ['admin1@test.com', 'admin2@test.com'] })
+        } as Response)
         // Round 2: summary email succeeds
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({ success: true, emails_sent: 5 })
         } as Response)
-        // Round 2: admin summary email succeeds
+        // Round 2: admin summary email fails
         .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, recipients: ['admin1@test.com', 'admin2@test.com'] })
+          ok: false,
+          status: 500,
+          text: async () => 'Admin API Error'
         } as Response);
 
       const results = await schedulerService.checkForSummaryEmails();
 
-      expect(results).toHaveLength(3);
+      expect(results).toHaveLength(4);
       expect(results[0].success).toBe(false); // Round 1 summary failed
-      expect(results[1].success).toBe(true);  // Round 2 summary succeeded
-      expect(results[2].success).toBe(true);  // Round 2 admin summary succeeded
+      expect(results[0].emailType).toBe('summary');
+      expect(results[1].success).toBe(true);  // Round 1 admin summary succeeded
+      expect(results[1].emailType).toBe('admin-summary');
+      expect(results[2].success).toBe(true);  // Round 2 summary succeeded
+      expect(results[2].emailType).toBe('summary');
+      expect(results[3].success).toBe(false); // Round 2 admin summary failed
+      expect(results[3].emailType).toBe('admin-summary');
     });
   });
 
