@@ -27,6 +27,42 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: "APL",
   description: "Premier League prediction competition",
+  keywords: ["Premier League", "football", "predictions", "betting", "APL"],
+  authors: [{ name: "APL" }],
+  creator: "APL",
+  publisher: "APL",
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'),
+  openGraph: {
+    title: "APL - Premier League Predictions",
+    description: "Join the ultimate Premier League prediction competition. Make your predictions and compete with friends!",
+    url: '/',
+    siteName: 'APL',
+    locale: 'en_US',
+    type: 'website',
+    images: [
+      {
+        url: '/og-image.jpg', // You'll need to add this image
+        width: 1200,
+        height: 630,
+        alt: 'APL - Premier League Predictions',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: "APL - Premier League Predictions",
+    description: "Join the ultimate Premier League prediction competition. Make your predictions and compete with friends!",
+    images: ['/og-image.jpg'],
+  },
+  other: {
+    'theme-color': '#0d9488', // Teal-600 for dark theme
+    'color-scheme': 'dark light',
+  },
 };
 
 export default function RootLayout({
