@@ -13,6 +13,7 @@ const publicRoutes = [
   '/api/teams',
   '/api/fixtures',
   '/api/players',
+  '/api/players-all',
   '/api/standings',
   '/api/bets',
   '/api/season-answers',

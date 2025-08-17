@@ -78,7 +78,7 @@ describe('useQuestionnaireData Hook', () => {
     expect(result.current.error).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock).toHaveBeenCalledWith(`/api/teams?league=${defaultProps.leagueId}&season=${defaultProps.season}`);
-    expect(fetchMock).toHaveBeenCalledWith(`/api/players?league=${defaultProps.leagueId}&season=${defaultProps.season}`);
+    expect(fetchMock).toHaveBeenCalledWith(`/api/players-all?league=${defaultProps.leagueId}&season=${defaultProps.season}`);
   });
 
   test('should handle error if teams fetch fails', async () => {
