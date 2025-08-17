@@ -8,7 +8,6 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const leagueIdParam = searchParams.get('league');
   const seasonYearParam = searchParams.get('season');
-  const positionParam = searchParams.get('position'); // Optional filter
 
   if (!leagueIdParam || !seasonYearParam) {
     return NextResponse.json({ error: 'Missing league or season query parameter' }, { status: 400 });
@@ -24,23 +23,39 @@ export async function GET(request: Request) {
   try {
     console.log(`API Route /api/players-all: Fetching all players for league ${leagueId}, year ${seasonYear}...`);
     
-    // For Premier League 2025, fetch all players
-    // In production, you might want to filter by:
-    // - Players in teams that are in the league for this season
-    // - Players with certain positions (e.g., only attackers for top scorer)
+    // For Premier League (league ID 39), we'll filter by recently updated players
+    if (leagueId === 39 && seasonYear === 2025) {
+      // Since we just updated PL players, we can use the last_api_update timestamp
+      // Players updated after August 17, 2025 are the PL players we just added
+      const updateCutoff = '2025-08-17T00:00:00';
+      
+      const { data: players, error } = await supabaseServerClient
+        .from('players')
+        .select('id, api_player_id, name, firstname, lastname, last_api_update')
+        .gte('last_api_update', updateCutoff)
+        .order('name');
+      
+      if (error) {
+        console.error('Error fetching Premier League players:', error);
+        return NextResponse.json({ error: 'Failed to fetch players' }, { status: 500 });
+      }
+      
+      console.log(`Found ${players?.length || 0} Premier League players (updated after ${updateCutoff})`);
+      
+      // Format players for the frontend
+      const formattedPlayers = players?.map(player => ({
+        id: player.id,
+        name: player.name || `${player.firstname} ${player.lastname}`.trim()
+      })) || [];
+      
+      return NextResponse.json(formattedPlayers);
+    }
     
+    // For other leagues, return all players (existing behavior)
     const query = supabaseServerClient
       .from('players')
       .select('id, api_player_id, name, firstname, lastname')
       .order('name');
-    
-    // If position filter is provided (e.g., for top scorer question)
-    // This would require a position column or join with player_team_seasons
-    if (positionParam === 'attacker') {
-      // For now, return all players since we don't have position data in players table
-      // In production, you'd filter by position
-      console.log('Note: Position filtering not implemented yet');
-    }
     
     const { data: players, error } = await query;
     
