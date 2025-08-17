@@ -36,7 +36,7 @@ export function useQuestionnaireData({ leagueId, season }: UseQuestionnaireDataP
     try {
       const [teamsRes, playersRes] = await Promise.all([
         fetch(`/api/teams?league=${leagueId}&season=${season}`),
-        fetch(`/api/players?league=${leagueId}&season=${season}`)
+        fetch(`/api/players-all?league=${leagueId}&season=${season}`)
       ]);
 
       // Process Teams
