@@ -516,9 +516,9 @@ export function Combobox({
                 className={cn(
                   "h-10 flex-1",
                   "border-0 border-none",
-                  "bg-transparent text-gray-800",
+                  "bg-transparent text-gray-800 dark:text-gray-100",
                   "focus:ring-0 focus:outline-none",
-                  "placeholder:text-gray-400"
+                  "placeholder:text-gray-400 dark:placeholder:text-gray-500"
                 )}
                 ref={inputRef}
                 aria-autocomplete="list"
