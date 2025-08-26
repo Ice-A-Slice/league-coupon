@@ -9,6 +9,7 @@ import { reminderEmailDataService } from '@/lib/reminderEmailDataService';
 import { sendEmail } from '@/lib/resend';
 import { emailMonitoringService } from '@/lib/emailMonitoringService';
 import { getSuperAdminEmails } from '@/lib/adminEmails';
+import { emailDeliveryService } from '@/lib/emailDeliveryService';
 import { logger } from '@/utils/logger';
 
 /**
@@ -20,6 +21,7 @@ const reminderEmailRequestSchema = z.object({
   test_mode: z.boolean().optional().default(false),
   deadline_hours: z.number().min(1).max(168).optional().default(24), // 1 hour to 1 week
   force_send: z.boolean().optional().default(false), // Send even to users who already submitted
+  delivery_tracking: z.boolean().optional().default(false), // Enable individual delivery tracking
 });
 
 type ReminderEmailRequest = z.infer<typeof reminderEmailRequestSchema>;
@@ -376,6 +378,25 @@ export async function POST(request: Request) {
             throw new Error(emailResponse.error || 'Email sending failed');
           }
           
+          // Update delivery tracking if enabled
+          if (payload.delivery_tracking && payload.round_id) {
+            try {
+              await emailDeliveryService.markAsSent(
+                targetUser.id,
+                payload.round_id,
+                'reminder',
+                emailResponse.id || 'unknown',
+                targetUser.email
+              );
+            } catch (trackingError) {
+              logger.warn(`ReminderEmailAPI: Failed to update delivery tracking for user ${targetUser.id}`, {
+                operationId,
+                trackingError: trackingError instanceof Error ? trackingError.message : 'Unknown error'
+              });
+              // Don't fail the email send if tracking update fails
+            }
+          }
+          
           return {
             userId: targetUser.id,
             email: targetUser.email,
@@ -391,6 +412,25 @@ export async function POST(request: Request) {
             userId: targetUser.id, 
             error: errorMessage 
           });
+          
+          // Update delivery tracking if enabled
+          if (payload.delivery_tracking && payload.round_id) {
+            try {
+              const shouldRetry = !errorMessage.includes('429'); // Don't retry 429s immediately
+              await emailDeliveryService.markAsFailed(
+                targetUser.id,
+                payload.round_id,
+                'reminder',
+                errorMessage,
+                shouldRetry
+              );
+            } catch (trackingError) {
+              logger.warn(`ReminderEmailAPI: Failed to update delivery tracking failure for user ${targetUser.id}`, {
+                operationId,
+                trackingError: trackingError instanceof Error ? trackingError.message : 'Unknown error'
+              });
+            }
+          }
           
           return {
             userId: targetUser.id,
