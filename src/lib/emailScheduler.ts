@@ -231,9 +231,19 @@ export class EmailSchedulerService {
             });
 
             if (triggerResult.success) {
-              // Mark reminder as sent
-              await this.markReminderAsSent(timing.roundId);
-              logger.info(`EmailScheduler: Successfully scheduled reminder email for round ${timing.roundId}`);
+              // Only mark as sent if we actually sent emails successfully
+              // This prevents duplicate sends when rate limiting causes failures
+              const emailsSent = triggerResult.emailsSent || 0;
+              
+              // Mark as sent if we sent any emails at all - this indicates the reminder
+              // process worked and users were notified. Even if some failed due to rate
+              // limits, the main purpose (notifying users about deadline) was achieved.
+              if (emailsSent > 0) {
+                await this.markReminderAsSent(timing.roundId);
+                logger.info(`EmailScheduler: Successfully scheduled reminder email for round ${timing.roundId} (${emailsSent} emails sent)`);
+              } else {
+                logger.warn(`EmailScheduler: API succeeded but no emails were sent for round ${timing.roundId} - not marking as sent to allow retry`);
+              }
             } else {
               logger.error(`EmailScheduler: Failed to schedule reminder email for round ${timing.roundId}`, {
                 errors: triggerResult.errors
@@ -455,7 +465,7 @@ export class EmailSchedulerService {
       return {
         success: true,
         message: `Reminder email triggered successfully for round ${roundId}`,
-        emailsSent: result.emails_sent || 0
+        emailsSent: result.summary?.sent || result.emails_sent || 0
       };
 
     } catch (error) {
