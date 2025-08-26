@@ -3,6 +3,7 @@ import 'server-only';
 import { logger } from '@/utils/logger';
 import { roundCompletionDetectorService } from '@/services/roundCompletionDetectorService';
 import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { emailDeliveryService, type EmailDelivery } from './emailDeliveryService';
 // Removed unused import
 
 /**
@@ -203,23 +204,33 @@ export class EmailSchedulerService {
               reminderSendTime: timing.reminderSendTime
             });
 
-            // Check if reminder was already sent
-            const alreadySent = await this.wasReminderAlreadySent(timing.roundId);
+            // Set up individual delivery tracking for reminder emails
+            // This replaces the old round-level "reminder_sent_at" approach
+            await this.setupReminderDeliveryTracking(timing.roundId);
             
-            if (alreadySent) {
-              logger.info(`EmailScheduler: Reminder already sent for round ${timing.roundId}`);
+            // Get pending reminder deliveries for this round
+            const pendingDeliveries = await emailDeliveryService.getPendingDeliveries({
+              email_type: 'reminder',
+              betting_round_id: timing.roundId,
+              max_retry_count: 3
+            });
+            
+            if (pendingDeliveries.length === 0) {
+              logger.info(`EmailScheduler: No pending reminder deliveries for round ${timing.roundId}`);
               results.push({
                 success: true,
-                message: `Reminder already sent for round ${timing.roundId}`,
+                message: `All reminder emails already sent for round ${timing.roundId}`,
                 roundId: timing.roundId,
                 emailType: 'reminder',
                 scheduledTime: timing.reminderSendTime
               });
               continue;
             }
+            
+            logger.info(`EmailScheduler: Found ${pendingDeliveries.length} pending reminder deliveries for round ${timing.roundId}`);
 
-            // Trigger reminder email
-            const triggerResult = await this.triggerReminderEmail(timing.roundId);
+            // Trigger reminder email for pending users only
+            const triggerResult = await this.triggerReminderEmailWithDeliveryTracking(timing.roundId, pendingDeliveries);
             
             results.push({
               success: triggerResult.success,
@@ -230,12 +241,12 @@ export class EmailSchedulerService {
               errors: triggerResult.errors
             });
 
+            // With individual delivery tracking, success/failure is handled per-user
+            // No need for round-level success logic anymore
             if (triggerResult.success) {
-              // Mark reminder as sent
-              await this.markReminderAsSent(timing.roundId);
-              logger.info(`EmailScheduler: Successfully scheduled reminder email for round ${timing.roundId}`);
+              logger.info(`EmailScheduler: Reminder email process completed for round ${timing.roundId} (${triggerResult.emailsSent || 0} deliveries attempted)`);
             } else {
-              logger.error(`EmailScheduler: Failed to schedule reminder email for round ${timing.roundId}`, {
+              logger.error(`EmailScheduler: Failed to process reminder emails for round ${timing.roundId}`, {
                 errors: triggerResult.errors
               });
             }
@@ -455,7 +466,7 @@ export class EmailSchedulerService {
       return {
         success: true,
         message: `Reminder email triggered successfully for round ${roundId}`,
-        emailsSent: result.emails_sent || 0
+        emailsSent: result.summary?.sent || result.emails_sent || 0
       };
 
     } catch (error) {
@@ -849,6 +860,118 @@ export class EmailSchedulerService {
     } catch (error) {
       logger.error(`EmailScheduler: Error marking transparency as sent for round ${roundId}`, { error });
       throw error;
+    }
+  }
+
+  /**
+   * Set up delivery tracking records for reminder emails
+   * Creates records for all users who need reminder emails for this round
+   */
+  async setupReminderDeliveryTracking(roundId: number): Promise<void> {
+    try {
+      logger.debug(`EmailScheduler: Setting up reminder delivery tracking for round ${roundId}`);
+      
+      const supabase = createSupabaseServiceRoleClient();
+      
+      // Get all active users who have made bets (same logic as reminder API)
+      const { data: activeBettors, error: bettorsError } = await supabase
+        .from('user_bets')
+        .select('user_id')
+        .not('user_id', 'is', null); // Ensure user_id is not null
+        
+      if (bettorsError) {
+        throw new Error(`Failed to fetch active bettors: ${bettorsError.message}`);
+      }
+      
+      const activeBettorIds = [...new Set(activeBettors?.map(bet => bet.user_id) || [])];
+      
+      if (activeBettorIds.length === 0) {
+        logger.info(`EmailScheduler: No active bettors found for delivery tracking setup`);
+        return;
+      }
+      
+      // Get auth users (for emails) filtered to active bettors only
+      const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
+      if (authError) {
+        throw new Error(`Failed to fetch users from auth: ${authError.message}`);
+      }
+      
+      // Filter to active bettors with emails
+      const targetUsers = authUsers.users.filter(user => 
+        user.email && activeBettorIds.includes(user.id)
+      );
+      
+      // Create delivery tracking records
+      const deliveryRecords = targetUsers.map(user => ({
+        user_id: user.id,
+        betting_round_id: roundId,
+        email_type: 'reminder' as const,
+        recipient_email: user.email!,
+        max_retries: 3
+      }));
+      
+      if (deliveryRecords.length > 0) {
+        await emailDeliveryService.createDeliveryRecords(deliveryRecords);
+        logger.info(`EmailScheduler: Set up delivery tracking for ${deliveryRecords.length} users for round ${roundId}`);
+      }
+      
+    } catch (error) {
+      logger.error(`EmailScheduler: Failed to setup reminder delivery tracking for round ${roundId}`, { error });
+      throw error;
+    }
+  }
+
+  /**
+   * Trigger reminder emails with individual delivery tracking
+   * This replaces the old triggerReminderEmail method
+   */
+  async triggerReminderEmailWithDeliveryTracking(
+    roundId: number, 
+    pendingDeliveries: EmailDelivery[]
+  ): Promise<EmailTriggerResult> {
+    logger.info(`EmailScheduler: Triggering reminder emails with delivery tracking for round ${roundId} (${pendingDeliveries.length} pending)`);
+
+    try {
+      // Extract user IDs from pending deliveries
+      const userIds = pendingDeliveries.map(delivery => delivery.user_id);
+      
+      const response = await fetch(`${this.API_BASE_URL}/api/send-reminder`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.CRON_SECRET}`,
+        },
+        body: JSON.stringify({
+          round_id: roundId,
+          user_ids: userIds, // Only send to pending users
+          test_mode: process.env.EMAIL_TEST_MODE === 'true',
+          deadline_hours: this.REMINDER_HOURS_BEFORE,
+          delivery_tracking: true // Flag to enable delivery tracking in API
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Reminder email API call failed: ${response.status} ${errorText}`);
+      }
+
+      const result = await response.json();
+      
+      return {
+        success: true,
+        message: `Reminder emails triggered with delivery tracking for round ${roundId}`,
+        emailsSent: result.summary?.sent || result.emails_sent || 0
+      };
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`EmailScheduler: Failed to trigger reminder emails with delivery tracking for round ${roundId}`, { error: errorMessage });
+      
+      return {
+        success: false,
+        message: `Failed to trigger reminder emails with delivery tracking for round ${roundId}`,
+        errors: [errorMessage]
+      };
     }
   }
 }
