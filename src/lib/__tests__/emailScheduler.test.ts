@@ -1,6 +1,7 @@
 import { EmailSchedulerService, emailSchedulerService, runEmailSchedulingCheck } from '../emailScheduler';
 import { roundCompletionDetectorService } from '@/services/roundCompletionDetectorService';
 import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
+import { emailDeliveryService } from '../emailDeliveryService';
 // Removed unused logger import
 
 // Mock dependencies
@@ -244,7 +245,6 @@ describe('EmailSchedulerService', () => {
   describe('checkForReminderEmails', () => {
     it('should process rounds due for reminder emails', async () => {
       const now = new Date();
-      const _pastTime = new Date(now.getTime() - 60 * 60 * 1000); // 1 hour ago (prefixed with _ to indicate intentionally unused)
       const futureTime = new Date(now.getTime() + 23 * 60 * 60 * 1000); // 23 hours from now (so reminder is due 1 hour ago)
 
       // Mock the complete Supabase call chain for getting open rounds
@@ -264,20 +264,16 @@ describe('EmailSchedulerService', () => {
                     }
                   ],
                   error: null
-                }),
-                single: jest.fn().mockResolvedValue({
-                  data: { reminder_sent_at: null },
-                  error: null
                 })
-              }),
-              single: jest.fn().mockResolvedValue({
-                data: { reminder_sent_at: null },
-                error: null
               })
-            }),
-            update: jest.fn().mockReturnValue({
-              eq: jest.fn().mockResolvedValue({
-                data: null,
+            })
+          };
+        }
+        if (table === 'user_bets') {
+          return {
+            select: jest.fn().mockReturnValue({
+              not: jest.fn().mockResolvedValue({
+                data: [{ user_id: 'user1' }, { user_id: 'user2' }],
                 error: null
               })
             })
@@ -286,10 +282,63 @@ describe('EmailSchedulerService', () => {
         return {};
       });
 
+      // Mock auth.admin.listUsers for getting users
+      mockSupabaseClient.auth = {
+        admin: {
+          listUsers: jest.fn().mockResolvedValue({
+            data: {
+              users: [
+                { id: 'user1', email: 'user1@example.com' },
+                { id: 'user2', email: 'user2@example.com' }
+              ]
+            },
+            error: null
+          })
+        }
+      };
+
+      // Mock emailDeliveryService methods using scoped mocks
+      const mockDeliveryRecords = [
+        { 
+          id: 'delivery1', 
+          user_id: 'user1', 
+          betting_round_id: 1, 
+          email_type: 'reminder' as const, 
+          status: 'pending' as const,
+          sent_at: null,
+          message_id: null,
+          recipient_email: 'user1@example.com',
+          error_message: null,
+          retry_count: 0,
+          max_retries: 3,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        },
+        { 
+          id: 'delivery2', 
+          user_id: 'user2', 
+          betting_round_id: 1, 
+          email_type: 'reminder' as const, 
+          status: 'pending' as const,
+          sent_at: null,
+          message_id: null,
+          recipient_email: 'user2@example.com',
+          error_message: null,
+          retry_count: 0,
+          max_retries: 3,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+      ];
+
+      const mockCreateDeliveryRecords = jest.spyOn(emailDeliveryService, 'createDeliveryRecords').mockResolvedValue(mockDeliveryRecords);
+
+      const mockGetPendingDeliveries = jest.spyOn(emailDeliveryService, 'getPendingDeliveries').mockResolvedValue(mockDeliveryRecords);
+
       // Mock successful reminder email trigger
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ success: true, emails_sent: 5 })
+        json: async () => ({ success: true, summary: { sent: 2 } })
       } as Response);
 
       const results = await schedulerService.checkForReminderEmails();
@@ -303,16 +352,19 @@ describe('EmailSchedulerService', () => {
           method: 'POST',
           headers: expect.objectContaining({
             'Authorization': 'Bearer test-secret'
-          })
+          }),
+          body: expect.stringContaining('delivery_tracking')
         })
       );
+      expect(mockCreateDeliveryRecords).toHaveBeenCalled();
+      expect(mockGetPendingDeliveries).toHaveBeenCalled();
     });
 
     it('should skip rounds where reminder was already sent', async () => {
       const now = new Date();
       const futureTime = new Date(now.getTime() + 23 * 60 * 60 * 1000); // 23 hours from now (so reminder is due)
 
-      // Mock the complete Supabase call chain
+      // Mock the complete Supabase call chain for getting open rounds
       mockSupabaseClient.from.mockImplementation((table: string) => {
         if (table === 'betting_rounds') {
           return {
@@ -329,17 +381,42 @@ describe('EmailSchedulerService', () => {
                     }
                   ],
                   error: null
-                }),
-                single: jest.fn().mockResolvedValue({
-                  data: { reminder_sent_at: now.toISOString() }, // Already sent
-                  error: null
                 })
+              })
+            })
+          };
+        }
+        if (table === 'user_bets') {
+          return {
+            select: jest.fn().mockReturnValue({
+              not: jest.fn().mockResolvedValue({
+                data: [{ user_id: 'user1' }, { user_id: 'user2' }],
+                error: null
               })
             })
           };
         }
         return {};
       });
+
+      // Mock auth.admin.listUsers for getting users
+      mockSupabaseClient.auth = {
+        admin: {
+          listUsers: jest.fn().mockResolvedValue({
+            data: {
+              users: [
+                { id: 'user1', email: 'user1@example.com' },
+                { id: 'user2', email: 'user2@example.com' }
+              ]
+            },
+            error: null
+          })
+        }
+      };
+
+      // Mock emailDeliveryService - setup successful, but no pending deliveries (already sent)
+      jest.spyOn(emailDeliveryService, 'createDeliveryRecords').mockResolvedValue([]);
+      jest.spyOn(emailDeliveryService, 'getPendingDeliveries').mockResolvedValue([]); // No pending deliveries
 
       const results = await schedulerService.checkForReminderEmails();
 
