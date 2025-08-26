@@ -140,75 +140,106 @@ export async function POST(request: Request) {
       null
     );
 
-    // Send emails to each user
-    const emailResults = [];
-    for (const user of targetUsers) {
-      try {
-        // Get user email from auth.users and name from profiles
-        const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(user.userId);
-        
-        if (authError || !authUser.user?.email) {
-          logger.error(`Failed to get email for user ${user.userId}:`, authError);
-          emailResults.push({
+    // Send emails to each user using batch processing to prevent timeouts
+    const emailResults: Array<{
+      userId: string;
+      email?: string;
+      success: boolean;
+      messageId?: string;
+      error?: string;
+    }> = [];
+    const batchSize = 10; // Process in batches to avoid overwhelming the service and prevent timeouts
+    
+    // Generate email HTML once (reused for all users)
+    const emailHtml = await render(
+      React.createElement(TransparencyEmail, {
+        data: transparencyData
+      })
+    );
+    
+    for (let i = 0; i < targetUsers.length; i += batchSize) {
+      const batch = targetUsers.slice(i, i + batchSize);
+      
+      const batchPromises = batch.map(async (user) => {
+        try {
+          // Get user email from auth.users and name from profiles
+          const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(user.userId);
+          
+          if (authError || !authUser.user?.email) {
+            logger.error(`Failed to get email for user ${user.userId}:`, authError);
+            return {
+              userId: user.userId,
+              success: false,
+              error: `No email found for user ${user.userId}`
+            };
+          }
+
+          // Get display name from profiles (optional - not blocking)
+          const { data: _profile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', user.userId)
+            .single();
+
+          // Send email using pre-generated HTML
+          const emailResponse = await sendEmail({
+            from: process.env.RESEND_FROM_EMAIL || 'noreply@tippslottet.com',
+            to: [authUser.user.email],
+            subject: `APL - ${transparencyData.roundName} - The Bets`,
+            html: emailHtml,
+            tags: [
+              { name: 'type', value: 'transparency' },
+              { name: 'round', value: round_id.toString() }
+            ]
+          });
+
+          if (emailResponse.error) {
+            throw new Error(emailResponse.error);
+          }
+
+          logger.info(`Transparency email sent successfully to ${authUser.user.email}`);
+
+          return {
+            userId: user.userId,
+            email: authUser.user.email,
+            success: true,
+            messageId: emailResponse.id
+          };
+
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          logger.error(`Failed to send transparency email to user ${user.userId}:`, errorMessage);
+          
+          return {
             userId: user.userId,
             success: false,
-            error: `No email found for user ${user.userId}`
+            error: errorMessage
+          };
+        }
+      });
+      
+      const batchResults = await Promise.allSettled(batchPromises);
+      
+      // Process batch results
+      batchResults.forEach((result) => {
+        if (result.status === 'fulfilled') {
+          emailResults.push(result.value);
+        } else {
+          emailResults.push({
+            userId: 'unknown',
+            success: false,
+            error: result.reason
           });
-          continue;
         }
-
-        // Get display name from profiles (optional)
-        const { data: _profile } = await supabase
-          .from('profiles')
-          .select('full_name')
-          .eq('id', user.userId)
-          .single();
-
-        // Generate email HTML
-        const emailHtml = await render(
-          React.createElement(TransparencyEmail, {
-            data: transparencyData
-          })
-        );
-
-        // Send email
-        const emailResponse = await sendEmail({
-          from: process.env.RESEND_FROM_EMAIL || 'noreply@tippslottet.com',
-          to: [authUser.user.email],
-          subject: `APL - ${transparencyData.roundName} - The Bets`,
-          html: emailHtml,
-          tags: [
-            { name: 'type', value: 'transparency' },
-            { name: 'round', value: round_id.toString() }
-          ]
-        });
-
-        if (emailResponse.error) {
-          throw new Error(emailResponse.error);
-        }
-
-        emailResults.push({
-          userId: user.userId,
-          email: authUser.user.email,
-          success: true,
-          messageId: emailResponse.id
-        });
-
-        logger.info(`Transparency email sent successfully to ${authUser.user.email}`);
-
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        logger.error(`Failed to send transparency email to user ${user.userId}:`, errorMessage);
-        
-        emailResults.push({
-          userId: user.userId,
-          success: false,
-          error: errorMessage
-        });
+      });
+      
+      // Add small delay between batches to avoid rate limiting
+      if (i + batchSize < targetUsers.length) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
 
-    // Send transparency emails to super admins (optional feature)
+    // Send transparency emails to super admins using batch processing
     const superAdminEmails = getSuperAdminEmails();
     if (superAdminEmails.length > 0) {
       logger.info('TransparencyEmailAPI: Sending transparency emails to super admins', { 
@@ -219,21 +250,14 @@ export async function POST(request: Request) {
       });
       
       try {
-        // Generate email HTML (reuse the same transparency data)
-        const emailHtml = await render(
-          React.createElement(TransparencyEmail, {
-            data: transparencyData
-          })
-        );
-        
-        // Send to each super admin
-        for (const adminEmail of superAdminEmails) {
+        // Send to each super admin in parallel (small number, so no need for batching)
+        const adminPromises = superAdminEmails.map(async (adminEmail) => {
           try {
             const emailResponse = await sendEmail({
               from: process.env.RESEND_FROM_EMAIL || 'noreply@tippslottet.com',
               to: adminEmail,
               subject: `APL - ${transparencyData.roundName} - The Bets (Admin Copy)`,
-              html: emailHtml,
+              html: emailHtml, // Reuse HTML generated above
               tags: [
                 { name: 'type', value: 'transparency' },
                 { name: 'recipient_type', value: 'super_admin' },
@@ -245,27 +269,44 @@ export async function POST(request: Request) {
               throw new Error(emailResponse.error);
             }
 
-            emailResults.push({
+            logger.info(`Transparency email sent successfully to super admin ${adminEmail}`);
+
+            return {
               userId: 'super_admin',
               email: adminEmail,
               success: true,
               messageId: emailResponse.id
-            });
-
-            logger.info(`Transparency email sent successfully to super admin ${adminEmail}`);
+            };
 
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             logger.error(`Failed to send transparency email to super admin ${adminEmail}:`, errorMessage);
             
-            emailResults.push({
+            return {
               userId: 'super_admin',
               email: adminEmail,
               success: false,
               error: errorMessage
+            };
+          }
+        });
+
+        const adminResults = await Promise.allSettled(adminPromises);
+        
+        // Process admin results
+        adminResults.forEach((result) => {
+          if (result.status === 'fulfilled') {
+            emailResults.push(result.value);
+          } else {
+            emailResults.push({
+              userId: 'super_admin',
+              email: 'unknown',
+              success: false,
+              error: result.reason
             });
           }
-        }
+        });
+        
       } catch (error) {
         logger.warn('TransparencyEmailAPI: Failed to send super admin emails', { 
           operationId,

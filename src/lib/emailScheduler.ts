@@ -311,8 +311,8 @@ export class EmailSchedulerService {
           const reminderSendTime = new Date(earliestKickoff.getTime() - (this.REMINDER_HOURS_BEFORE * 60 * 60 * 1000));
           
           // Transparency email is due when the round has started (first game kicked off)
-          // Allow a small buffer (5 minutes) after kickoff to account for scheduling delays
-          const transparencyBufferMinutes = 5;
+          // Allow a larger buffer (30 minutes) after kickoff to account for API timeouts and retries
+          const transparencyBufferMinutes = 30;
           const transparencyDueTime = new Date(earliestKickoff.getTime() + (transparencyBufferMinutes * 60 * 1000));
           const isTransparencyDue = now >= earliestKickoff && now <= transparencyDueTime;
           
