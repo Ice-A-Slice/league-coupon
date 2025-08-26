@@ -315,31 +315,60 @@ export class ReminderEmailDataService {
         count: missingProfileIds.length 
       });
 
-      // Try to get emails as fallback for users without proper profile names
-      let emailFallbacks: string[] = [];
+      // Get display names from auth.users metadata for users without proper profile names
+      let authUserNames: string[] = [];
       if (missingProfileIds.length > 0) {
         try {
-          // Note: This requires service role key to access auth.users
-          const { data: authUsers, error: authError } = await supabaseServerClient.auth.admin.listUsers();
-          if (!authError && authUsers) {
-            emailFallbacks = authUsers.users
-              .filter(user => missingProfileIds.includes(user.id) && user.email)
-              .map(user => user.email!.split('@')[0]) // Use email part before @
-              .filter(name => name && name.trim() !== '');
-          }
+          // Get individual users to access their metadata (same pattern as winnerDeterminationService)
+          const authUserPromises = missingProfileIds.map(userId => 
+            supabaseServerClient.auth.admin.getUserById(userId)
+          );
+          
+          const authUserResults = await Promise.allSettled(authUserPromises);
+          
+          authUserNames = authUserResults
+            .map((result, _index) => {
+              if (result.status === 'fulfilled' && result.value.data.user) {
+                const user = result.value.data.user;
+                
+                // Try auth user metadata first (same as winnerDeterminationService)
+                if (user.user_metadata) {
+                  const metadata = user.user_metadata;
+                  const name = metadata.full_name || metadata.name || metadata.display_name;
+                  if (name && typeof name === 'string' && name.trim() !== '') {
+                    return name.trim();
+                  }
+                }
+                
+                // Final fallback: use email prefix with proper formatting
+                if (user.email) {
+                  const emailPrefix = user.email.split('@')[0];
+                  return emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+                }
+              }
+              return null;
+            })
+            .filter((name): name is string => name !== null && name.trim() !== '');
+            
+          logger.info('ReminderEmailDataService: Retrieved names from auth.users metadata', {
+            missingProfileIds,
+            authUserNames,
+            successCount: authUserNames.length
+          });
+            
         } catch (authError) {
-          logger.warn('ReminderEmailDataService: Could not fetch auth users for email fallback', { authError });
+          logger.warn('ReminderEmailDataService: Could not fetch auth users for metadata fallback', { authError });
         }
       }
 
-      // Combine names and email fallbacks
-      const allNames = [...namesFromProfiles, ...emailFallbacks].sort();
+      // Combine names from profiles and auth user metadata
+      const allNames = [...namesFromProfiles, ...authUserNames].sort();
 
       logger.info('ReminderEmailDataService: Returning submitted user names', { 
         allNames, 
         count: allNames.length,
         fromProfiles: namesFromProfiles.length,
-        fromEmails: emailFallbacks.length
+        fromAuthMetadata: authUserNames.length
       });
 
       return allNames;
