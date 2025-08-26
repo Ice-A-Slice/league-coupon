@@ -54,14 +54,27 @@ describe('EmailSchedulerService', () => {
         errors: []
       });
 
-      // Mock open rounds query
-      mockSupabaseClient.from.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        order: jest.fn().mockResolvedValue({
-          data: [],
-          error: null
-        })
+      // Mock open rounds query and missed admin summaries query
+      mockSupabaseClient.from.mockImplementation((table: string) => {
+        if (table === 'betting_rounds') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                order: jest.fn().mockResolvedValue({
+                  data: [],
+                  error: null
+                }),
+                gte: jest.fn().mockReturnValue({
+                  is: jest.fn().mockResolvedValue({
+                    data: [], // No missed admin summaries
+                    error: null
+                  })
+                })
+              })
+            })
+          };
+        }
+        return {};
       });
 
       // Mock successful summary email trigger
@@ -92,12 +105,37 @@ describe('EmailSchedulerService', () => {
         new Error('Database connection failed')
       );
 
+      // Mock missed admin summaries query to fail
+      mockSupabaseClient.from.mockImplementation((table: string) => {
+        if (table === 'betting_rounds') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                order: jest.fn().mockResolvedValue({
+                  data: [],
+                  error: null
+                }),
+                gte: jest.fn().mockReturnValue({
+                  is: jest.fn().mockResolvedValue({
+                    data: null,
+                    error: { message: 'supabase.from(...).select(...).eq(...).gte is not a function' }
+                  })
+                })
+              })
+            })
+          };
+        }
+        return {};
+      });
+
       const results = await schedulerService.checkAndScheduleEmails();
 
-      expect(results).toHaveLength(1);
+      expect(results).toHaveLength(2);
       expect(results[0].success).toBe(false);
       expect(results[0].message).toContain('Summary email check failed');
       expect(results[0].errors).toContain('Database connection failed');
+      expect(results[1].success).toBe(false);
+      expect(results[1].message).toContain('Admin summary check failed');
     });
   });
 
@@ -619,6 +657,126 @@ describe('EmailSchedulerService', () => {
     });
   });
 
+  describe('checkForMissedAdminSummaries', () => {
+    it('should process missed admin summaries for recently scored rounds', async () => {
+      const now = new Date();
+      const scoredAt = new Date(now.getTime() - 2 * 60 * 60 * 1000); // 2 hours ago
+
+      mockSupabaseClient.from.mockImplementation((table: string) => {
+        if (table === 'betting_rounds') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                gte: jest.fn().mockReturnValue({
+                  is: jest.fn().mockResolvedValue({
+                    data: [
+                      {
+                        id: 42,
+                        name: 'Round 42',
+                        scored_at: scoredAt.toISOString(),
+                        admin_summary_sent_at: null
+                      }
+                    ],
+                    error: null
+                  })
+                }),
+                single: jest.fn().mockResolvedValue({
+                  data: { admin_summary_sent_at: null },
+                  error: null
+                })
+              })
+            })
+          };
+        }
+        return {};
+      });
+
+      // Mock successful admin summary email trigger
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true, recipients: ['admin@test.com'] })
+      } as Response);
+
+      const results = await schedulerService.checkForMissedAdminSummaries();
+
+      expect(results).toHaveLength(1);
+      expect(results[0].roundId).toBe(42);
+      expect(results[0].emailType).toBe('admin-summary');
+      expect(results[0].success).toBe(true);
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:3000/api/send-admin-summary',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ roundId: 42 })
+        })
+      );
+    });
+
+    it('should skip rounds where admin summary was already sent', async () => {
+      const now = new Date();
+      const scoredAt = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+
+      mockSupabaseClient.from.mockImplementation((table: string) => {
+        if (table === 'betting_rounds') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                gte: jest.fn().mockReturnValue({
+                  is: jest.fn().mockResolvedValue({
+                    data: [
+                      {
+                        id: 42,
+                        name: 'Round 42',
+                        scored_at: scoredAt.toISOString(),
+                        admin_summary_sent_at: null
+                      }
+                    ],
+                    error: null
+                  })
+                }),
+                single: jest.fn().mockResolvedValue({
+                  data: { admin_summary_sent_at: now.toISOString() }, // Already sent
+                  error: null
+                })
+              })
+            })
+          };
+        }
+        return {};
+      });
+
+      const results = await schedulerService.checkForMissedAdminSummaries();
+
+      expect(results).toHaveLength(0);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should handle no missed rounds gracefully', async () => {
+      mockSupabaseClient.from.mockImplementation((table: string) => {
+        if (table === 'betting_rounds') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                gte: jest.fn().mockReturnValue({
+                  is: jest.fn().mockResolvedValue({
+                    data: [], // No missed rounds
+                    error: null
+                  })
+                })
+              })
+            })
+          };
+        }
+        return {};
+      });
+
+      const results = await schedulerService.checkForMissedAdminSummaries();
+
+      expect(results).toHaveLength(0);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+  });
+
   describe('getUpcomingEmailSchedule', () => {
     it('should return upcoming email events only', async () => {
       const now = new Date();
@@ -669,13 +827,27 @@ describe('Module exports', () => {
       errors: []
     });
 
-    mockSupabaseClient.from.mockReturnValue({
-      select: jest.fn().mockReturnThis(),
-      eq: jest.fn().mockReturnThis(),
-      order: jest.fn().mockResolvedValue({
-        data: [],
-        error: null
-      })
+    // Mock both open rounds and missed admin summaries queries
+    mockSupabaseClient.from.mockImplementation((table: string) => {
+      if (table === 'betting_rounds') {
+        return {
+          select: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              order: jest.fn().mockResolvedValue({
+                data: [],
+                error: null
+              }),
+              gte: jest.fn().mockReturnValue({
+                is: jest.fn().mockResolvedValue({
+                  data: [], // No missed admin summaries
+                  error: null
+                })
+              })
+            })
+          })
+        };
+      }
+      return {};
     });
 
     const results = await runEmailSchedulingCheck();

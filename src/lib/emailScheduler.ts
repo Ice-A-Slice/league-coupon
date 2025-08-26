@@ -73,6 +73,10 @@ export class EmailSchedulerService {
       const transparencyResults = await this.checkForTransparencyEmails();
       results.push(...transparencyResults);
 
+      // Check for scored rounds that missed their admin summary emails
+      const missedAdminResults = await this.checkForMissedAdminSummaries();
+      results.push(...missedAdminResults);
+
       logger.info(`EmailScheduler: Scheduling check complete. Processed ${results.length} opportunities.`);
       return results;
 
@@ -640,6 +644,107 @@ export class EmailSchedulerService {
          emailType: 'transparency' as const,
          errors: [errorMessage]
        }];
+    }
+  }
+
+  /**
+   * Check for scored rounds that need admin summary emails
+   * This handles rounds that were scored but never got their admin summary sent
+   */
+  async checkForMissedAdminSummaries(): Promise<SchedulingResult[]> {
+    logger.info('EmailScheduler: Checking for scored rounds needing admin summary emails...');
+    const results: SchedulingResult[] = [];
+    
+    try {
+      const supabase = createSupabaseServiceRoleClient();
+      
+      // Find rounds that:
+      // 1. Are scored (status = 'scored')
+      // 2. Were scored within last 24 hours (to avoid sending old summaries)
+      // 3. Haven't had admin summary sent (admin_summary_sent_at is NULL)
+      const twentyFourHoursAgo = new Date();
+      twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+      
+      const { data: missedRounds, error } = await supabase
+        .from('betting_rounds')
+        .select('id, name, scored_at, admin_summary_sent_at')
+        .eq('status', 'scored')
+        .gte('scored_at', twentyFourHoursAgo.toISOString())
+        .is('admin_summary_sent_at', null);
+      
+      if (error) {
+        logger.error('Failed to fetch rounds needing admin summary', { error });
+        throw error;
+      }
+      
+      logger.info(`Found ${missedRounds?.length || 0} scored rounds without admin summary`);
+      
+      // Process each round
+      for (const round of missedRounds || []) {
+        try {
+          logger.info(`Processing missed admin summary for round ${round.id} (${round.name})`);
+          
+          // Double-check admin_summary_sent_at is still null (prevent race conditions)
+          const { data: currentRound, error: checkError } = await supabase
+            .from('betting_rounds')
+            .select('admin_summary_sent_at')
+            .eq('id', round.id)
+            .single();
+          
+          if (checkError || currentRound?.admin_summary_sent_at) {
+            logger.warn(`Round ${round.id} admin summary already sent or error checking`, { 
+              error: checkError,
+              admin_summary_sent_at: currentRound?.admin_summary_sent_at 
+            });
+            continue;
+          }
+          
+          // Trigger admin summary email
+          const adminResult = await this.triggerAdminSummaryEmail(round.id);
+          
+          results.push({
+            success: adminResult.success,
+            message: adminResult.message,
+            roundId: round.id,
+            emailType: 'admin-summary' as const,
+            scheduledTime: new Date().toISOString(),
+            errors: adminResult.errors
+          });
+          
+          if (adminResult.success) {
+            logger.info(`Successfully sent admin summary for round ${round.id}`);
+          } else {
+            logger.error(`Failed to send admin summary for round ${round.id}`, {
+              errors: adminResult.errors
+            });
+          }
+          
+        } catch (roundError) {
+          const errorMessage = roundError instanceof Error ? roundError.message : 'Unknown error';
+          logger.error(`Error processing admin summary for round ${round.id}`, { error: errorMessage });
+          
+          results.push({
+            success: false,
+            message: `Failed to process admin summary for round ${round.id}: ${errorMessage}`,
+            roundId: round.id,
+            emailType: 'admin-summary' as const,
+            errors: [errorMessage]
+          });
+        }
+      }
+      
+      return results;
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('Failed to check for missed admin summaries', { error: errorMessage });
+      
+      return [{
+        success: false,
+        message: `Admin summary check failed: ${errorMessage}`,
+        emailType: 'admin-summary' as const,
+        errors: [errorMessage]
+      }];
     }
   }
 
