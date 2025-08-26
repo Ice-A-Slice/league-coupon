@@ -256,4 +256,129 @@ npm test -- --testPathPattern="winnerDeterminationService" --testNamePattern="sh
 - [ ] All 9 `cupWinnerDeterminationService` tests pass
 - [ ] All foreign key constraint issues resolved
 
-The debugging team has made **excellent progress** (22→15 failing tests), but the core **database state management issues** still need to be systematically addressed. 
+The debugging team has made **excellent progress** (22→15 failing tests), but the core **database state management issues** still need to be systematically addressed.
+
+## ⚠️ Critical Testing Pattern: Avoiding Mock Pollution
+
+### 🚨 **Recently Discovered Issue**: Global Mock Interference
+
+**What Happened**: Adding a seemingly innocent global mock in `emailScheduler.test.ts` caused unrelated integration tests to fail with database connection errors.
+
+**Root Cause**: 
+```typescript
+// This single line in ONE test file...
+jest.mock('@/utils/supabase/service');
+
+// ...affected ALL other test files that needed real Supabase connections
+// Integration tests got mocked clients instead of real database connections
+// Result: Foreign key constraint violations and seeding failures
+```
+
+### 🛡️ **Prevention Strategy**
+
+#### 1. **Understand Global Mock Scope**
+- `jest.mock()` affects the **entire Jest environment**, not just the declaring file
+- Even with `maxWorkers: 1` (sequential execution), mock pollution occurs during module loading
+- Integration tests expecting real services get mocked versions instead
+
+#### 2. **Proper Mock Management**
+```typescript
+// ✅ CORRECT: Always configure mocks properly
+jest.mock('@/utils/supabase/service');
+
+const mockSupabaseClient = { from: jest.fn() };
+const mockCreateSupabaseServiceRoleClient = createSupabaseServiceRoleClient as jest.MockedFunction<typeof createSupabaseServiceRoleClient>;
+
+describe('MyService', () => {
+  beforeEach(() => {
+    jest.clearAllMocks(); // 🔑 CRITICAL: Reset mock state
+    
+    // 🔑 CRITICAL: Configure mock behavior
+    mockCreateSupabaseServiceRoleClient.mockReturnValue(mockSupabaseClient as any);
+  });
+});
+```
+
+#### 3. **Warning Signs of Mock Pollution**
+- ❌ Integration tests failing after adding unit tests with mocks
+- ❌ Database connection errors in unrelated test files  
+- ❌ Foreign key constraint violations that "shouldn't be possible"
+- ❌ Tests pass in isolation but fail when run together
+
+#### 4. **Alternative Strategies**
+
+**Option A: Surgical Mocking (Preferred when possible)**
+```typescript
+// Instead of global mock, use spies in specific tests
+test('should handle database errors', () => {
+  const mockSupabase = jest.spyOn(supabaseService, 'createSupabaseServiceRoleClient')
+    .mockReturnValue(mockClient);
+  
+  // test code...
+  
+  mockSupabase.mockRestore(); // Clean up after test
+});
+```
+
+**Option B: Test Isolation**
+```typescript
+// For complex scenarios, isolate modules
+jest.isolateModules(() => {
+  const { EmailSchedulerService } = require('../emailScheduler');
+  // mocked version only available in this scope
+});
+```
+
+#### 5. **Testing Checklist Before Adding Global Mocks**
+
+- [ ] **Is this mock really necessary globally?** (Can I use `jest.spyOn()` instead?)
+- [ ] **Will this affect integration tests?** (Am I mocking a core infrastructure service?)
+- [ ] **Do I have proper mock cleanup?** (`jest.clearAllMocks()` in `beforeEach`)
+- [ ] **Did I test the full suite?** (Run all tests after adding the mock)
+
+#### 6. **Debugging Mock Pollution**
+
+```bash
+# Test the suspected file in isolation
+npm test -- --testPathPattern="myNewTest.test" --maxWorkers=1
+
+# Test the failing integration test in isolation  
+npm test -- --testPathPattern="integrationTest.test" --maxWorkers=1
+
+# Test both together to reproduce the interference
+npm test -- --testPathPattern="(myNewTest|integrationTest).test" --maxWorkers=1
+```
+
+#### 7. **Safe Mocking Patterns**
+
+```typescript
+// ✅ SAFE: Mock utilities that don't affect other tests
+jest.mock('@/utils/logger');
+
+// ⚠️ CAUTION: Mock shared infrastructure services
+jest.mock('@/utils/supabase/service'); // Needs careful management
+
+// ❌ DANGEROUS: Mock core React/Next.js modules
+jest.mock('next/router'); // Can break many tests
+```
+
+### 📋 **Mock Pollution Prevention Protocol**
+
+1. **Before Adding Global Mocks**:
+   - Consider if `jest.spyOn()` can work instead
+   - Check if the service is used by integration tests
+   - Plan proper cleanup strategy
+
+2. **When Adding Global Mocks**:
+   - Always include `jest.clearAllMocks()` in `beforeEach`
+   - Configure mock return values explicitly
+   - Test both unit and integration suites
+
+3. **After Adding Global Mocks**:
+   - Run full test suite to check for interference
+   - Monitor for "unrelated" test failures
+   - Document the mock's scope and purpose
+
+**Remember**: A seemingly innocent unit test mock can break production-critical integration tests. Always consider the global impact of your testing changes.
+
+--- 
