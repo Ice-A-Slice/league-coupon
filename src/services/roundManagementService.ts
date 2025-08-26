@@ -424,10 +424,22 @@ export const roundManagementService = {
 
       // --- Query Candidate Fixtures ---
       // Status = 'NS', Kickoff within window, Not already in a round
+      // TEMPORARY FIX (2025-08-26): Filter to Premier League only to prevent mixed-competition rounds
+      // TODO: Make this competition-aware by accepting competitionId parameter
+      // See ROUND_MANAGEMENT_FIX_PLAN.md for full implementation plan
       const { data: candidateFixturesData, error: queryError } = await supabase
         .from('fixtures')
-        .select('*')
+        .select(`
+          *,
+          rounds!inner (
+            season_id,
+            seasons!inner (
+              competition_id
+            )
+          )
+        `)
         .eq('status_short', 'NS')
+        .eq('rounds.seasons.competition_id', 1) // HARDCODED: Premier League only
         .not('id', 'in', `(${existingFixtureIds.join(',')})`); // Filter out existing IDs
 
       if (queryError) {
