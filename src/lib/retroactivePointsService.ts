@@ -301,19 +301,23 @@ export class RetroactivePointsService {
     };
 
     try {
-      // Find users created after the specified date
-      const { data: newUsers, error } = await this.client
-        .from('profiles')
-        .select('id, full_name, created_at')
-        .gte('created_at', afterDate)
-        .order('created_at', { ascending: true });
+      // Find users created after the specified date using auth.users
+      const { data: authResponse, error } = await this.client.auth.admin.listUsers({
+        page: 1,
+        perPage: 1000 // Adjust as needed
+      });
 
       if (error) {
-        const errorMessage = `Failed to fetch new users: ${error.message}`;
+        const errorMessage = `Failed to fetch users from auth: ${error.message}`;
         result.errors.push(errorMessage);
-        logger.error({ ...loggerContext, error: errorMessage }, 'Failed to fetch new users');
+        logger.error({ ...loggerContext, error: errorMessage }, 'Failed to fetch users from auth');
         return result;
       }
+
+      // Filter users created after the specified date
+      const newUsers = authResponse?.users?.filter(user => 
+        user.created_at && new Date(user.created_at) >= new Date(afterDate)
+      ) || [];
 
       if (!newUsers || newUsers.length === 0) {
         logger.info({ ...loggerContext }, 'No new users found after specified date');
@@ -322,8 +326,8 @@ export class RetroactivePointsService {
 
       logger.info({ ...loggerContext, userCount: newUsers.length }, 'Found new users to process');
 
-      // Process each user - type assertion is safe after null check above
-      for (const user of (newUsers as unknown) as Array<{ id: string; full_name?: string; created_at?: string }>) {
+      // Process each user from auth.users
+      for (const user of newUsers) {
         if (!user?.id) {
           continue;
         }
@@ -344,7 +348,7 @@ export class RetroactivePointsService {
           logger.info({ 
             ...loggerContext, 
             userId: user.id, 
-            userName: user.full_name,
+            userName: user.email || user.id,
             roundsProcessed: userResult.roundsProcessed,
             pointsAwarded: userResult.totalPointsAwarded
           }, 'Processed retroactive points for user');
@@ -461,20 +465,36 @@ export class RetroactivePointsService {
 
   private async verifyUserExists(userId: string): Promise<{ exists: boolean; createdAt?: string }> {
     try {
-      const { data: userProfile, error } = await this.client
+      // Primary: Check auth.users table (this is where users actually are)
+      try {
+        const { data: authUser, error: authError } = await this.client.auth.admin.getUserById(userId);
+        
+        if (!authError && authUser?.user) {
+          logger.info({ userId }, 'Found user in auth.users table');
+          return { 
+            exists: true, 
+            createdAt: authUser.user.created_at 
+          };
+        }
+      } catch (authError) {
+        logger.warn({ userId, authError }, 'Failed to check auth.users, trying profiles fallback');
+      }
+
+      // Fallback: Check profiles table 
+      const { data: userProfile, error: profileError } = await this.client
         .from('profiles')
-        .select('id, created_at')
+        .select('id')
         .eq('id', userId)
         .single();
 
-      if (error || !userProfile) {
-        return { exists: false };
+      if (!profileError && userProfile) {
+        logger.info({ userId }, 'Found user in profiles table (fallback)');
+        return { exists: true };
       }
 
-      return { 
-        exists: true, 
-        createdAt: ((userProfile as unknown) as { id: string; created_at?: string }).created_at 
-      };
+      logger.error({ userId, authError: 'not found', profileError: profileError?.message }, 'User not found in auth.users or profiles');
+      return { exists: false };
+
     } catch (error) {
       logger.error({ userId, error }, 'Error verifying user exists');
       return { exists: false };
