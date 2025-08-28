@@ -186,28 +186,36 @@ describe('RetroactivePointsService - Core Logic', () => {
 
   describe('Utility Methods', () => {
     it('should verify user exists method returns correct structure', async () => {
-      // Mock successful user lookup
-      const mockFrom = jest.fn().mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({
-              data: { id: 'user-123', created_at: '2025-08-20T00:00:00Z' },
-              error: null
-            })
-          })
+      // Mock successful auth.users lookup
+      const mockAuthAdmin = {
+        getUserById: jest.fn().mockResolvedValue({
+          data: { 
+            user: { 
+              id: 'user-123', 
+              created_at: '2025-08-20T00:00:00Z' 
+            } 
+          },
+          error: null
         })
-      });
-      mockClient.from.mockImplementation(mockFrom);
+      };
+      mockClient.auth = { admin: mockAuthAdmin };
 
       const result = await service['verifyUserExists']('user-123');
 
       expect(result.exists).toBe(true);
       expect(result.createdAt).toBe('2025-08-20T00:00:00Z');
-      expect(mockClient.from).toHaveBeenCalledWith('profiles');
+      expect(mockAuthAdmin.getUserById).toHaveBeenCalledWith('user-123');
     });
 
     it('should return false for non-existent user', async () => {
-      // Mock failed user lookup
+      // Mock failed auth.users lookup and profiles fallback
+      const mockAuthAdmin = {
+        getUserById: jest.fn().mockResolvedValue({
+          data: null,
+          error: { message: 'User not found' }
+        })
+      };
+      
       const mockFrom = jest.fn().mockReturnValue({
         select: jest.fn().mockReturnValue({
           eq: jest.fn().mockReturnValue({
@@ -218,12 +226,15 @@ describe('RetroactivePointsService - Core Logic', () => {
           })
         })
       });
+      
+      mockClient.auth = { admin: mockAuthAdmin };
       mockClient.from.mockImplementation(mockFrom);
 
       const result = await service['verifyUserExists']('non-existent');
 
       expect(result.exists).toBe(false);
       expect(result.createdAt).toBeUndefined();
+      expect(mockAuthAdmin.getUserById).toHaveBeenCalledWith('non-existent');
     });
   });
 
