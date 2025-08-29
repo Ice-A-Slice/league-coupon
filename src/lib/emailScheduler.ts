@@ -873,6 +873,25 @@ export class EmailSchedulerService {
       
       const supabase = createSupabaseServiceRoleClient();
       
+      // Check if delivery records already exist for this round
+      // This prevents creating duplicate records when the cron job runs multiple times
+      // within the 24-hour reminder window
+      const { data: existingDeliveries, error: checkError } = await supabase
+        .from('email_deliveries')
+        .select('id')
+        .eq('betting_round_id', roundId)
+        .eq('email_type', 'reminder')
+        .limit(1);
+        
+      if (checkError) {
+        throw new Error(`Failed to check existing deliveries: ${checkError.message}`);
+      }
+      
+      if (existingDeliveries && existingDeliveries.length > 0) {
+        logger.info(`EmailScheduler: Delivery records already exist for round ${roundId}, skipping setup`);
+        return;
+      }
+      
       // Get all active users who have made bets (same logic as reminder API)
       const { data: activeBettors, error: bettorsError } = await supabase
         .from('user_bets')

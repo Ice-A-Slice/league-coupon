@@ -279,6 +279,20 @@ describe('EmailSchedulerService', () => {
             })
           };
         }
+        if (table === 'email_deliveries') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                eq: jest.fn().mockReturnValue({
+                  limit: jest.fn().mockResolvedValue({
+                    data: [], // No existing delivery records
+                    error: null
+                  })
+                })
+              })
+            })
+          };
+        }
         return {};
       });
 
@@ -392,6 +406,20 @@ describe('EmailSchedulerService', () => {
               not: jest.fn().mockResolvedValue({
                 data: [{ user_id: 'user1' }, { user_id: 'user2' }],
                 error: null
+              })
+            })
+          };
+        }
+        if (table === 'email_deliveries') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                eq: jest.fn().mockReturnValue({
+                  limit: jest.fn().mockResolvedValue({
+                    data: [], // No existing delivery records
+                    error: null
+                  })
+                })
               })
             })
           };
