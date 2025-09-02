@@ -12,6 +12,8 @@ interface BettingRound {
   scoring_completed: boolean
   cup_activated_at: string | null
   is_bonus_round: boolean | null
+  status?: 'open' | 'closed' | 'scoring' | 'scored'
+  name?: string
 }
 
 interface Season {
@@ -71,7 +73,6 @@ export default function RoundsManagement() {
         const { data: roundsData, error: roundsError } = await supabase
           .from('betting_rounds')
           .select('*')
-          .eq('competition_id', current.competition_id)
           .order('id', { ascending: true })
 
         if (roundsError) throw roundsError
@@ -196,6 +197,65 @@ export default function RoundsManagement() {
     }
   }
 
+  const recalculateDynamicPoints = async (roundId: string, roundName?: string) => {
+    try {
+      setError(null)
+      setSuccessMessage(null)
+
+      const isAllRounds = roundId === 'all'
+      const confirmMessage = isAllRounds
+        ? 'Are you sure you want to recalculate dynamic points for ALL scored rounds?\n\n' +
+          'This will:\n' +
+          '• Clear ALL existing dynamic points\n' +
+          '• Recalculate points for all dynamic questions in all scored rounds\n' +
+          '• NOT affect game/match points'
+        : `Are you sure you want to recalculate dynamic points for ${roundName || `Round ${roundId}`}?\n\n` +
+          'This will:\n' +
+          '• Clear existing dynamic points for this round\n' +
+          '• Recalculate points for all dynamic questions\n' +
+          '• NOT affect game/match points'
+
+      const confirmRecalc = window.confirm(confirmMessage)
+
+      if (!confirmRecalc) return
+
+      setSuccessMessage(
+        isAllRounds 
+          ? 'Recalculating dynamic points for all scored rounds...' 
+          : `Recalculating dynamic points for ${roundName || `Round ${roundId}`}...`
+      )
+
+      const response = await fetch('/api/admin/recalculate-dynamic-points', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          roundId: isAllRounds ? null : parseInt(roundId) 
+        })
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        console.error('Recalculation API error:', result)
+        throw new Error(result.error || result.message || JSON.stringify(result) || 'Failed to recalculate')
+      }
+
+      setSuccessMessage(
+        isAllRounds
+          ? `Successfully recalculated dynamic points for all scored rounds. ` +
+            `${result.details?.roundsProcessed || 0} rounds processed, ` +
+            `${result.details?.usersUpdated || 0} total users updated.`
+          : `Successfully recalculated dynamic points for ${roundName || `Round ${roundId}`}. ` +
+            `${result.details?.usersUpdated || 0} users updated.`
+      )
+      
+      // No need to refresh data as this doesn't change the rounds table
+    } catch (err) {
+      console.error('Error recalculating dynamic points:', err)
+      setError(`Failed to recalculate dynamic points: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -278,6 +338,29 @@ export default function RoundsManagement() {
         </div>
       )}
 
+      <div className="bg-white shadow rounded-lg mb-6">
+        <div className="px-4 py-5 sm:px-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">
+            Dynamic Points Management
+          </h3>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-700">Recalculate All Dynamic Points</p>
+              <p className="text-sm text-gray-500">Recalculates dynamic question points for all scored rounds in the current season</p>
+            </div>
+            <button
+              onClick={() => recalculateDynamicPoints('all')}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Recalculate All
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div className="bg-white shadow rounded-lg">
         <div className="px-4 py-5 sm:px-6 border-b">
           <h3 className="text-lg font-medium text-gray-900">
@@ -304,7 +387,10 @@ export default function RoundsManagement() {
                   Cup Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
+                  Cup Actions
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Dynamic Points
                 </th>
               </tr>
             </thead>
@@ -319,13 +405,15 @@ export default function RoundsManagement() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex px-2 text-xs font-semibold rounded-full ${
-                      round.is_active 
-                        ? 'bg-green-100 text-green-800' 
-                        : round.scoring_completed 
+                      round.status === 'open' 
+                        ? 'bg-green-100 text-green-800'
+                        : round.status === 'scoring'
+                        ? 'bg-blue-100 text-blue-800' 
+                        : round.status === 'scored' 
                         ? 'bg-gray-100 text-gray-800'
                         : 'bg-yellow-100 text-yellow-800'
                     }`}>
-                      {round.is_active ? 'Active' : round.scoring_completed ? 'Completed' : 'Pending'}
+                      {round.status || 'Unknown'}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -364,6 +452,21 @@ export default function RoundsManagement() {
                       >
                         Activate Cup
                       </button>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    {round.status === 'scored' ? (
+                      <button
+                        onClick={() => recalculateDynamicPoints(round.id, round.name)}
+                        className="text-indigo-600 hover:text-indigo-900 font-medium cursor-pointer flex items-center gap-1"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Recalculate
+                      </button>
+                    ) : (
+                      <span className="text-gray-400 text-xs">Not scored</span>
                     )}
                   </td>
                 </tr>

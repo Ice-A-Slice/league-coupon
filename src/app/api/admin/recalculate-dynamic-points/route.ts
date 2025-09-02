@@ -1,48 +1,136 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { processAndStoreDynamicPointsForRound } from '@/lib/scoring';
-import { supabaseServerClient } from '@/lib/supabase/server';
+import { createClient } from '@supabase/supabase-js';
 
 export async function POST(request: NextRequest) {
   try {
     const { roundId } = await request.json();
     
-    if (!roundId) {
-      return NextResponse.json({ error: 'Round ID is required' }, { status: 400 });
+    // Create a proper service role client
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    
+    if (!supabaseUrl || !supabaseServiceRoleKey) {
+      console.error('Missing Supabase credentials');
+      return NextResponse.json({ 
+        error: 'Server configuration error - missing credentials' 
+      }, { status: 500 });
     }
     
-    console.log(`Recalculating dynamic points for round ${roundId}...`);
+    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
     
-    // Clear existing dynamic points for this round
-    await supabaseServerClient
-      .from('user_round_dynamic_points')
-      .delete()
-      .eq('betting_round_id', roundId);
-    
-    // Use the proper function to calculate dynamic points
-    const result = await processAndStoreDynamicPointsForRound(
-      roundId,
-      supabaseServerClient
-    );
-    
-    if (result.success) {
-      return NextResponse.json({ 
-        success: true, 
-        message: result.message,
-        details: result.details 
+    if (roundId === null || roundId === undefined) {
+      // Recalculate for all scored rounds
+      console.log('Recalculating dynamic points for all scored rounds...');
+      
+      // First, get all scored rounds
+      const { data: scoredRounds, error: roundsError } = await supabase
+        .from('betting_rounds')
+        .select('id')
+        .eq('status', 'scored')
+        .order('id', { ascending: true });
+        
+      if (roundsError) {
+        console.error('Error fetching scored rounds:', roundsError);
+        return NextResponse.json({ 
+          error: `Failed to fetch scored rounds: ${roundsError.message}` 
+        }, { status: 500 });
+      }
+      
+      if (!scoredRounds || scoredRounds.length === 0) {
+        return NextResponse.json({ 
+          success: true,
+          message: 'No scored rounds found to recalculate',
+          details: { roundsProcessed: 0, usersUpdated: 0 }
+        });
+      }
+      
+      // Clear ALL existing dynamic points
+      console.log(`Clearing all existing dynamic points for ${scoredRounds.length} scored rounds...`);
+      const { error: deleteError } = await supabase
+        .from('user_round_dynamic_points')
+        .delete()
+        .in('betting_round_id', scoredRounds.map(r => r.id));
+        
+      if (deleteError) {
+        console.error('Error clearing all existing points:', deleteError);
+        return NextResponse.json({ 
+          error: `Failed to clear existing points: ${deleteError.message}` 
+        }, { status: 500 });
+      }
+      
+      // Recalculate for each scored round
+      let totalUsersUpdated = 0;
+      let successfulRounds = 0;
+      
+      for (const round of scoredRounds) {
+        try {
+          console.log(`Processing round ${round.id}...`);
+          const result = await processAndStoreDynamicPointsForRound(round.id, supabase);
+          
+          if (result.success) {
+            totalUsersUpdated += result.details?.usersUpdated || 0;
+            successfulRounds++;
+          } else {
+            console.error(`Failed to process round ${round.id}:`, result.message);
+          }
+        } catch (error) {
+          console.error(`Error processing round ${round.id}:`, error);
+        }
+      }
+      
+      return NextResponse.json({
+        success: true,
+        message: `Processed ${successfulRounds}/${scoredRounds.length} scored rounds successfully`,
+        details: { 
+          roundsProcessed: successfulRounds,
+          totalRounds: scoredRounds.length,
+          usersUpdated: totalUsersUpdated 
+        }
       });
+      
     } else {
-      return NextResponse.json({ 
-        success: false, 
-        message: result.message,
-        error: result.details?.error 
-      }, { status: 500 });
+      // Recalculate for a specific round
+      console.log(`Recalculating dynamic points for round ${roundId}...`);
+      
+      // Clear existing dynamic points for this round
+      const { error: deleteError } = await supabase
+        .from('user_round_dynamic_points')
+        .delete()
+        .eq('betting_round_id', roundId);
+        
+      if (deleteError) {
+        console.error('Error clearing existing points:', deleteError);
+        return NextResponse.json({ 
+          error: `Failed to clear existing points: ${deleteError.message}` 
+        }, { status: 500 });
+      }
+      
+      // Use the proper function to calculate dynamic points
+      const result = await processAndStoreDynamicPointsForRound(roundId, supabase);
+      
+      if (result.success) {
+        return NextResponse.json({ 
+          success: true, 
+          message: result.message,
+          details: result.details 
+        });
+      } else {
+        console.error('Recalculation failed:', result.message, result.details);
+        return NextResponse.json({ 
+          success: false, 
+          message: result.message,
+          error: result.details?.error || result.message
+        }, { status: 500 });
+      }
     }
     
   } catch (error) {
     console.error('Error in recalculate-dynamic-points:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ 
       success: false, 
-      error: 'Internal server error' 
+      error: `Internal server error: ${errorMessage}`
     }, { status: 500 });
   }
 }
