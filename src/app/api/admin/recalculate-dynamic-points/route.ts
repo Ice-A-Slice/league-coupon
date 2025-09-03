@@ -20,14 +20,16 @@ export async function POST(request: NextRequest) {
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
     
     if (roundId === null || roundId === undefined) {
-      // Recalculate for all scored rounds in current season/competition
-      console.log('Recalculating dynamic points for all scored rounds in current season...');
+      // Recalculate for all scored rounds in competition 1, season 2025
+      console.log('Recalculating dynamic points for all scored rounds in competition 1, season 2025...');
       
-      // First, get the current season
+      // First, get the current season with explicit competition 1 and year 2025
       const { data: currentSeason, error: seasonError } = await supabase
         .from('seasons')
-        .select('competition_id')
+        .select('competition_id, api_season_year')
         .eq('is_current', true)
+        .eq('competition_id', 1)
+        .eq('api_season_year', 2025)
         .single();
         
       if (seasonError || !currentSeason) {
@@ -37,12 +39,12 @@ export async function POST(request: NextRequest) {
         }, { status: 500 });
       }
       
-      // Get scored rounds for current competition only
+      // Get scored rounds for competition 1 only
       const { data: scoredRounds, error: roundsError } = await supabase
         .from('betting_rounds')
         .select('id')
         .eq('status', 'scored')
-        .eq('competition_id', currentSeason.competition_id)
+        .eq('competition_id', 1)
         .order('id', { ascending: true });
         
       if (roundsError) {
@@ -60,8 +62,8 @@ export async function POST(request: NextRequest) {
         });
       }
       
-      // Clear existing dynamic points for current season rounds
-      console.log(`Clearing existing dynamic points for ${scoredRounds.length} scored rounds in current season...`);
+      // Clear existing dynamic points for competition 1 rounds
+      console.log(`Clearing existing dynamic points for ${scoredRounds.length} scored rounds in competition 1...`);
       const { error: deleteError } = await supabase
         .from('user_round_dynamic_points')
         .delete()
