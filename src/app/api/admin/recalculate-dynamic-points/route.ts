@@ -20,14 +20,29 @@ export async function POST(request: NextRequest) {
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
     
     if (roundId === null || roundId === undefined) {
-      // Recalculate for all scored rounds
-      console.log('Recalculating dynamic points for all scored rounds...');
+      // Recalculate for all scored rounds in current season/competition
+      console.log('Recalculating dynamic points for all scored rounds in current season...');
       
-      // First, get all scored rounds
+      // First, get the current season
+      const { data: currentSeason, error: seasonError } = await supabase
+        .from('seasons')
+        .select('competition_id')
+        .eq('is_current', true)
+        .single();
+        
+      if (seasonError || !currentSeason) {
+        console.error('Error fetching current season:', seasonError);
+        return NextResponse.json({ 
+          error: `Failed to fetch current season: ${seasonError?.message || 'No current season found'}` 
+        }, { status: 500 });
+      }
+      
+      // Get scored rounds for current competition only
       const { data: scoredRounds, error: roundsError } = await supabase
         .from('betting_rounds')
         .select('id')
         .eq('status', 'scored')
+        .eq('competition_id', currentSeason.competition_id)
         .order('id', { ascending: true });
         
       if (roundsError) {
@@ -45,8 +60,8 @@ export async function POST(request: NextRequest) {
         });
       }
       
-      // Clear ALL existing dynamic points
-      console.log(`Clearing all existing dynamic points for ${scoredRounds.length} scored rounds...`);
+      // Clear existing dynamic points for current season rounds
+      console.log(`Clearing existing dynamic points for ${scoredRounds.length} scored rounds in current season...`);
       const { error: deleteError } = await supabase
         .from('user_round_dynamic_points')
         .delete()
