@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { processAndStoreDynamicPointsForRound } from '@/lib/scoring';
 import { createClient } from '@supabase/supabase-js';
 
+export const maxDuration = 60; // Set maximum duration to 60 seconds for Vercel
+
 export async function POST(request: NextRequest) {
   try {
     const { roundId } = await request.json();
@@ -63,36 +65,51 @@ export async function POST(request: NextRequest) {
       }
       
       // Clear existing dynamic points for competition 1 rounds
-      console.log(`Clearing existing dynamic points for ${scoredRounds.length} scored rounds in competition 1...`);
-      const { error: deleteError } = await supabase
-        .from('user_round_dynamic_points')
-        .delete()
-        .in('betting_round_id', scoredRounds.map(r => r.id));
-        
-      if (deleteError) {
-        console.error('Error clearing all existing points:', deleteError);
-        return NextResponse.json({ 
-          error: `Failed to clear existing points: ${deleteError.message}` 
-        }, { status: 500 });
-      }
+      console.log(`Found ${scoredRounds.length} scored rounds in competition 1:`, scoredRounds.map(r => r.id));
       
-      // Recalculate for each scored round
+      // Process in smaller batches to avoid timeout
+      const BATCH_SIZE = 2; // Process 2 rounds at a time
       let totalUsersUpdated = 0;
       let successfulRounds = 0;
       
-      for (const round of scoredRounds) {
-        try {
-          console.log(`Processing round ${round.id}...`);
-          const result = await processAndStoreDynamicPointsForRound(round.id, supabase);
+      for (let i = 0; i < scoredRounds.length; i += BATCH_SIZE) {
+        const batch = scoredRounds.slice(i, i + BATCH_SIZE);
+        const batchIds = batch.map(r => r.id);
+        
+        console.log(`Processing batch ${i / BATCH_SIZE + 1}: rounds ${batchIds.join(', ')}`);
+        
+        // Clear existing dynamic points for this batch
+        const { error: deleteError } = await supabase
+          .from('user_round_dynamic_points')
+          .delete()
+          .in('betting_round_id', batchIds);
           
-          if (result.success) {
-            totalUsersUpdated += result.details?.usersUpdated || 0;
-            successfulRounds++;
-          } else {
-            console.error(`Failed to process round ${round.id}:`, result.message);
+        if (deleteError) {
+          console.error('Error clearing points for batch:', deleteError);
+          continue; // Skip this batch but continue with others
+        }
+        
+        // Process each round in the batch
+        for (const round of batch) {
+          try {
+            console.log(`Processing round ${round.id}...`);
+            const result = await processAndStoreDynamicPointsForRound(round.id, supabase);
+            
+            if (result.success) {
+              totalUsersUpdated += result.details?.usersUpdated || 0;
+              successfulRounds++;
+              console.log(`Round ${round.id} processed successfully`);
+            } else {
+              console.error(`Failed to process round ${round.id}:`, result.message);
+            }
+          } catch (error) {
+            console.error(`Error processing round ${round.id}:`, error);
           }
-        } catch (error) {
-          console.error(`Error processing round ${round.id}:`, error);
+        }
+        
+        // Small delay between batches to prevent overwhelming the system
+        if (i + BATCH_SIZE < scoredRounds.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
       

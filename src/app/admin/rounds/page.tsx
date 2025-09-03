@@ -233,7 +233,17 @@ export default function RoundsManagement() {
         })
       })
 
-      const result = await response.json()
+      let result
+      const contentType = response.headers.get('content-type')
+      
+      if (contentType && contentType.includes('application/json')) {
+        result = await response.json()
+      } else {
+        // Handle non-JSON responses (like HTML error pages)
+        const text = await response.text()
+        console.error('Non-JSON response:', text)
+        throw new Error('Server error: Request timed out or failed. Try processing individual rounds instead.')
+      }
 
       if (!response.ok) {
         console.error('Recalculation API error:', result)
