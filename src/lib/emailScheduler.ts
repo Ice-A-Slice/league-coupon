@@ -3,7 +3,7 @@ import 'server-only';
 import { logger } from '@/utils/logger';
 import { roundCompletionDetectorService } from '@/services/roundCompletionDetectorService';
 import { createSupabaseServiceRoleClient } from '@/utils/supabase/service';
-import { emailDeliveryService, type EmailDelivery } from './emailDeliveryService';
+import { emailDeliveryService, type EmailDelivery, type EmailType } from './emailDeliveryService';
 // Removed unused import
 
 /**
@@ -322,8 +322,11 @@ export class EmailSchedulerService {
           const reminderSendTime = new Date(earliestKickoff.getTime() - (this.REMINDER_HOURS_BEFORE * 60 * 60 * 1000));
           
           // Transparency email is due when the round has started (first game kicked off)
-          // Allow a larger buffer (30 minutes) after kickoff to account for API timeouts and retries
-          const transparencyBufferMinutes = 30;
+          // Allow a larger buffer (60 minutes) after kickoff to account for:
+          // 1. 30-minute cron job intervals (game at 13:30, cron at 14:00)
+          // 2. Rounds that might change status from 'open' to 'scoring'
+          // 3. API timeouts and retries
+          const transparencyBufferMinutes = 60;
           const transparencyDueTime = new Date(earliestKickoff.getTime() + (transparencyBufferMinutes * 60 * 1000));
           const isTransparencyDue = now >= earliestKickoff && now <= transparencyDueTime;
           
@@ -568,6 +571,70 @@ export class EmailSchedulerService {
   }
 
   /**
+   * Get timing information for rounds eligible for transparency emails
+   * This includes both 'open' and 'scoring' status rounds that have started
+   */
+  async getTransparencyEligibleRounds(): Promise<RoundTiming[]> {
+    logger.debug('EmailScheduler: Fetching rounds eligible for transparency emails...');
+    
+    try {
+      const supabase = createSupabaseServiceRoleClient();
+      const now = new Date();
+
+      const { data: eligibleRounds, error } = await supabase
+        .from('betting_rounds')
+        .select('id, name, status, earliest_fixture_kickoff, latest_fixture_kickoff, transparency_sent_at')
+        .in('status', ['open', 'scoring']) // Include both open and scoring rounds
+        .not('earliest_fixture_kickoff', 'is', null)
+        .not('latest_fixture_kickoff', 'is', null)
+        .is('transparency_sent_at', null) // Haven't sent transparency yet
+        .order('earliest_fixture_kickoff', { ascending: true });
+
+      if (error) {
+        logger.error('EmailScheduler: Error fetching transparency eligible rounds', { error: error.message });
+        throw new Error(`Failed to fetch transparency eligible rounds: ${error.message}`);
+      }
+
+      if (!eligibleRounds || eligibleRounds.length === 0) {
+        logger.debug('EmailScheduler: No transparency eligible rounds found');
+        return [];
+      }
+
+      // Calculate timing information for each round
+      const timings: RoundTiming[] = eligibleRounds
+        .map(round => {
+          const earliestKickoff = new Date(round.earliest_fixture_kickoff!);
+          const reminderSendTime = new Date(earliestKickoff.getTime() - (this.REMINDER_HOURS_BEFORE * 60 * 60 * 1000));
+          
+          // Check if transparency email is due (60 minute window after kickoff)
+          const transparencyBufferMinutes = 60;
+          const transparencyDueTime = new Date(earliestKickoff.getTime() + (transparencyBufferMinutes * 60 * 1000));
+          const isTransparencyDue = now >= earliestKickoff && now <= transparencyDueTime;
+          
+          return {
+            roundId: round.id,
+            roundName: round.name,
+            status: round.status as 'open' | 'scoring' | 'scored',
+            earliestKickoff: round.earliest_fixture_kickoff!,
+            latestKickoff: round.latest_fixture_kickoff!,
+            reminderSendTime: reminderSendTime.toISOString(),
+            isReminderDue: false, // Not relevant for transparency check
+            isSummaryDue: false,
+            isTransparencyDue
+          };
+        })
+        .filter(timing => timing.isTransparencyDue); // Only return rounds that are due
+
+      logger.debug(`EmailScheduler: Found ${timings.length} rounds eligible for transparency emails`);
+      return timings;
+
+    } catch (error) {
+      logger.error('EmailScheduler: Failed to get transparency eligible rounds', { error });
+      throw error;
+    }
+  }
+
+  /**
    * Check for rounds that have just started and need transparency emails
    */
   async checkForTransparencyEmails(): Promise<SchedulingResult[]> {
@@ -575,67 +642,73 @@ export class EmailSchedulerService {
     const results: SchedulingResult[] = [];
 
     try {
-      // Get timing information for open rounds
-      const roundTimings = await this.getOpenRoundTimings();
+      // Get timing information for transparency eligible rounds (open or scoring status)
+      const roundTimings = await this.getTransparencyEligibleRounds();
       
       // Check each round for transparency email eligibility (round just started)
       for (const timing of roundTimings) {
-        if (timing.isTransparencyDue) {
-          try {
-            logger.info(`EmailScheduler: Processing transparency email for started round ${timing.roundId}`, {
-              roundName: timing.roundName,
-              earliestKickoff: timing.earliestKickoff
+        try {
+          logger.info(`EmailScheduler: Processing transparency email for started round ${timing.roundId}`, {
+            roundName: timing.roundName,
+            earliestKickoff: timing.earliestKickoff,
+            status: timing.status
+          });
+
+          // Set up individual delivery tracking for transparency emails
+          await this.setupTransparencyDeliveryTracking(timing.roundId);
+          
+          // Get pending transparency deliveries for this round
+          const pendingDeliveries = await emailDeliveryService.getPendingDeliveries({
+            email_type: 'transparency' as EmailType,
+            betting_round_id: timing.roundId,
+            max_retry_count: 3
+          });
+          
+          if (pendingDeliveries.length === 0) {
+            logger.info(`EmailScheduler: No pending transparency deliveries for round ${timing.roundId}`);
+            results.push({
+              success: true,
+              message: `All transparency emails already sent for round ${timing.roundId}`,
+              roundId: timing.roundId,
+              emailType: 'transparency' as const,
+              scheduledTime: new Date().toISOString()
             });
-
-            // Check if transparency email was already sent
-            const alreadySent = await this.wasTransparencyAlreadySent(timing.roundId);
-            
-            if (alreadySent) {
-              logger.info(`EmailScheduler: Transparency email already sent for round ${timing.roundId}`);
-                             results.push({
-                 success: true,
-                 message: `Transparency email already sent for round ${timing.roundId}`,
-                 roundId: timing.roundId,
-                 emailType: 'transparency' as const,
-                 scheduledTime: timing.earliestKickoff
-               });
-              continue;
-            }
-
-            // Trigger transparency email
-            const triggerResult = await this.triggerTransparencyEmail(timing.roundId);
-            
-                         results.push({
-               success: triggerResult.success,
-               message: triggerResult.message,
-               roundId: timing.roundId,
-               emailType: 'transparency' as const,
-               scheduledTime: new Date().toISOString(),
-               errors: triggerResult.errors
-             });
-
-            if (triggerResult.success) {
-              logger.info(`EmailScheduler: Successfully triggered transparency email for round ${timing.roundId}`);
-              // Mark transparency as sent
-              await this.markTransparencyAsSent(timing.roundId);
-            } else {
-              logger.error(`EmailScheduler: Failed to trigger transparency email for round ${timing.roundId}`, {
-                errors: triggerResult.errors
-              });
-            }
-
-          } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            logger.error(`EmailScheduler: Error processing transparency for round ${timing.roundId}`, { error: errorMessage });
-            
-                         results.push({
-               success: false,
-               message: `Failed to process transparency for round ${timing.roundId}: ${errorMessage}`,
-               roundId: timing.roundId,
-               emailType: 'transparency' as const,
-               errors: [errorMessage]
-             });
+            continue;
           }
+          
+          logger.info(`EmailScheduler: Found ${pendingDeliveries.length} pending transparency deliveries for round ${timing.roundId}`);
+
+          // Trigger transparency email for pending users only
+          const triggerResult = await this.triggerTransparencyEmailWithDeliveryTracking(timing.roundId, pendingDeliveries);
+            
+          results.push({
+            success: triggerResult.success,
+            message: triggerResult.message,
+            roundId: timing.roundId,
+            emailType: 'transparency' as const,
+            scheduledTime: new Date().toISOString(),
+            errors: triggerResult.errors
+          });
+
+          if (triggerResult.success) {
+            logger.info(`EmailScheduler: Transparency email process completed for round ${timing.roundId} (${triggerResult.emailsSent || 0} deliveries attempted)`);
+          } else {
+            logger.error(`EmailScheduler: Failed to process transparency emails for round ${timing.roundId}`, {
+              errors: triggerResult.errors
+            });
+          }
+
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          logger.error(`EmailScheduler: Error processing transparency for round ${timing.roundId}`, { error: errorMessage });
+          
+          results.push({
+            success: false,
+            message: `Failed to process transparency for round ${timing.roundId}: ${errorMessage}`,
+            roundId: timing.roundId,
+            emailType: 'transparency' as const,
+            errors: [errorMessage]
+          });
         }
       }
 
@@ -760,20 +833,29 @@ export class EmailSchedulerService {
   }
 
   /**
-   * Trigger a transparency email for a started round
+   * Trigger transparency emails with individual delivery tracking
+   * Similar to the reminder email approach
    */
-  async triggerTransparencyEmail(roundId: number): Promise<EmailTriggerResult> {
-    logger.info(`EmailScheduler: Triggering transparency email for round ${roundId}`);
+  async triggerTransparencyEmailWithDeliveryTracking(
+    roundId: number, 
+    pendingDeliveries: EmailDelivery[]
+  ): Promise<EmailTriggerResult> {
+    logger.info(`EmailScheduler: Triggering transparency emails with delivery tracking for round ${roundId} (${pendingDeliveries.length} pending)`);
 
     try {
+      // Extract user IDs from pending deliveries
+      const userIds = pendingDeliveries.map(delivery => delivery.user_id);
+      
       const response = await fetch(`${this.API_BASE_URL}/api/send-transparency`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.CRON_SECRET}`, // Use cron secret for internal API calls
+          'Authorization': `Bearer ${process.env.CRON_SECRET}`,
         },
         body: JSON.stringify({
-          round_id: roundId
+          round_id: roundId,
+          user_ids: userIds, // Only send to pending users
+          delivery_tracking: true // Flag to enable delivery tracking in API
         })
       });
 
@@ -786,17 +868,17 @@ export class EmailSchedulerService {
       
       return {
         success: true,
-        message: `Transparency email triggered successfully for round ${roundId}`,
-        emailsSent: result.emails_sent || 0
+        message: `Transparency emails triggered with delivery tracking for round ${roundId}`,
+        emailsSent: result.successCount || result.emails_sent || 0
       };
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      logger.error(`EmailScheduler: Failed to trigger transparency email for round ${roundId}`, { error: errorMessage });
+      logger.error(`EmailScheduler: Failed to trigger transparency emails with delivery tracking for round ${roundId}`, { error: errorMessage });
       
       return {
         success: false,
-        message: `Failed to trigger transparency email for round ${roundId}`,
+        message: `Failed to trigger transparency emails with delivery tracking for round ${roundId}`,
         errors: [errorMessage]
       };
     }
@@ -936,6 +1018,82 @@ export class EmailSchedulerService {
       
     } catch (error) {
       logger.error(`EmailScheduler: Failed to setup reminder delivery tracking for round ${roundId}`, { error });
+      throw error;
+    }
+  }
+
+  /**
+   * Set up delivery tracking records for transparency emails
+   * Creates records for all users who made predictions for this round
+   */
+  async setupTransparencyDeliveryTracking(roundId: number): Promise<void> {
+    try {
+      logger.debug(`EmailScheduler: Setting up transparency delivery tracking for round ${roundId}`);
+      
+      const supabase = createSupabaseServiceRoleClient();
+      
+      // Check if delivery records already exist for this round
+      const { data: existingDeliveries, error: checkError } = await supabase
+        .from('email_deliveries')
+        .select('id')
+        .eq('betting_round_id', roundId)
+        .eq('email_type', 'transparency')
+        .limit(1);
+        
+      if (checkError) {
+        throw new Error(`Failed to check existing deliveries: ${checkError.message}`);
+      }
+      
+      if (existingDeliveries && existingDeliveries.length > 0) {
+        logger.info(`EmailScheduler: Delivery records already exist for round ${roundId}, skipping setup`);
+        return;
+      }
+      
+      // Get all users who have made predictions for this round
+      const { data: userPredictions, error: predictionsError } = await supabase
+        .from('user_season_answers')
+        .select('user_id')
+        .eq('betting_round_id', roundId)
+        .not('user_id', 'is', null);
+        
+      if (predictionsError) {
+        throw new Error(`Failed to fetch user predictions: ${predictionsError.message}`);
+      }
+      
+      const userIds = [...new Set(userPredictions?.map(p => p.user_id) || [])];
+      
+      if (userIds.length === 0) {
+        logger.info(`EmailScheduler: No users with predictions found for transparency delivery tracking setup`);
+        return;
+      }
+      
+      // Get auth users (for emails) filtered to users with predictions
+      const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
+      if (authError) {
+        throw new Error(`Failed to fetch users from auth: ${authError.message}`);
+      }
+      
+      // Filter to users with predictions and emails
+      const targetUsers = authUsers.users.filter(user => 
+        user.email && userIds.includes(user.id)
+      );
+      
+      // Create delivery tracking records
+      const deliveryRecords = targetUsers.map(user => ({
+        user_id: user.id,
+        betting_round_id: roundId,
+        email_type: 'transparency' as const,
+        recipient_email: user.email!,
+        max_retries: 3
+      }));
+      
+      if (deliveryRecords.length > 0) {
+        await emailDeliveryService.createDeliveryRecords(deliveryRecords);
+        logger.info(`EmailScheduler: Set up transparency delivery tracking for ${deliveryRecords.length} users for round ${roundId}`);
+      }
+      
+    } catch (error) {
+      logger.error(`EmailScheduler: Failed to setup transparency delivery tracking for round ${roundId}`, { error });
       throw error;
     }
   }

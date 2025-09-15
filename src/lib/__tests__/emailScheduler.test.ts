@@ -15,6 +15,11 @@ global.fetch = jest.fn();
 // Create a mock Supabase client for testing
 interface MockSupabaseClient {
   from: jest.MockedFunction<(table: string) => unknown>;
+  auth?: {
+    admin: {
+      listUsers: jest.MockedFunction<() => Promise<{ data: { users: Array<{ id: string; email: string }> }; error: null }>>;
+    };
+  };
 }
 
 const mockSupabaseClient: MockSupabaseClient = {
@@ -48,14 +53,14 @@ describe('EmailSchedulerService', () => {
   });
 
   describe('checkAndScheduleEmails', () => {
-    it('should check both summary and reminder emails successfully', async () => {
-      // Mock successful responses for both checks
+    it('should check summary, admin-summary, and transparency emails successfully', async () => {
+      // Mock successful responses for all checks
       mockRoundCompletionDetectorService.detectAndMarkCompletedRounds.mockResolvedValue({
         completedRoundIds: [1],
         errors: []
       });
 
-      // Mock open rounds query and missed admin summaries query
+      // Mock open rounds query, missed admin summaries query, and transparency eligible rounds query
       mockSupabaseClient.from.mockImplementation((table: string) => {
         if (table === 'betting_rounds') {
           return {
@@ -69,6 +74,18 @@ describe('EmailSchedulerService', () => {
                   is: jest.fn().mockResolvedValue({
                     data: [], // No missed admin summaries
                     error: null
+                  })
+                })
+              }),
+              in: jest.fn().mockReturnValue({
+                not: jest.fn().mockReturnValue({
+                  not: jest.fn().mockReturnValue({
+                    is: jest.fn().mockReturnValue({
+                      order: jest.fn().mockResolvedValue({
+                        data: [], // No transparency eligible rounds
+                        error: null
+                      })
+                    })
                   })
                 })
               })
@@ -92,6 +109,7 @@ describe('EmailSchedulerService', () => {
 
       const results = await schedulerService.checkAndScheduleEmails();
 
+      // Should only return 2 results (summary + admin-summary) when no transparency rounds are found
       expect(results).toHaveLength(2);
       expect(results[0].emailType).toBe('summary');
       expect(results[0].success).toBe(true);
@@ -106,7 +124,7 @@ describe('EmailSchedulerService', () => {
         new Error('Database connection failed')
       );
 
-      // Mock missed admin summaries query to fail
+      // Mock missed admin summaries query to fail and transparency query to fail
       mockSupabaseClient.from.mockImplementation((table: string) => {
         if (table === 'betting_rounds') {
           return {
@@ -121,6 +139,14 @@ describe('EmailSchedulerService', () => {
                     data: null,
                     error: { message: 'supabase.from(...).select(...).eq(...).gte is not a function' }
                   })
+                }),
+                in: jest.fn().mockReturnValue({
+                  not: jest.fn().mockReturnValue({
+                    order: jest.fn().mockResolvedValue({
+                      data: null,
+                      error: { message: 'supabase.from(...).select(...).in is not a function' }
+                    })
+                  })
                 })
               })
             })
@@ -131,12 +157,15 @@ describe('EmailSchedulerService', () => {
 
       const results = await schedulerService.checkAndScheduleEmails();
 
-      expect(results).toHaveLength(2);
+      expect(results).toHaveLength(3);
       expect(results[0].success).toBe(false);
       expect(results[0].message).toContain('Summary email check failed');
       expect(results[0].errors).toContain('Database connection failed');
       expect(results[1].success).toBe(false);
-      expect(results[1].message).toContain('Admin summary check failed');
+      expect(results[1].message).toContain('Transparency email check failed');
+      expect(results[1].errors).toContain('supabase.from(...).select(...).in is not a function');
+      expect(results[2].success).toBe(false);
+      expect(results[2].message).toContain('Admin summary check failed');
     });
   });
 
