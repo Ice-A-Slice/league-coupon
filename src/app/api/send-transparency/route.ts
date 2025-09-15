@@ -8,6 +8,7 @@ import { TransparencyEmail } from '@/components/emails/TransparencyEmail';
 import { getAllUsersPredictionsForRound } from '@/lib/userDataAggregationService';
 import { sendEmail } from '@/lib/resend';
 import { emailMonitoringService } from '@/lib/emailMonitoringService';
+import { emailDeliveryService } from '@/lib/emailDeliveryService';
 import { getSuperAdminEmails } from '@/lib/adminEmails';
 import { logger } from '@/utils/logger';
 
@@ -17,6 +18,7 @@ import { logger } from '@/utils/logger';
 const transparencyEmailRequestSchema = z.object({
   round_id: z.number(),
   user_ids: z.array(z.string().uuid()).optional(), // If provided, send only to these users
+  delivery_tracking: z.boolean().optional().default(false), // Enable individual delivery tracking
 });
 
 /**
@@ -76,7 +78,7 @@ export async function POST(request: Request) {
     // Parse and validate request body
     const body = await request.json();
     const validatedData = transparencyEmailRequestSchema.parse(body);
-    const { round_id, user_ids } = validatedData;
+    const { round_id, user_ids, delivery_tracking } = validatedData;
 
     logger.info(`Processing transparency email for round ${round_id}`);
 
@@ -198,6 +200,24 @@ export async function POST(request: Request) {
           }
 
           logger.info(`Transparency email sent successfully to ${authUser.user.email}`);
+
+          // Update delivery tracking if enabled
+          if (delivery_tracking) {
+            try {
+              await emailDeliveryService.markAsSent(
+                user.userId,
+                round_id,
+                'transparency',
+                emailResponse.id || 'unknown',
+                authUser.user.email
+              );
+            } catch (trackingError) {
+              logger.warn(`TransparencyEmailAPI: Failed to update delivery tracking for user ${user.userId}`, {
+                trackingError: trackingError instanceof Error ? trackingError.message : 'Unknown error'
+              });
+              // Don't fail the email send if tracking update fails
+            }
+          }
 
           return {
             userId: user.userId,
