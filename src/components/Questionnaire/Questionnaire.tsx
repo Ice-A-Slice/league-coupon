@@ -10,6 +10,7 @@ import { validatePrediction } from "@/schemas/questionnaireSchema";
 import ValidationStatusIndicator from '@/components/ui/ValidationStatusIndicator';
 import { cn } from '@/lib/utils';
 import { useLocalStorage } from '@/lib/hooks/useLocalStorage';
+import { AlertTriangle } from 'lucide-react';
 // import { Combobox } from '@headlessui/react';
 // import { CheckIcon, ChevronUpDownIcon } from '@heroicons/react/20/solid';
 
@@ -159,6 +160,23 @@ const Questionnaire = forwardRef<QuestionnaireRef, QuestionnaireProps>(({
   // Content for the questionnaire
   const questionnaireContent = (
     <div className="px-3 sm:px-4 py-3 sm:py-5 space-y-3 sm:space-y-4 w-full [&>*]:!border-b-0">
+      {/* Last Chance Alert Banner - TEMPORARY: Remove or comment out this entire block after the deadline round */}
+      {/* TODO: Comment out or remove this alert after the last round for editing dynamic questions */}
+      <div className="bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 p-4 mb-4 rounded-r-md">
+        <div className="flex items-start">
+          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 mr-3 flex-shrink-0" />
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-200 mb-1">
+              Last round with the questions!
+            </h3>
+            <p className="text-sm text-amber-700 dark:text-amber-300">
+              Dear friends remember that this is the final round where you can add or edit your answers for the seasons questions below.
+            </p>
+          </div>
+        </div>
+      </div>
+      {/* END: Last Chance Alert Banner */}
+      
       {/* League Winner Selection - Reverted to use TeamSelect */}
       <div className="pt-3 sm:pt-4 first:pt-0">
         <div className="flex items-center mb-1">
