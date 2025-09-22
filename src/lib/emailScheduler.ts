@@ -1049,31 +1049,31 @@ export class EmailSchedulerService {
         return;
       }
       
-      // Get all users who have made predictions for this round
-      const { data: userPredictions, error: predictionsError } = await supabase
-        .from('user_season_answers')
+      // Get all active users who have made bets (same logic as reminder emails)
+      // This sends to everyone who has ever bet, not just this round
+      const { data: activeBettors, error: predictionsError } = await supabase
+        .from('user_bets')
         .select('user_id')
-        .eq('betting_round_id', roundId)
         .not('user_id', 'is', null);
         
       if (predictionsError) {
-        throw new Error(`Failed to fetch user predictions: ${predictionsError.message}`);
+        throw new Error(`Failed to fetch active bettors: ${predictionsError.message}`);
       }
       
-      const userIds = [...new Set(userPredictions?.map(p => p.user_id) || [])];
+      const userIds = [...new Set(activeBettors?.map(p => p.user_id) || [])];
       
       if (userIds.length === 0) {
-        logger.info(`EmailScheduler: No users with predictions found for transparency delivery tracking setup`);
+        logger.info(`EmailScheduler: No active bettors found for transparency delivery tracking setup`);
         return;
       }
       
-      // Get auth users (for emails) filtered to users with predictions
+      // Get auth users (for emails) filtered to active bettors
       const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
       if (authError) {
         throw new Error(`Failed to fetch users from auth: ${authError.message}`);
       }
       
-      // Filter to users with predictions and emails
+      // Filter to active bettors with emails
       const targetUsers = authUsers.users.filter(user => 
         user.email && userIds.includes(user.id)
       );
