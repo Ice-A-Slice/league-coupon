@@ -1049,9 +1049,9 @@ export class EmailSchedulerService {
         return;
       }
       
-      // Get all users who have made predictions for this round
+      // Get all users who have made predictions (bets) for this round
       const { data: userPredictions, error: predictionsError } = await supabase
-        .from('user_season_answers')
+        .from('user_bets')
         .select('user_id')
         .eq('betting_round_id', roundId)
         .not('user_id', 'is', null);
