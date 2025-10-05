@@ -7,6 +7,7 @@ const publicRoutes = [
   '/',
   '/auth/signin',
   '/auth/callback',
+  '/auth/reset-password',
   '/auth/access-denied',
   '/auth/auth-code-error',
   '/api/health',
