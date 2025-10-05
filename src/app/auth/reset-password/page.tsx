@@ -26,28 +26,32 @@ export default function ResetPasswordPage() {
           // In development, we'll assume the session is valid for now
           setIsValidSession(true)
         } else {
-          // First check if we already have a session (user came from email link)
-          const { data: { session }, error } = await supabase.auth.getSession()
-          
-          if (!error && session?.user) {
-            // User has a valid session, allow password reset
-            console.log('Valid session found for password reset')
-            setIsValidSession(true)
-          } else {
-            // Listen for password recovery events (backup method)
-            const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-              console.log('Auth state change:', event, !!session)
-              if (event === "PASSWORD_RECOVERY" || (event === "SIGNED_IN" && session?.user)) {
-                setIsValidSession(true)
-              } else if (event === "SIGNED_OUT" || (!session && event !== "INITIAL_SESSION")) {
-                toast.error('Invalid or expired password reset link')
-                router.push('/')
-              }
-            })
+          // Listen for password recovery events
+          const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            console.log('Auth state change:', event, !!session)
+            if (event === "PASSWORD_RECOVERY") {
+              // This is the only valid way to access this page
+              setIsValidSession(true)
+            } else if (event === "INITIAL_SESSION" && !session) {
+              // No session at all - wait for PASSWORD_RECOVERY event
+              console.log('Waiting for password recovery event...')
+            } else if (event === "SIGNED_IN" && !isValidSession) {
+              // Someone signed in but it wasn't through password recovery
+              toast.error('Invalid access to password reset page')
+              router.push('/')
+            }
+          })
 
-            // Cleanup subscription
-            return () => subscription?.unsubscribe()
+          // Check if we're coming from a valid reset link
+          const hashParams = new URLSearchParams(window.location.hash.substring(1))
+          const type = hashParams.get('type')
+          if (type === 'recovery') {
+            console.log('Valid recovery link detected in URL')
+            // Supabase will fire PASSWORD_RECOVERY event shortly
           }
+
+          // Cleanup subscription
+          return () => subscription?.unsubscribe()
         }
       } catch (error) {
         console.error('Error checking session:', error)
@@ -60,7 +64,7 @@ export default function ResetPasswordPage() {
     return () => {
       cleanup?.then(cleanupFn => cleanupFn?.())
     }
-  }, [router, supabase.auth])
+  }, [router, supabase.auth, isValidSession])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
