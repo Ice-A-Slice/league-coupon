@@ -915,9 +915,11 @@ export async function applyNonParticipantScoringRule(
     logger.info({ bettingRoundId, minimumScore, participantCount: userPointTotals.size }, "Found minimum participant score");
 
     // 3. Get all users in the system
-    const { data: allUsersData, error: allUsersError } = await client
-      .from('profiles')
-      .select('id');
+    // Using auth.users directly since profiles table has issues
+    // Note: This requires service role permissions to access auth schema
+    const { data: allUsersData, error: allUsersError } = await (client as unknown as {
+      rpc(name: 'get_all_user_ids'): Promise<{ data: { id: string }[] | null; error: Error | null }>
+    }).rpc('get_all_user_ids');
 
     if (allUsersError) {
       logger.error({ bettingRoundId, error: allUsersError }, "Failed to fetch all users for non-participant scoring");
@@ -929,7 +931,9 @@ export async function applyNonParticipantScoringRule(
     }
 
     // 4. Identify non-participants
-    const allUserIds = new Set(allUsersData?.map(user => user.id) || []);
+    // Type assertion needed since RPC return type isn't in our types yet
+    const userIds = allUsersData as unknown as { id: string }[];
+    const allUserIds = new Set(userIds?.map(user => user.id) || []);
     const nonParticipantUserIds = Array.from(allUserIds).filter(userId => !participantUserIds.has(userId));
 
     if (nonParticipantUserIds.length === 0) {
