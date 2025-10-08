@@ -19,29 +19,45 @@ export default function ResetPasswordPage() {
   const supabase = createClient()
 
   useEffect(() => {
-    // Simple approach: just check if we have recovery params
-    const checkRecovery = () => {
-      const urlParams = new URLSearchParams(window.location.search)
-      const code = urlParams.get('code')
-      const hashParams = window.location.hash
+    const checkRecovery = async () => {
+      // Give Supabase time to process the recovery token
+      await new Promise(resolve => setTimeout(resolve, 1500))
       
-      console.log('Reset password page - code:', code, 'hash:', hashParams)
+      // Check if we have a session (recovery token creates a session)
+      const { data: { session } } = await supabase.auth.getSession()
+      console.log('Reset password page - session exists:', !!session)
       
-      // If we have a code or hash params, we're likely in a valid recovery flow
-      if (code || hashParams.includes('type=recovery')) {
+      if (session || shouldUseAuthWorkaround()) {
+        // We have a session from the recovery token, or we're in dev mode
         setIsReady(true)
-      } else if (!shouldUseAuthWorkaround()) {
-        // No recovery params, redirect
-        toast.error('Invalid password reset link')
-        router.push('/')
       } else {
-        // Dev mode
-        setIsReady(true)
+        // Check if we just arrived with recovery params
+        const urlParams = new URLSearchParams(window.location.search)
+        const code = urlParams.get('code')
+        const hashParams = window.location.hash
+        
+        if (code || hashParams.includes('type=recovery')) {
+          // We have recovery params, wait a bit more
+          console.log('Recovery params detected, waiting for session...')
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          
+          // Check session again
+          const { data: { session: retrySession } } = await supabase.auth.getSession()
+          if (retrySession) {
+            setIsReady(true)
+          } else {
+            toast.error('Recovery link expired or invalid. Please request a new one.')
+            router.push('/')
+          }
+        } else {
+          // No session and no recovery params
+          toast.error('Please use the link from your password reset email')
+          router.push('/')
+        }
       }
     }
     
-    // Wait a bit for Supabase to process
-    setTimeout(checkRecovery, 100)
+    checkRecovery()
   }, [router, supabase])
 
   const handleSubmit = async (e: React.FormEvent) => {
