@@ -52,13 +52,12 @@ export default function AuthModal({ children }: AuthModalProps) {
     setIsLoading(true)
 
     try {
-      // Always use the primary domain for password reset to ensure Supabase accepts it
-      // This prevents issues when users access the site from different domains (e.g., apl.zone)
-      const primaryDomain = process.env.NEXT_PUBLIC_APP_URL || 'https://league-coupon.vercel.app'
-      const redirectTo = `${primaryDomain}/auth/reset-password`
+      // Use the current domain for password reset to match where the user is
+      // This ensures Supabase can properly handle the session
+      const currentOrigin = window.location.origin
+      const redirectTo = `${currentOrigin}/auth/reset-password`
       console.log('Password reset requested with redirectTo:', redirectTo)
-      console.log('Current origin:', window.location.origin)
-      console.log('Using primary domain:', primaryDomain)
+      console.log('Current origin:', currentOrigin)
       
       if (shouldUseAuthWorkaround()) {
         // Development workaround: Use direct API call
