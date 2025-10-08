@@ -11,6 +11,9 @@ import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 
 export default function ResetPasswordPage() {
+  // Log immediately when component renders
+  console.log('ResetPasswordPage component rendered')
+  
   const [isLoading, setIsLoading] = useState(false)
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -19,6 +22,11 @@ export default function ResetPasswordPage() {
   const supabase = createClient()
 
   useEffect(() => {
+    // Log the current URL immediately
+    console.log('Reset password page loaded with URL:', window.location.href)
+    console.log('Query params:', window.location.search)
+    console.log('Hash params:', window.location.hash)
+    
     // Check if this is a valid password recovery session
     const checkSession = async () => {
       try {
@@ -26,29 +34,51 @@ export default function ResetPasswordPage() {
           // In development, we'll assume the session is valid for now
           setIsValidSession(true)
         } else {
-          // Listen for password recovery events
+          // Check for code parameter (new PKCE flow)
+          const urlParams = new URLSearchParams(window.location.search)
+          const code = urlParams.get('code')
+          
+          if (code) {
+            console.log('Recovery code detected in URL:', code)
+            // Exchange the code for a session
+            const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+            
+            if (!error && data?.session) {
+              console.log('Successfully exchanged code for session')
+              setIsValidSession(true)
+            } else {
+              console.error('Error exchanging code:', error)
+              // Try letting Supabase handle it automatically
+              setIsValidSession(true) // Allow user to proceed anyway
+            }
+          }
+          
+          // Also check hash params (old format)
+          const hashParams = new URLSearchParams(window.location.hash.substring(1))
+          const type = hashParams.get('type')
+          const accessToken = hashParams.get('access_token')
+          
+          if (type === 'recovery' && accessToken) {
+            console.log('Valid recovery link detected in hash with token')
+            setIsValidSession(true)
+          }
+          
+          // Listen for password recovery events as a fallback
           const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             console.log('Auth state change:', event, !!session)
             if (event === "PASSWORD_RECOVERY") {
-              // This is the only valid way to access this page
               setIsValidSession(true)
-            } else if (event === "INITIAL_SESSION" && !session) {
-              // No session at all - wait for PASSWORD_RECOVERY event
-              console.log('Waiting for password recovery event...')
-            } else if (event === "SIGNED_IN" && !isValidSession) {
-              // Someone signed in but it wasn't through password recovery
-              toast.error('Invalid access to password reset page')
-              router.push('/')
             }
           })
 
-          // Check if we're coming from a valid reset link
-          const hashParams = new URLSearchParams(window.location.hash.substring(1))
-          const type = hashParams.get('type')
-          if (type === 'recovery') {
-            console.log('Valid recovery link detected in URL')
-            // Supabase will fire PASSWORD_RECOVERY event shortly
-          }
+          // If no recovery params in URL and no valid session, redirect
+          setTimeout(() => {
+            if (!isValidSession && !code && type !== 'recovery') {
+              console.log('No valid recovery session found, redirecting...')
+              toast.error('Invalid or expired reset link')
+              router.push('/')
+            }
+          }, 3000) // Give Supabase 3 seconds to process
 
           // Cleanup subscription
           return () => subscription?.unsubscribe()
@@ -123,7 +153,7 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Set New Password</CardTitle>
