@@ -11,104 +11,38 @@ import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 
 export default function ResetPasswordPage() {
-  // Log immediately when component renders
-  console.log('ResetPasswordPage component rendered')
-  
   const [isLoading, setIsLoading] = useState(false)
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [isValidSession, setIsValidSession] = useState(false)
+  const [isReady, setIsReady] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => {
-    // Log the current URL immediately
-    console.log('Reset password page loaded with URL:', window.location.href)
-    console.log('Query params:', window.location.search)
-    console.log('Hash params:', window.location.hash)
-    
-    // Check if this is a valid password recovery session
-    const checkSession = async () => {
-      try {
-        if (shouldUseAuthWorkaround()) {
-          // In development, we'll assume the session is valid for now
-          setIsValidSession(true)
-        } else {
-          let sessionValidated = false
-          
-          // First, wait a bit for Supabase to auto-handle the recovery flow
-          await new Promise(resolve => setTimeout(resolve, 500))
-          
-          // Check if we already have a session (Supabase may have auto-handled it)
-          const { data: { session: existingSession } } = await supabase.auth.getSession()
-          if (existingSession) {
-            console.log('Existing session found')
-            setIsValidSession(true)
-            sessionValidated = true
-          }
-          
-          // Check for code parameter (new PKCE flow)
-          const urlParams = new URLSearchParams(window.location.search)
-          const code = urlParams.get('code')
-          
-          if (code && !sessionValidated) {
-            console.log('Recovery code detected, waiting for Supabase to handle it...')
-            // Don't manually exchange - let Supabase handle it
-            // Just validate that we have a recovery code
-            setIsValidSession(true)
-            sessionValidated = true
-          }
-          
-          // Also check hash params (old format)
-          const hashParams = new URLSearchParams(window.location.hash.substring(1))
-          const type = hashParams.get('type')
-          const accessToken = hashParams.get('access_token')
-          
-          if ((type === 'recovery' && accessToken) && !sessionValidated) {
-            console.log('Valid recovery link detected in hash with token')
-            setIsValidSession(true)
-            sessionValidated = true
-          }
-          
-          // Listen for password recovery events
-          const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-            console.log('Auth state change:', event, !!session)
-            if (event === "PASSWORD_RECOVERY" || (event === "SIGNED_IN" && session)) {
-              setIsValidSession(true)
-              sessionValidated = true
-            }
-          })
-
-          // Final check after waiting
-          setTimeout(async () => {
-            if (!sessionValidated) {
-              // One more session check
-              const { data: { session: finalSession } } = await supabase.auth.getSession()
-              if (finalSession) {
-                setIsValidSession(true)
-              } else if (!code && type !== 'recovery') {
-                console.log('No valid recovery session found, redirecting...')
-                toast.error('Invalid or expired reset link')
-                router.push('/')
-              }
-            }
-          }, 2000)
-
-          // Cleanup subscription
-          return () => subscription?.unsubscribe()
-        }
-      } catch (error) {
-        console.error('Error checking session:', error)
-        toast.error('Error validating reset link')
+    // Simple approach: just check if we have recovery params
+    const checkRecovery = () => {
+      const urlParams = new URLSearchParams(window.location.search)
+      const code = urlParams.get('code')
+      const hashParams = window.location.hash
+      
+      console.log('Reset password page - code:', code, 'hash:', hashParams)
+      
+      // If we have a code or hash params, we're likely in a valid recovery flow
+      if (code || hashParams.includes('type=recovery')) {
+        setIsReady(true)
+      } else if (!shouldUseAuthWorkaround()) {
+        // No recovery params, redirect
+        toast.error('Invalid password reset link')
         router.push('/')
+      } else {
+        // Dev mode
+        setIsReady(true)
       }
     }
-
-    const cleanup = checkSession()
-    return () => {
-      cleanup?.then(cleanupFn => cleanupFn?.())
-    }
-  }, [router, supabase.auth])
+    
+    // Wait a bit for Supabase to process
+    setTimeout(checkRecovery, 100)
+  }, [router, supabase])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -126,39 +60,34 @@ export default function ResetPasswordPage() {
     setIsLoading(true)
 
     try {
-      if (shouldUseAuthWorkaround()) {
-        // Development workaround: simulate password update
-        toast.success('Password updated successfully! (Development mode)')
-        router.push('/')
-      } else {
-        // Production: Use Supabase updateUser
-        const { error } = await supabase.auth.updateUser({ 
-          password: password 
-        })
+      const { error } = await supabase.auth.updateUser({ 
+        password: password 
+      })
 
-        if (error) {
-          toast.error('Error updating password: ' + error.message)
-        } else {
-          toast.success('Password updated successfully!')
-          router.push('/')
-        }
+      if (error) {
+        console.error('Password update error:', error)
+        toast.error(error.message)
+      } else {
+        toast.success('Password updated successfully!')
+        await supabase.auth.signOut()
+        router.push('/')
       }
     } catch (error) {
-      console.error('Network error:', error)
-      toast.error('Network error. Please try again.')
+      console.error('Unexpected error:', error)
+      toast.error('An unexpected error occurred')
     } finally {
       setIsLoading(false)
     }
   }
 
-  if (!isValidSession) {
+  if (!isReady) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
         <Card className="w-full max-w-md">
           <CardHeader>
-            <CardTitle>Validating Reset Link</CardTitle>
+            <CardTitle>Loading...</CardTitle>
             <CardDescription>
-              Please wait while we validate your password reset link...
+              Please wait...
             </CardDescription>
           </CardHeader>
         </Card>
