@@ -34,23 +34,29 @@ export default function ResetPasswordPage() {
           // In development, we'll assume the session is valid for now
           setIsValidSession(true)
         } else {
+          let sessionValidated = false
+          
+          // First, wait a bit for Supabase to auto-handle the recovery flow
+          await new Promise(resolve => setTimeout(resolve, 500))
+          
+          // Check if we already have a session (Supabase may have auto-handled it)
+          const { data: { session: existingSession } } = await supabase.auth.getSession()
+          if (existingSession) {
+            console.log('Existing session found')
+            setIsValidSession(true)
+            sessionValidated = true
+          }
+          
           // Check for code parameter (new PKCE flow)
           const urlParams = new URLSearchParams(window.location.search)
           const code = urlParams.get('code')
           
-          if (code) {
-            console.log('Recovery code detected in URL:', code)
-            // Exchange the code for a session
-            const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-            
-            if (!error && data?.session) {
-              console.log('Successfully exchanged code for session')
-              setIsValidSession(true)
-            } else {
-              console.error('Error exchanging code:', error)
-              // Try letting Supabase handle it automatically
-              setIsValidSession(true) // Allow user to proceed anyway
-            }
+          if (code && !sessionValidated) {
+            console.log('Recovery code detected, waiting for Supabase to handle it...')
+            // Don't manually exchange - let Supabase handle it
+            // Just validate that we have a recovery code
+            setIsValidSession(true)
+            sessionValidated = true
           }
           
           // Also check hash params (old format)
@@ -58,27 +64,35 @@ export default function ResetPasswordPage() {
           const type = hashParams.get('type')
           const accessToken = hashParams.get('access_token')
           
-          if (type === 'recovery' && accessToken) {
+          if ((type === 'recovery' && accessToken) && !sessionValidated) {
             console.log('Valid recovery link detected in hash with token')
             setIsValidSession(true)
+            sessionValidated = true
           }
           
-          // Listen for password recovery events as a fallback
+          // Listen for password recovery events
           const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             console.log('Auth state change:', event, !!session)
-            if (event === "PASSWORD_RECOVERY") {
+            if (event === "PASSWORD_RECOVERY" || (event === "SIGNED_IN" && session)) {
               setIsValidSession(true)
+              sessionValidated = true
             }
           })
 
-          // If no recovery params in URL and no valid session, redirect
-          setTimeout(() => {
-            if (!isValidSession && !code && type !== 'recovery') {
-              console.log('No valid recovery session found, redirecting...')
-              toast.error('Invalid or expired reset link')
-              router.push('/')
+          // Final check after waiting
+          setTimeout(async () => {
+            if (!sessionValidated) {
+              // One more session check
+              const { data: { session: finalSession } } = await supabase.auth.getSession()
+              if (finalSession) {
+                setIsValidSession(true)
+              } else if (!code && type !== 'recovery') {
+                console.log('No valid recovery session found, redirecting...')
+                toast.error('Invalid or expired reset link')
+                router.push('/')
+              }
             }
-          }, 3000) // Give Supabase 3 seconds to process
+          }, 2000)
 
           // Cleanup subscription
           return () => subscription?.unsubscribe()
@@ -94,7 +108,7 @@ export default function ResetPasswordPage() {
     return () => {
       cleanup?.then(cleanupFn => cleanupFn?.())
     }
-  }, [router, supabase.auth, isValidSession])
+  }, [router, supabase.auth])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
