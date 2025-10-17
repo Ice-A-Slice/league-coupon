@@ -209,10 +209,12 @@ export class EmailSchedulerService {
             await this.setupReminderDeliveryTracking(timing.roundId);
             
             // Get pending reminder deliveries for this round
+            // Limit to 15 emails per cron run to avoid timeouts
             const pendingDeliveries = await emailDeliveryService.getPendingDeliveries({
               email_type: 'reminder',
               betting_round_id: timing.roundId,
-              max_retry_count: 3
+              max_retry_count: 3,
+              limit: 15
             });
             
             if (pendingDeliveries.length === 0) {
@@ -227,7 +229,7 @@ export class EmailSchedulerService {
               continue;
             }
             
-            logger.info(`EmailScheduler: Found ${pendingDeliveries.length} pending reminder deliveries for round ${timing.roundId}`);
+            logger.info(`EmailScheduler: Processing ${pendingDeliveries.length} pending reminder deliveries for round ${timing.roundId} (limited to 15 per run)`);
 
             // Trigger reminder email for pending users only
             const triggerResult = await this.triggerReminderEmailWithDeliveryTracking(timing.roundId, pendingDeliveries);
@@ -658,10 +660,12 @@ export class EmailSchedulerService {
           await this.setupTransparencyDeliveryTracking(timing.roundId);
           
           // Get pending transparency deliveries for this round
+          // Limit to 15 emails per cron run to avoid timeouts
           const pendingDeliveries = await emailDeliveryService.getPendingDeliveries({
             email_type: 'transparency' as EmailType,
             betting_round_id: timing.roundId,
-            max_retry_count: 3
+            max_retry_count: 3,
+            limit: 15
           });
           
           if (pendingDeliveries.length === 0) {
@@ -676,7 +680,7 @@ export class EmailSchedulerService {
             continue;
           }
           
-          logger.info(`EmailScheduler: Found ${pendingDeliveries.length} pending transparency deliveries for round ${timing.roundId}`);
+          logger.info(`EmailScheduler: Processing ${pendingDeliveries.length} pending transparency deliveries for round ${timing.roundId} (limited to 15 per run)`);
 
           // Trigger transparency email for pending users only
           const triggerResult = await this.triggerTransparencyEmailWithDeliveryTracking(timing.roundId, pendingDeliveries);
