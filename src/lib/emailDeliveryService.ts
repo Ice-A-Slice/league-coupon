@@ -42,6 +42,7 @@ export interface PendingEmailsQuery {
   email_type: EmailType;
   betting_round_id?: number;
   max_retry_count?: number;
+  limit?: number; // Add limit to prevent timeouts
 }
 
 /**
@@ -112,6 +113,10 @@ export class EmailDeliveryService {
 
       if (query.max_retry_count !== undefined) {
         queryBuilder = queryBuilder.lte('retry_count', query.max_retry_count);
+      }
+
+      if (query.limit !== undefined && query.limit > 0) {
+        queryBuilder = queryBuilder.limit(query.limit);
       }
 
       const { data, error } = await queryBuilder.order('created_at', { ascending: true });
