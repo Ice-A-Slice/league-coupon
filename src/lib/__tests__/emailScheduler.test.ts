@@ -107,9 +107,12 @@ describe('EmailSchedulerService', () => {
           json: async () => ({ success: true, recipients: ['admin1@test.com', 'admin2@test.com'] })
         } as Response);
 
+      // Mock emailDeliveryService to return no pending deliveries for transparency check
+      jest.spyOn(emailDeliveryService, 'getPendingDeliveries').mockResolvedValue([]);
+
       const results = await schedulerService.checkAndScheduleEmails();
 
-      // Should only return 2 results (summary + admin-summary) when no transparency rounds are found
+      // Should return 2 results (summary + admin-summary) when no pending transparency emails
       expect(results).toHaveLength(2);
       expect(results[0].emailType).toBe('summary');
       expect(results[0].success).toBe(true);
