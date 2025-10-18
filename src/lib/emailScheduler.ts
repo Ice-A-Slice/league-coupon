@@ -637,6 +637,61 @@ export class EmailSchedulerService {
   }
 
   /**
+   * Process any pending transparency emails from previous runs
+   */
+  private async processPendingTransparencyEmails(results: SchedulingResult[]): Promise<void> {
+    try {
+      // Get any pending transparency emails across all rounds
+      const allPendingTransparency = await emailDeliveryService.getPendingDeliveries({
+        email_type: 'transparency' as EmailType,
+        max_retry_count: 3,
+        limit: 15
+      });
+      
+      if (allPendingTransparency.length > 0) {
+        logger.info(`EmailScheduler: Found ${allPendingTransparency.length} pending transparency emails from previous runs`);
+        
+        // Group by round
+        const pendingByRound = new Map<number, typeof allPendingTransparency>();
+        allPendingTransparency.forEach(delivery => {
+          if (delivery.betting_round_id) {
+            const roundDeliveries = pendingByRound.get(delivery.betting_round_id) || [];
+            roundDeliveries.push(delivery);
+            pendingByRound.set(delivery.betting_round_id, roundDeliveries);
+          }
+        });
+        
+        // Process each round with pending deliveries
+        for (const [roundId, deliveries] of pendingByRound.entries()) {
+          logger.info(`EmailScheduler: Processing ${deliveries.length} pending transparency emails for round ${roundId}`);
+          
+          const triggerResult = await this.triggerTransparencyEmailWithDeliveryTracking(roundId, deliveries);
+          
+          results.push({
+            success: triggerResult.success,
+            message: `Processed pending transparency emails for round ${roundId}: ${triggerResult.message}`,
+            roundId: roundId,
+            emailType: 'transparency' as const,
+            scheduledTime: new Date().toISOString(),
+            errors: triggerResult.errors
+          });
+        }
+      } else {
+        logger.debug('EmailScheduler: No pending transparency emails found');
+        // Don't add any result when there are no pending emails
+      }
+    } catch (error) {
+      logger.error('EmailScheduler: Failed to process pending transparency emails', { error });
+      results.push({
+        success: false,
+        message: 'Failed to process pending transparency emails',
+        emailType: 'transparency' as const,
+        errors: [error instanceof Error ? error.message : 'Unknown error']
+      });
+    }
+  }
+
+  /**
    * Check for rounds that have just started and need transparency emails
    */
   async checkForTransparencyEmails(): Promise<SchedulingResult[]> {
@@ -644,7 +699,11 @@ export class EmailSchedulerService {
     const results: SchedulingResult[] = [];
 
     try {
-      // Get timing information for transparency eligible rounds (open or scoring status)
+      // First, check for any pending transparency emails from previous runs
+      // This ensures we don't leave emails stuck if they missed their time window
+      await this.processPendingTransparencyEmails(results);
+      
+      // Then check for new rounds that need transparency emails
       const roundTimings = await this.getTransparencyEligibleRounds();
       
       // Check each round for transparency email eligibility (round just started)
